@@ -11,7 +11,7 @@ const LOGO_URL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663427629051/9BCf3
 const defaultBanners = [
   {
     id: 1,
-    title: "NOVA COLEÇÃO 2025",
+    title: "NOVA COLEÇÃO 2026",
     subtitle: "As melhores camisas dos times e seleções do mundo",
     imageUrl: `https://placehold.co/1400x500/0D0D0D/C8102E?text=JUMERA+SPORT`,
     buttonText: "Ver Coleção",
