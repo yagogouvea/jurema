@@ -65,3 +65,6 @@
 - [x] Corrigir banner hero cortado no mobile
 - [x] Estilizar cards de categoria sem emojis (ícones SVG/lucide com estilo esportivo)
 - [x] Redesenhar botão WhatsApp com identidade visual da marca (preto/vermelho)
+
+## Correções v3
+- [x] Corrigir banner hero cortado no mobile (altura dinâmica, sem overflow hidden fixo)

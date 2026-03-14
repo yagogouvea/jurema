@@ -61,20 +61,20 @@ function HeroBanner() {
   const banner = banners[current];
 
   return (
-    <div className="relative w-full overflow-hidden" style={{ minHeight: "clamp(260px, 60vw, 580px)", height: "auto" }}>
-      {/* Background image */}
+    <div className="relative w-full bg-[#0D0D0D]">
+      {/* Background image — posicionada como elemento de bloco para não cortar */}
       <div
         className="absolute inset-0 bg-cover bg-center transition-all duration-700"
         style={{ backgroundImage: `url(${banner.imageUrl})` }}
       />
-      {/* Overlay gradient — mais forte no mobile para garantir legibilidade */}
-      <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D0D] via-[#0D0D0D]/80 to-[#0D0D0D]/40 md:via-[#0D0D0D]/70 md:to-transparent" />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0D] via-transparent to-transparent" />
+      {/* Overlays */}
+      <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D0D] via-[#0D0D0D]/85 to-[#0D0D0D]/50" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0D]/80 via-transparent to-transparent" />
 
-      {/* Content */}
-      <div className="relative flex items-center" style={{ minHeight: "inherit" }}>
-        <div className="container py-16 md:py-0">
-          <div className="max-w-xl animate-fade-in-up">
+      {/* Content — define a altura real do banner */}
+      <div className="relative z-10">
+        <div className="container">
+          <div className="py-20 sm:py-24 md:py-32 max-w-xl">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-0.5 bg-[#C8102E]" />
               <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Jumera Sport</span>
@@ -83,13 +83,13 @@ function HeroBanner() {
               {banner.title}
             </h1>
             {banner.subtitle && (
-              <p className="text-gray-300 text-sm sm:text-base md:text-lg mb-6 leading-relaxed">
+              <p className="text-gray-300 text-sm sm:text-base md:text-lg mb-8 leading-relaxed">
                 {banner.subtitle}
               </p>
             )}
             {banner.linkUrl && (
               <Link href={banner.linkUrl}>
-                <Button className="bg-[#C8102E] hover:bg-red-700 text-white font-bold px-6 py-2.5 sm:px-8 sm:py-3 text-sm sm:text-base rounded-lg flex items-center gap-2 transition-all hover:scale-105">
+                <Button className="bg-[#C8102E] hover:bg-red-700 text-white font-bold px-6 py-3 sm:px-8 text-sm sm:text-base rounded-lg flex items-center gap-2 transition-all hover:scale-105">
                   {banner.buttonText || "Ver Produtos"}
                   <ArrowRight size={16} />
                 </Button>
@@ -104,21 +104,21 @@ function HeroBanner() {
         <>
           <button
             onClick={() => go((current - 1 + banners.length) % banners.length)}
-            className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-[#C8102E] flex items-center justify-center text-white transition-all"
+            className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-black/60 hover:bg-[#C8102E] flex items-center justify-center text-white transition-all"
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={18} />
           </button>
           <button
             onClick={() => go((current + 1) % banners.length)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-[#C8102E] flex items-center justify-center text-white transition-all"
+            className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-black/60 hover:bg-[#C8102E] flex items-center justify-center text-white transition-all"
           >
-            <ChevronRight size={20} />
+            <ChevronRight size={18} />
           </button>
         </>
       )}
 
       {/* Dots */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex gap-2">
         {banners.map((_, i) => (
           <button
             key={i}
