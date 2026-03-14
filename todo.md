@@ -60,3 +60,8 @@
 ## Testes
 - [x] 17 testes vitest passando (auth, products, orders, banners, dashboard, settings, payment)
 - [x] Verificação responsividade mobile/desktop
+
+## Correções e Melhorias (v2)
+- [x] Corrigir banner hero cortado no mobile
+- [x] Estilizar cards de categoria sem emojis (ícones SVG/lucide com estilo esportivo)
+- [x] Redesenhar botão WhatsApp com identidade visual da marca (preto/vermelho)

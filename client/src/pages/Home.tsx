@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { ChevronLeft, ChevronRight, ArrowRight, Zap, Trophy, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowRight, Zap, Trophy, Users, Flag, Globe, Clock, User, Baby, Shirt } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import ProductCard from "@/components/ProductCard";
 import { Button } from "@/components/ui/button";
@@ -61,37 +61,37 @@ function HeroBanner() {
   const banner = banners[current];
 
   return (
-    <div className="relative w-full overflow-hidden" style={{ height: "clamp(300px, 55vw, 560px)" }}>
+    <div className="relative w-full overflow-hidden" style={{ minHeight: "clamp(260px, 60vw, 580px)", height: "auto" }}>
       {/* Background image */}
       <div
         className="absolute inset-0 bg-cover bg-center transition-all duration-700"
         style={{ backgroundImage: `url(${banner.imageUrl})` }}
       />
-      {/* Overlay gradient */}
-      <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D0D] via-[#0D0D0D]/70 to-transparent" />
+      {/* Overlay gradient — mais forte no mobile para garantir legibilidade */}
+      <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D0D] via-[#0D0D0D]/80 to-[#0D0D0D]/40 md:via-[#0D0D0D]/70 md:to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0D] via-transparent to-transparent" />
 
       {/* Content */}
-      <div className="relative h-full flex items-center">
-        <div className="container">
+      <div className="relative flex items-center" style={{ minHeight: "inherit" }}>
+        <div className="container py-16 md:py-0">
           <div className="max-w-xl animate-fade-in-up">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-0.5 bg-[#C8102E]" />
               <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Jumera Sport</span>
             </div>
-            <h1 className="font-['Bebas_Neue'] text-5xl md:text-7xl text-white leading-none tracking-wider mb-3">
+            <h1 className="font-['Bebas_Neue'] text-4xl sm:text-5xl md:text-7xl text-white leading-none tracking-wider mb-3">
               {banner.title}
             </h1>
             {banner.subtitle && (
-              <p className="text-gray-300 text-base md:text-lg mb-6 leading-relaxed">
+              <p className="text-gray-300 text-sm sm:text-base md:text-lg mb-6 leading-relaxed">
                 {banner.subtitle}
               </p>
             )}
             {banner.linkUrl && (
               <Link href={banner.linkUrl}>
-                <Button className="bg-[#C8102E] hover:bg-red-700 text-white font-bold px-8 py-3 text-base rounded-lg flex items-center gap-2 transition-all hover:scale-105">
+                <Button className="bg-[#C8102E] hover:bg-red-700 text-white font-bold px-6 py-2.5 sm:px-8 sm:py-3 text-sm sm:text-base rounded-lg flex items-center gap-2 transition-all hover:scale-105">
                   {banner.buttonText || "Ver Produtos"}
-                  <ArrowRight size={18} />
+                  <ArrowRight size={16} />
                 </Button>
               </Link>
             )}
@@ -187,22 +187,34 @@ function CategorySection() {
       title: "Times Brasileiros",
       subtitle: "Flamengo, Corinthians, Palmeiras e mais",
       href: "/produtos?categoria=times",
-      icon: "🇧🇷",
-      color: "from-green-900/40",
+      Icon: Flag,
+      accent: "#C8102E",
+      borderColor: "border-[#C8102E]/30",
+      hoverBorder: "hover:border-[#C8102E]",
+      bg: "bg-gradient-to-br from-[#1A0000] to-[#0D0D0D]",
+      iconBg: "bg-[#C8102E]/10",
     },
     {
       title: "Seleções Nacionais",
       subtitle: "Brasil, Argentina, Portugal e mais",
       href: "/produtos?categoria=selecoes",
-      icon: "🌍",
-      color: "from-blue-900/40",
+      Icon: Globe,
+      accent: "#1D6FA4",
+      borderColor: "border-[#1D6FA4]/30",
+      hoverBorder: "hover:border-[#1D6FA4]",
+      bg: "bg-gradient-to-br from-[#001A2A] to-[#0D0D0D]",
+      iconBg: "bg-[#1D6FA4]/10",
     },
     {
       title: "Coleção Retrô",
       subtitle: "Clássicos históricos do futebol",
       href: "/produtos?categoria=retro",
-      icon: "⭐",
-      color: "from-yellow-900/40",
+      Icon: Clock,
+      accent: "#B8860B",
+      borderColor: "border-[#B8860B]/30",
+      hoverBorder: "hover:border-[#B8860B]",
+      bg: "bg-gradient-to-br from-[#1A1400] to-[#0D0D0D]",
+      iconBg: "bg-[#B8860B]/10",
     },
   ];
 
@@ -210,13 +222,18 @@ function CategorySection() {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {categories.map(cat => (
         <Link key={cat.href} href={cat.href}>
-          <div className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${cat.color} to-[#1A1A1A] border border-[#2A2A2A] hover:border-[#C8102E]/50 p-6 cursor-pointer group transition-all hover:scale-[1.02]`}>
-            <div className="text-4xl mb-3">{cat.icon}</div>
+          <div className={`relative overflow-hidden rounded-xl ${cat.bg} border ${cat.borderColor} ${cat.hoverBorder} p-6 cursor-pointer group transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl`}>
+            {/* Decorative diagonal stripe */}
+            <div className="absolute top-0 right-0 w-24 h-24 opacity-5" style={{ background: `linear-gradient(135deg, ${cat.accent} 50%, transparent 50%)` }} />
+            {/* Icon */}
+            <div className={`w-12 h-12 rounded-lg ${cat.iconBg} flex items-center justify-center mb-4 transition-transform group-hover:scale-110`}>
+              <cat.Icon size={24} style={{ color: cat.accent }} />
+            </div>
             <h3 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider group-hover:text-[#C8102E] transition-colors">
               {cat.title}
             </h3>
-            <p className="text-gray-500 text-sm mt-1">{cat.subtitle}</p>
-            <div className="flex items-center gap-1 mt-4 text-[#C8102E] text-sm font-semibold">
+            <p className="text-gray-500 text-sm mt-1 mb-4">{cat.subtitle}</p>
+            <div className="flex items-center gap-1 text-sm font-semibold transition-all group-hover:gap-2" style={{ color: cat.accent }}>
               Ver coleção <ArrowRight size={14} />
             </div>
           </div>
@@ -228,18 +245,27 @@ function CategorySection() {
 
 function GenderSection() {
   const genders = [
-    { label: "Masculino", href: "/produtos?genero=masculino", emoji: "👕", desc: "Camisas para homens" },
-    { label: "Feminino", href: "/produtos?genero=feminino", emoji: "👚", desc: "Camisas femininas" },
-    { label: "Infantil", href: "/produtos?genero=infantil", emoji: "🧒", desc: "Para os pequenos torcedores" },
+    { label: "Masculino", href: "/produtos?genero=masculino", Icon: User, desc: "Camisas para homens", tag: "MAS" },
+    { label: "Feminino", href: "/produtos?genero=feminino", Icon: Shirt, desc: "Camisas femininas", tag: "FEM" },
+    { label: "Infantil", href: "/produtos?genero=infantil", Icon: Baby, desc: "Para os pequenos torcedores", tag: "INF" },
   ];
 
   return (
     <div className="grid grid-cols-3 gap-3 md:gap-6">
       {genders.map(g => (
         <Link key={g.href} href={g.href}>
-          <div className="flex flex-col items-center gap-2 p-4 md:p-6 bg-[#111111] rounded-xl border border-[#1E1E1E] hover:border-[#C8102E]/40 cursor-pointer group transition-all hover:scale-105 text-center">
-            <span className="text-3xl md:text-4xl">{g.emoji}</span>
-            <h3 className="font-['Bebas_Neue'] text-lg md:text-xl text-white tracking-wider group-hover:text-[#C8102E] transition-colors">
+          <div className="flex flex-col items-center gap-3 p-4 md:p-6 bg-[#111111] rounded-xl border border-[#1E1E1E] hover:border-[#C8102E]/60 cursor-pointer group transition-all hover:scale-105 text-center relative overflow-hidden">
+            {/* Top accent line */}
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#C8102E] scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left" />
+            {/* Tag badge */}
+            <span className="absolute top-2 right-2 text-[9px] font-bold text-[#C8102E] border border-[#C8102E]/30 px-1.5 py-0.5 rounded tracking-widest opacity-60 group-hover:opacity-100 transition-opacity">
+              {g.tag}
+            </span>
+            {/* Icon */}
+            <div className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-[#1A1A1A] border border-[#2A2A2A] group-hover:border-[#C8102E]/40 flex items-center justify-center transition-all group-hover:bg-[#C8102E]/10">
+              <g.Icon size={20} className="text-gray-400 group-hover:text-[#C8102E] transition-colors" />
+            </div>
+            <h3 className="font-['Bebas_Neue'] text-base md:text-xl text-white tracking-wider group-hover:text-[#C8102E] transition-colors">
               {g.label}
             </h3>
             <p className="text-gray-600 text-xs hidden md:block">{g.desc}</p>
