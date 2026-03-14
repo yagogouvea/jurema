@@ -72,6 +72,7 @@ export async function getProducts(opts: {
   switch (orderBy) {
     case 'newest': orderClause = desc(products.createdAt); break;
     case 'sales': orderClause = desc(products.salesCount); break;
+    case 'bestseller': orderClause = desc(products.salesCount); break;
     case 'price_asc': orderClause = asc(products.price); break;
     case 'price_desc': orderClause = desc(products.price); break;
     default: orderClause = desc(products.isFeatured);

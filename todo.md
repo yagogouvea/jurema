@@ -68,3 +68,8 @@
 
 ## Correções v3
 - [x] Corrigir banner hero cortado no mobile (altura dinâmica, sem overflow hidden fixo)
+
+## Melhorias v4
+- [x] Inserir produtos fictícios no banco de dados para visualização
+- [x] Adicionar seção "Nova Coleção" na página inicial
+- [x] Adicionar seção "Mais Vendidos" na página inicial

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { ChevronLeft, ChevronRight, ArrowRight, Zap, Trophy, Users, Flag, Globe, Clock, User, Baby, Shirt } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowRight, Zap, Trophy, Users, Flag, Globe, Clock, User, Baby, Shirt, TrendingUp, Sparkles, Medal } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import ProductCard from "@/components/ProductCard";
 import { Button } from "@/components/ui/button";
@@ -304,6 +304,100 @@ function NewArrivals() {
   );
 }
 
+function BestSellers() {
+  const { data, isLoading } = trpc.products.list.useQuery({ orderBy: 'bestseller', limit: 8 });
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="bg-[#111111] rounded-xl aspect-square animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  const products = data?.items ?? [];
+  if (products.length === 0) return null;
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {products.map((p, idx) => (
+        <div key={p.id} className="relative">
+          {/* Ranking badge para top 3 */}
+          {idx < 3 && (
+            <div className={`absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold shadow-lg ${
+              idx === 0 ? 'bg-yellow-500 text-black' :
+              idx === 1 ? 'bg-gray-300 text-black' :
+              'bg-amber-700 text-white'
+            }`}>
+              <Medal size={10} />
+              #{idx + 1}
+            </div>
+          )}
+          <ProductCard
+            id={p.id}
+            name={p.name}
+            slug={p.slug}
+            price={p.price}
+            originalPrice={p.originalPrice}
+            images={p.images as string[]}
+            team={p.team}
+            gender={p.gender}
+            category={p.category}
+            isFeatured={p.isFeatured}
+            salesCount={p.salesCount}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NewCollection() {
+  const { data, isLoading } = trpc.products.list.useQuery({ orderBy: 'newest', limit: 8 });
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="bg-[#111111] rounded-xl aspect-square animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  const products = data?.items ?? [];
+  if (products.length === 0) return null;
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {products.map((p, idx) => (
+        <div key={p.id} className="relative">
+          {idx < 4 && (
+            <div className="absolute top-2 right-2 z-10 bg-[#C8102E] text-white text-[10px] font-bold px-2 py-0.5 rounded-full tracking-wider shadow-lg">
+              NOVO
+            </div>
+          )}
+          <ProductCard
+            id={p.id}
+            name={p.name}
+            slug={p.slug}
+            price={p.price}
+            originalPrice={p.originalPrice}
+            images={p.images as string[]}
+            team={p.team}
+            gender={p.gender}
+            category={p.category}
+            isFeatured={p.isFeatured}
+            salesCount={p.salesCount}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StatsBar() {
   return (
     <div className="bg-[#C8102E] py-4">
@@ -400,16 +494,42 @@ export default function Home() {
         </div>
       </section>
 
-      {/* New Arrivals */}
-      <section className="py-12 bg-[#0A0A0A]">
+      {/* Mais Vendidos */}
+      <section className="py-12 md:py-16 bg-[#0A0A0A]">
         <div className="container">
           <div className="flex items-center justify-between mb-8">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <div className="w-6 h-0.5 bg-[#C8102E]" />
+                <TrendingUp size={14} className="text-[#C8102E]" />
+                <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Campeões de venda</span>
+              </div>
+              <h2 className="font-['Bebas_Neue'] text-4xl text-white tracking-wider">MAIS VENDIDOS</h2>
+            </div>
+            <Link href="/produtos?ordem=bestseller">
+              <Button variant="outline" className="hidden md:flex border-[#C8102E]/50 text-[#C8102E] hover:bg-[#C8102E] hover:text-white bg-transparent gap-2">
+                Ver todos <ArrowRight size={16} />
+              </Button>
+            </Link>
+          </div>
+          <BestSellers />
+          <div className="mt-6 text-center md:hidden">
+            <Link href="/produtos?ordem=bestseller">
+              <Button className="bg-[#C8102E] hover:bg-red-700 text-white">Ver todos os mais vendidos</Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Nova Coleção */}
+      <section className="py-12 md:py-16">
+        <div className="container">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles size={14} className="text-[#C8102E]" />
                 <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Recém chegados</span>
               </div>
-              <h2 className="font-['Bebas_Neue'] text-4xl text-white tracking-wider">NOVIDADES</h2>
+              <h2 className="font-['Bebas_Neue'] text-4xl text-white tracking-wider">NOVA COLEÇÃO</h2>
             </div>
             <Link href="/produtos?ordem=newest">
               <Button variant="outline" className="hidden md:flex border-[#C8102E]/50 text-[#C8102E] hover:bg-[#C8102E] hover:text-white bg-transparent gap-2">
@@ -417,7 +537,12 @@ export default function Home() {
               </Button>
             </Link>
           </div>
-          <NewArrivals />
+          <NewCollection />
+          <div className="mt-6 text-center md:hidden">
+            <Link href="/produtos?ordem=newest">
+              <Button className="bg-[#C8102E] hover:bg-red-700 text-white">Ver nova coleção completa</Button>
+            </Link>
+          </div>
         </div>
       </section>
 
