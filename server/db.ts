@@ -104,6 +104,18 @@ export async function getProductById(id: number) {
   return { ...product, stock };
 }
 
+// Helper para converter preço string (com vírgula ou ponto) para decimal
+function parsePrice(priceStr: string | undefined): string | null {
+  if (!priceStr) return null;
+  // Remove espaços e substitui vírgula por ponto
+  const normalized = priceStr.trim().replace(',', '.');
+  // Valida se é um número válido
+  const num = parseFloat(normalized);
+  if (isNaN(num)) return null;
+  // Retorna com 2 casas decimais
+  return num.toFixed(2);
+}
+
 export async function createProduct(data: {
   name: string; slug: string; description?: string; price: string; originalPrice?: string;
   team?: string; category: string; gender: string; isActive: boolean; isFeatured: boolean;
@@ -113,10 +125,10 @@ export async function createProduct(data: {
   if (!db) throw new Error("Database not available");
   const [result] = await db.insert(products).values({
     name: data.name, slug: data.slug, description: data.description || null,
-    price: data.price, originalPrice: data.originalPrice || null,
+    price: parsePrice(data.price) || "0.00", originalPrice: parsePrice(data.originalPrice),
     team: data.team || null, category: data.category as any, gender: data.gender as any,
     isActive: data.isActive, isFeatured: data.isFeatured,
-    images: data.images as any,
+    images: data.images,
   });
   const productId = (result as any).insertId;
   if (data.stock && data.stock.length > 0) {
@@ -138,14 +150,14 @@ export async function updateProduct(id: number, data: Partial<{
   if (data.name !== undefined) updateData.name = data.name;
   if (data.slug !== undefined) updateData.slug = data.slug;
   if (data.description !== undefined) updateData.description = data.description;
-  if (data.price !== undefined) updateData.price = data.price;
-  if (data.originalPrice !== undefined) updateData.originalPrice = data.originalPrice || null;
+  if (data.price !== undefined) updateData.price = parsePrice(data.price) || "0.00";
+  if (data.originalPrice !== undefined) updateData.originalPrice = parsePrice(data.originalPrice);
   if (data.team !== undefined) updateData.team = data.team || null;
   if (data.category !== undefined) updateData.category = data.category;
   if (data.gender !== undefined) updateData.gender = data.gender;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
   if (data.isFeatured !== undefined) updateData.isFeatured = data.isFeatured;
-  if (data.images !== undefined) updateData.images = JSON.stringify(data.images);
+  if (data.images !== undefined) updateData.images = data.images;
   if (Object.keys(updateData).length > 0) {
     await db.update(products).set(updateData).where(eq(products.id, id));
   }
