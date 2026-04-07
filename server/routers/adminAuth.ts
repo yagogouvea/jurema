@@ -17,28 +17,41 @@ export const adminAuthRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
 
-      const [rows]: any = await (db as any).$client.execute(
-        "SELECT * FROM admin_users WHERE username = ? LIMIT 1",
-        [input.username]
+      // Query raw SQL via Drizzle
+      const result: any = await (db as any).execute(
+        (db as any).raw`SELECT * FROM admin_users WHERE username = ${input.username} LIMIT 1`
       );
-      const admin = rows?.[0];
-      if (!admin) throw new TRPCError({ code: "UNAUTHORIZED", message: "Credenciais inválidas" });
+      const admin = result?.[0];
+      if (!admin || !admin.password) throw new TRPCError({ code: "UNAUTHORIZED", message: "Credenciais inválidas" });
 
-      const valid = await bcrypt.compare(input.password, admin.password);
+      let valid = false;
+      try {
+        valid = await bcrypt.compare(input.password, admin.password);
+      } catch (err) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Credenciais inválidas" });
+      }
       if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Credenciais inválidas" });
 
-      const token = await new SignJWT({ id: admin.id, username: admin.username, name: admin.name })
+      const token = await new SignJWT({ 
+        id: admin.id, 
+        username: admin.username, 
+        name: admin.name 
+      })
         .setProtectedHeader({ alg: "HS256" })
         .setExpirationTime("7d")
         .sign(ADMIN_JWT_SECRET);
 
-      ctx.res.cookie(ADMIN_COOKIE, token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none",
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-        path: "/",
-      });
+      try {
+        ctx.res.cookie(ADMIN_COOKIE, token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "none",
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+          path: "/",
+        });
+      } catch (err) {
+        console.error("[Admin Auth] Cookie error:", err);
+      }
 
       return { success: true, name: admin.name };
     }),
