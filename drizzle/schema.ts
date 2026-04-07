@@ -25,6 +25,29 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// Clientes da loja (cadastro próprio, sem OAuth)
+export const customers = mysqlTable("customers", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  cpf: varchar("cpf", { length: 14 }).notNull().unique(),
+  phone: varchar("phone", { length: 20 }).notNull(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  // Endereço
+  addressZip: varchar("addressZip", { length: 10 }),
+  addressStreet: varchar("addressStreet", { length: 255 }),
+  addressNumber: varchar("addressNumber", { length: 20 }),
+  addressComplement: varchar("addressComplement", { length: 100 }),
+  addressNeighborhood: varchar("addressNeighborhood", { length: 100 }),
+  addressCity: varchar("addressCity", { length: 100 }),
+  addressState: varchar("addressState", { length: 2 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Customer = typeof customers.$inferSelect;
+export type InsertCustomer = typeof customers.$inferInsert;
+
 // Produtos
 export const products = mysqlTable("products", {
   id: int("id").autoincrement().primaryKey(),

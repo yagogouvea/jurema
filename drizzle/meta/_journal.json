@@ -15,6 +15,13 @@
       "when": 1773445757824,
       "tag": "0001_red_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1775564960586,
+      "tag": "0002_amused_post",
+      "breakpoints": true
     }
   ]
 }

@@ -73,3 +73,13 @@
 - [x] Inserir produtos fictícios no banco de dados para visualização
 - [x] Adicionar seção "Nova Coleção" na página inicial
 - [x] Adicionar seção "Mais Vendidos" na página inicial
+
+## Sistema de Cadastro/Login e WhatsApp (v5)
+- [x] Atualizar schema: adicionar campos cpf, telefone, endereço na tabela customers
+- [x] Criar routers de cadastro e login próprio (sem OAuth)
+- [x] Página de Cadastro com campos: Nome, CPF, Endereço (CEP + API), Email, Telefone (máscara), Senha, Confirmação
+- [x] Página de Login com email e senha
+- [x] Busca automática de CEP via ViaCEP (API gratuita)
+- [x] Máscara de telefone no formato (00) 94729-3221
+- [x] Proteger checkout: redirecionar para login se não autenticado
+- [x] Envio do pedido via WhatsApp para 11 98169-3476 com: Nome, CPF, Telefone, itens, quantidades, valores e total

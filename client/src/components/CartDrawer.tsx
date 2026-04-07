@@ -1,12 +1,73 @@
 import { useCart } from "@/contexts/CartContext";
-import { X, ShoppingCart, Trash2, Plus, Minus } from "lucide-react";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { X, ShoppingCart, Trash2, Plus, Minus, MessageCircle, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { toast } from "sonner";
+
+const WHATSAPP_NUMBER = "5511981693476";
+
+function buildWhatsAppMessage(
+  customer: { name: string; cpf: string; phone: string },
+  items: Array<{ productName: string; size: string; quantity: number; unitPrice: number }>,
+  subtotal: number
+): string {
+  const lines: string[] = [];
+
+  lines.push("🛒 *NOVO PEDIDO — JUMERA SPORT*");
+  lines.push("─────────────────────────────");
+  lines.push(`👤 *Nome:* ${customer.name}`);
+  lines.push(`🪪 *CPF:* ${customer.cpf}`);
+  lines.push(`📱 *Telefone:* ${customer.phone}`);
+  lines.push("─────────────────────────────");
+  lines.push("*ITENS DO PEDIDO:*");
+  lines.push("");
+
+  items.forEach((item, i) => {
+    const itemTotal = (item.unitPrice * item.quantity).toFixed(2).replace(".", ",");
+    const unitFmt = item.unitPrice.toFixed(2).replace(".", ",");
+    lines.push(
+      `${i + 1}. *${item.productName}*\n   Tamanho: ${item.size} | Qtd: ${item.quantity} | R$ ${unitFmt} cada\n   Subtotal: R$ ${itemTotal}`
+    );
+  });
+
+  lines.push("");
+  lines.push("─────────────────────────────");
+  lines.push(`💰 *TOTAL: R$ ${subtotal.toFixed(2).replace(".", ",")}*`);
+  lines.push("─────────────────────────────");
+  lines.push("_Pedido realizado via Jumera Sport_");
+
+  return lines.join("\n");
+}
 
 export default function CartDrawer() {
-  const { items, isOpen, setIsOpen, removeItem, updateQuantity, subtotal, itemCount } = useCart();
+  const { items, isOpen, setIsOpen, removeItem, updateQuantity, subtotal, itemCount, clearCart } = useCart();
+  const { customer, isAuthenticated } = useCustomerAuth();
+  const [, navigate] = useLocation();
 
   if (!isOpen) return null;
+
+  function handleFinalizarCompra() {
+    if (!isAuthenticated || !customer) {
+      setIsOpen(false);
+      toast.info("Faça login para finalizar sua compra.");
+      navigate("/login?returnTo=/checkout");
+      return;
+    }
+
+    // Monta a mensagem WhatsApp
+    const message = buildWhatsAppMessage(
+      { name: customer.name, cpf: customer.cpf, phone: customer.phone },
+      items,
+      subtotal
+    );
+
+    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+    window.open(url, "_blank");
+    setIsOpen(false);
+    clearCart();
+    toast.success("Pedido enviado via WhatsApp! Aguarde o contato da nossa equipe.");
+  }
 
   return (
     <>
@@ -96,14 +157,42 @@ export default function CartDrawer() {
                 R$ {subtotal.toFixed(2).replace('.', ',')}
               </span>
             </div>
-            <p className="text-gray-600 text-xs text-center">Frete calculado no checkout</p>
+
+            {/* Aviso de login se não autenticado */}
+            {!isAuthenticated && (
+              <div className="bg-[#1A1A1A] border border-[#C8102E]/30 rounded-lg p-3 flex items-start gap-2">
+                <LogIn size={16} className="text-[#C8102E] mt-0.5 flex-shrink-0" />
+                <p className="text-gray-400 text-xs">
+                  Você precisa estar <span className="text-white font-semibold">logado</span> para finalizar a compra.{" "}
+                  <Link
+                    href="/login?returnTo=/checkout"
+                    className="text-[#C8102E] underline"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Fazer login
+                  </Link>{" "}
+                  ou{" "}
+                  <Link
+                    href="/cadastro"
+                    className="text-[#C8102E] underline"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    criar conta
+                  </Link>
+                </p>
+              </div>
+            )}
+
+            {/* Botão principal */}
             <Button
-              className="w-full bg-[#C8102E] hover:bg-red-700 text-white font-bold py-3 text-base"
-              onClick={() => setIsOpen(false)}
-              asChild
+              className="w-full bg-[#25D366] hover:bg-[#1ebe5d] text-white font-black py-3 text-base flex items-center gap-2 justify-center"
+              style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.1em" }}
+              onClick={handleFinalizarCompra}
             >
-              <Link href="/checkout">Finalizar Compra</Link>
+              <MessageCircle size={20} />
+              {isAuthenticated ? "FINALIZAR VIA WHATSAPP" : "ENTRAR E FINALIZAR"}
             </Button>
+
             <Button
               variant="outline"
               className="w-full border-[#333] text-gray-400 hover:text-white hover:border-[#555] bg-transparent"

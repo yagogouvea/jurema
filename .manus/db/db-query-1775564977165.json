@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `customers` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`name` varchar(255) NOT NULL,\n\t`email` varchar(320) NOT NULL,\n\t`cpf` varchar(14) NOT NULL,\n\t`phone` varchar(20) NOT NULL,\n\t`passwordHash` varchar(255) NOT NULL,\n\t`addressZip` varchar(10),\n\t`addressStreet` varchar(255),\n\t`addressNumber` varchar(20),\n\t`addressComplement` varchar(100),\n\t`addressNeighborhood` varchar(100),\n\t`addressCity` varchar(100),\n\t`addressState` varchar(2),\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `customers_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `customers_email_unique` UNIQUE(`email`),\n\tCONSTRAINT `customers_cpf_unique` UNIQUE(`cpf`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 36pMafMrnyn32yD.root --database 9BCf3HWTZf6aELg8wntRub --execute CREATE TABLE `customers` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`name` varchar(255) NOT NULL,\n\t`email` varchar(320) NOT NULL,\n\t`cpf` varchar(14) NOT NULL,\n\t`phone` varchar(20) NOT NULL,\n\t`passwordHash` varchar(255) NOT NULL,\n\t`addressZip` varchar(10),\n\t`addressStreet` varchar(255),\n\t`addressNumber` varchar(20),\n\t`addressComplement` varchar(100),\n\t`addressNeighborhood` varchar(100),\n\t`addressCity` varchar(100),\n\t`addressState` varchar(2),\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `customers_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `customers_email_unique` UNIQUE(`email`),\n\tCONSTRAINT `customers_cpf_unique` UNIQUE(`cpf`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 157
+}

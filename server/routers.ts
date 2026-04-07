@@ -7,6 +7,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { notifyOwner } from "./_core/notification";
 import { generateImage } from "./_core/imageGeneration";
 import { storagePut } from "./storage";
+import { customerAuthRouter } from "./routers/customerAuth";
 import {
   getProducts, getProductBySlug, getProductById, createProduct, updateProduct, deleteProduct,
   createOrder, getOrders, getOrderById, updateOrderStatus, getDashboardStats,
@@ -24,6 +25,7 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
 
 export const appRouter = router({
   system: systemRouter,
+  customerAuth: customerAuthRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),

@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ShoppingCart, Search, Menu, X, Instagram, Facebook } from "lucide-react";
+import { ShoppingCart, Search, Menu, X, Instagram, Facebook, User, LogOut } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 const LOGO_URL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663427629051/9BCf3HWTZf6aELg8wntRub/jumera-logo_2dee52ef.webp";
 
@@ -15,6 +18,49 @@ const navLinks = [
   { label: "Seleções", href: "/produtos?categoria=selecoes" },
   { label: "Retrô", href: "/produtos?categoria=retro" },
 ];
+
+function CustomerHeaderButton() {
+  const { customer, isAuthenticated } = useCustomerAuth();
+  const logout = trpc.customerAuth.logout.useMutation({
+    onSuccess: () => {
+      toast.success("Logout realizado com sucesso!");
+      window.location.href = "/";
+    },
+  });
+
+  if (isAuthenticated && customer) {
+    return (
+      <div className="hidden sm:flex items-center gap-1">
+        <Link
+          href="/minha-conta"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-md transition-colors"
+        >
+          <User size={14} className="text-[#C8102E]" />
+          <span className="max-w-[80px] truncate">{customer.name.split(" ")[0]}</span>
+        </Link>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-gray-500 hover:text-red-400"
+          onClick={() => logout.mutate()}
+          title="Sair"
+        >
+          <LogOut size={14} />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href="/login"
+      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#C8102E] hover:bg-[#a00d24] rounded-md transition-colors"
+    >
+      <User size={14} />
+      ENTRAR
+    </Link>
+  );
+}
 
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -114,6 +160,9 @@ export default function Header() {
               </Badge>
             )}
           </Button>
+
+          {/* Customer Auth */}
+          <CustomerHeaderButton />
 
           {/* Mobile menu */}
           <Button

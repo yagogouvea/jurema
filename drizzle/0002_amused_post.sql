@@ -1,0 +1,20 @@
+CREATE TABLE `customers` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`name` varchar(255) NOT NULL,
+	`email` varchar(320) NOT NULL,
+	`cpf` varchar(14) NOT NULL,
+	`phone` varchar(20) NOT NULL,
+	`passwordHash` varchar(255) NOT NULL,
+	`addressZip` varchar(10),
+	`addressStreet` varchar(255),
+	`addressNumber` varchar(20),
+	`addressComplement` varchar(100),
+	`addressNeighborhood` varchar(100),
+	`addressCity` varchar(100),
+	`addressState` varchar(2),
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `customers_id` PRIMARY KEY(`id`),
+	CONSTRAINT `customers_email_unique` UNIQUE(`email`),
+	CONSTRAINT `customers_cpf_unique` UNIQUE(`cpf`)
+);
