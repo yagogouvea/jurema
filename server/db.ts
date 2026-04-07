@@ -66,6 +66,10 @@ export async function getProducts(opts: {
   if (search) conditions.push(or(like(products.name, `%${search}%`), like(products.team, `%${search}%`)) as any);
   if (isFeatured !== undefined) conditions.push(eq(products.isFeatured, isFeatured));
   if (featuredSection !== undefined) conditions.push(eq(products.featuredSection, featuredSection as any));
+  // Se não está buscando por featured section, excluir produtos em destaque do catálogo
+  else if (isFeatured === undefined && featuredSection === undefined) {
+    conditions.push(eq(products.isFeatured, false));
+  }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
