@@ -334,7 +334,9 @@ function ProductsTab() {
 
   const { data } = trpc.products.list.useQuery({ limit: 100, search: search || undefined, category: categoryFilter !== "all" ? categoryFilter : undefined });
   const products = data?.items ?? [];
-  const filteredProducts = featuredSectionFilter === "all" ? products : products.filter((p: any) => p.featuredSection === featuredSectionFilter);
+  const filteredProducts = featuredSectionFilter === "all" 
+    ? products 
+    : products.filter((p: any) => p.isFeatured && p.featuredSection === featuredSectionFilter);
 
   const deleteMutation = trpc.products.delete.useMutation({
     onSuccess: () => { utils.products.list.invalidate(); toast.success("Produto removido!"); },
@@ -412,8 +414,16 @@ function ProductsTab() {
                   {!p.isActive && (
                     <span className="bg-gray-800/90 text-gray-400 text-[9px] px-1.5 py-0.5 rounded font-bold">INATIVO</span>
                   )}
-                  {p.isFeatured && (
-                    <span className="bg-yellow-500/90 text-black text-[9px] px-1.5 py-0.5 rounded font-bold">★ DEST.</span>
+                  {p.isFeatured && p.featuredSection && (
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                      p.featuredSection === 'destaque' ? 'bg-yellow-500/90 text-black' :
+                      p.featuredSection === 'mais-vendidos' ? 'bg-orange-500/90 text-black' :
+                      'bg-blue-500/90 text-white'
+                    }`}>
+                      {p.featuredSection === 'destaque' ? '★ DESTAQUE' :
+                       p.featuredSection === 'mais-vendidos' ? '📈 VENDIDOS' :
+                       '✨ NOVA'}
+                    </span>
                   )}
                 </div>
                 {/* Foto count */}
