@@ -7,6 +7,8 @@ import { TRPCError } from "@trpc/server";
 import { adminUsers } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 
+
+
 const ADMIN_JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "jumera-admin-secret-2026"
 );
@@ -42,8 +44,8 @@ export const adminAuthRouter = router({
 
       ctx.res.cookie(ADMIN_COOKIE, token, {
         httpOnly: true,
-        secure: true,
-        sameSite: "none",
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
         maxAge: 7 * 24 * 60 * 60 * 1000,
         path: "/",
       });
@@ -69,8 +71,8 @@ export const adminAuthRouter = router({
   logout: publicProcedure.mutation(({ ctx }) => {
     ctx.res.clearCookie(ADMIN_COOKIE, {
       httpOnly: true,
-      secure: true,
-      sameSite: "none",
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       path: "/",
     });
     return { success: true };
