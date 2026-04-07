@@ -306,7 +306,7 @@ function ProductsTab() {
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [showForm, setShowForm] = useState(false);
 
-  const { data } = trpc.products.list.useQuery({ limit: 200, search: search || undefined, category: categoryFilter !== "all" ? categoryFilter : undefined });
+  const { data } = trpc.products.list.useQuery({ limit: 100, search: search || undefined, category: categoryFilter !== "all" ? categoryFilter : undefined });
   const products = data?.items ?? [];
 
   const deleteMutation = trpc.products.delete.useMutation({
