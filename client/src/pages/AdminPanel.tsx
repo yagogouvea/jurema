@@ -95,6 +95,13 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
     if (!form.name || !form.price) { toast.error("Nome e preço são obrigatórios"); return; }
     const slug = form.slug || generateSlug(form.name);
     const data = { ...form, slug };
+    // Enviar featuredSection apenas se isFeatured e tiver valor
+    if (!form.isFeatured) {
+      data.featuredSection = undefined;
+    } else if (!data.featuredSection) {
+      toast.error("Selecione uma seção de destaque");
+      return;
+    }
     if (product) {
       updateMutation.mutate({ id: product.id, ...data });
     } else {
