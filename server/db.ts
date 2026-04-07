@@ -53,11 +53,11 @@ export async function getUserByOpenId(openId: string) {
 // ─── Products ─────────────────────────────────────────────────────────────────
 export async function getProducts(opts: {
   category?: string; gender?: string; team?: string; search?: string;
-  isFeatured?: boolean; orderBy?: string; limit?: number; offset?: number;
+  isFeatured?: boolean; featuredSection?: string; orderBy?: string; limit?: number; offset?: number;
 }) {
   const db = await getDb();
   if (!db) return { items: [], total: 0 };
-  const { category, gender, team, search, isFeatured, orderBy = 'featured', limit = 20, offset = 0 } = opts;
+  const { category, gender, team, search, isFeatured, featuredSection, orderBy = 'featured', limit = 20, offset = 0 } = opts;
 
   const conditions = [eq(products.isActive, true)];
   if (category) conditions.push(eq(products.category, category as any));
@@ -65,8 +65,9 @@ export async function getProducts(opts: {
   if (team) conditions.push(like(products.team, `%${team}%`));
   if (search) conditions.push(or(like(products.name, `%${search}%`), like(products.team, `%${search}%`)) as any);
   if (isFeatured !== undefined) conditions.push(eq(products.isFeatured, isFeatured));
+  if (featuredSection !== undefined) conditions.push(eq(products.featuredSection, featuredSection as any));
 
-  const where = conditions.length > 1 ? and(...conditions) : conditions[0];
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   let orderClause;
   switch (orderBy) {

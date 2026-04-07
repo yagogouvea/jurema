@@ -132,7 +132,7 @@ function HeroBanner() {
 }
 
 function FeaturedProducts() {
-  const { data, isLoading } = trpc.products.list.useQuery({ isFeatured: true, limit: 8 });
+  const { data, isLoading } = trpc.products.list.useQuery({ isFeatured: true, featuredSection: 'destaque', limit: 8 });
 
   if (isLoading) {
     return (
@@ -393,7 +393,7 @@ function NewArrivals() {
 }
 
 function BestSellers() {
-  const { data, isLoading } = trpc.products.list.useQuery({ orderBy: 'bestseller', limit: 8 });
+  const { data, isLoading } = trpc.products.list.useQuery({ isFeatured: true, featuredSection: 'mais-vendidos', limit: 8 });
 
   if (isLoading) {
     return (
@@ -443,7 +443,7 @@ function BestSellers() {
 }
 
 function NewCollection() {
-  const { data, isLoading } = trpc.products.list.useQuery({ orderBy: 'newest', limit: 8 });
+  const { data, isLoading } = trpc.products.list.useQuery({ isFeatured: true, featuredSection: 'nova-colecao', limit: 8 });
 
   if (isLoading) {
     return (
