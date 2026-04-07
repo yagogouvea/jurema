@@ -83,3 +83,7 @@
 - [x] Máscara de telefone no formato (00) 94729-3221
 - [x] Proteger checkout: redirecionar para login se não autenticado
 - [x] Envio do pedido via WhatsApp para 11 98169-3476 com: Nome, CPF, Telefone, itens, quantidades, valores e total
+
+## Popup de Seleção Atacado (v6)
+- [x] Criar QuickAddModal com grade de tamanhos e contadores independentes por tamanho
+- [x] Integrar modal ao ProductCard (clique no card abre o popup)
