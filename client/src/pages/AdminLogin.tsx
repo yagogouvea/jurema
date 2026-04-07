@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,11 +15,14 @@ export default function AdminLogin() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const utils = trpc.useUtils();
 
   const loginMutation = trpc.adminAuth.login.useMutation({
     onSuccess: (data) => {
       toast.success(`Bem-vindo, ${data.name}!`);
-      navigate("/admin");
+      // Refetch admin auth state após login bem-sucedido
+      utils.adminAuth.me.invalidate();
+      setTimeout(() => navigate("/admin"), 500);
     },
     onError: (e) => {
       toast.error(e.message || "Credenciais inválidas");
