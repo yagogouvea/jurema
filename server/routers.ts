@@ -15,6 +15,9 @@ import {
   getActiveBanners, getAllBanners, createBanner, updateBanner, deleteBanner,
   getAllSettings, setSetting,
 } from "./db";
+import { getDb } from "./db";
+import { sql, and, eq, ne } from "drizzle-orm";
+import { products } from "../drizzle/schema";
 
 // Admin guard middleware
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -85,9 +88,20 @@ export const appRouter = router({
         gender: z.enum(['masculino', 'feminino', 'infantil']).default('masculino'),
         isActive: z.boolean().default(true),
         isFeatured: z.boolean().default(false),
+        featuredSection: z.enum(['destaque', 'mais-vendidos', 'nova-colecao']).optional(),
         stock: z.array(z.object({ size: z.string(), quantity: z.number() })).optional(),
       }))
       .mutation(async ({ input }) => {
+        if (input.isFeatured && input.featuredSection) {
+          const db = await getDb();
+          if (db) {
+            const result = await db.select({ count: sql`count(*)` }).from(products).where(and(eq(products.isFeatured, true), eq(products.featuredSection, input.featuredSection as any)));
+            const count = Number(result?.[0]?.count ?? 0);
+            if (count >= 8) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `Seção "${input.featuredSection}" já tem 8 produtos. Remova um para adicionar outro.` });
+            }
+          }
+        }
         await createProduct(input as any);
         return { success: true };
       }),
@@ -106,10 +120,21 @@ export const appRouter = router({
         gender: z.enum(['masculino', 'feminino', 'infantil']).optional(),
         isActive: z.boolean().optional(),
         isFeatured: z.boolean().optional(),
+        featuredSection: z.enum(['destaque', 'mais-vendidos', 'nova-colecao']).optional(),
         stock: z.array(z.object({ size: z.string(), quantity: z.number() })).optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
+        if (data.isFeatured && data.featuredSection) {
+          const db = await getDb();
+          if (db) {
+            const result = await db.select({ count: sql`count(*)` }).from(products).where(and(eq(products.isFeatured, true), eq(products.featuredSection, data.featuredSection as any), ne(products.id, id)));
+            const count = Number(result?.[0]?.count ?? 0);
+            if (count >= 8) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `Seção "${data.featuredSection}" já tem 8 produtos. Remova um para adicionar outro.` });
+            }
+          }
+        }
         await updateProduct(id, data as any);
         return { success: true };
       }),

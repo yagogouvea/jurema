@@ -48,6 +48,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
     gender: product?.gender || "masculino",
     isActive: product?.isActive ?? true,
     isFeatured: product?.isFeatured ?? false,
+    featuredSection: product?.featuredSection || "",
     images: (product?.images as string[]) || [],
     stock: [],
   });
@@ -278,6 +279,23 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
               {form.isFeatured ? "Destaque" : "Sem destaque"}
             </button>
           </div>
+
+          {/* Seção de Destaque */}
+          {form.isFeatured && (
+            <div>
+              <Label className="text-gray-400 text-xs mb-1 block">SEÇÃO DE DESTAQUE</Label>
+              <Select value={form.featuredSection} onValueChange={v => setForm(p => ({ ...p, featuredSection: v }))}>
+                <SelectTrigger className="bg-[#1A1A1A] border-[#333] text-white">
+                  <SelectValue placeholder="Selecione uma seção" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#1A1A1A] border-[#333]">
+                  <SelectItem value="destaque" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">PRODUTOS EM DESTAQUE</SelectItem>
+                  <SelectItem value="mais-vendidos" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">MAIS VENDIDOS</SelectItem>
+                  <SelectItem value="nova-colecao" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">NOVA COLEÇÃO</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Footer fixo */}
@@ -303,11 +321,13 @@ function ProductsTab() {
   const utils = trpc.useUtils();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [featuredSectionFilter, setFeaturedSectionFilter] = useState("all");
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   const { data } = trpc.products.list.useQuery({ limit: 100, search: search || undefined, category: categoryFilter !== "all" ? categoryFilter : undefined });
   const products = data?.items ?? [];
+  const filteredProducts = featuredSectionFilter === "all" ? products : products.filter((p: any) => p.featuredSection === featuredSectionFilter);
 
   const deleteMutation = trpc.products.delete.useMutation({
     onSuccess: () => { utils.products.list.invalidate(); toast.success("Produto removido!"); },
@@ -342,6 +362,17 @@ function ProductsTab() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={featuredSectionFilter} onValueChange={setFeaturedSectionFilter}>
+          <SelectTrigger className="bg-[#1A1A1A] border-[#333] text-white w-full sm:w-48">
+            <SelectValue placeholder="Seção" />
+          </SelectTrigger>
+          <SelectContent className="bg-[#1A1A1A] border-[#333]">
+            <SelectItem value="all" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Todas</SelectItem>
+            <SelectItem value="destaque" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">PRODUTOS EM DESTAQUE</SelectItem>
+            <SelectItem value="mais-vendidos" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">MAIS VENDIDOS</SelectItem>
+            <SelectItem value="nova-colecao" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">NOVA COLEÇÃO</SelectItem>
+          </SelectContent>
+        </Select>
         <Button
           onClick={() => { setEditingProduct(null); setShowForm(true); }}
           className="bg-[#C8102E] hover:bg-red-700 text-white gap-2 whitespace-nowrap"
@@ -352,9 +383,9 @@ function ProductsTab() {
 
       <p className="text-gray-600 text-sm">{products.length} produto(s)</p>
 
-      {/* Product Grid — mobile-first cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {products.map(p => {
+      {/* Grid de produtos */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredProducts.map((p: any) => {
           const images = (p.images as string[]) || [];
           const coverImg = images[0];
           return (
