@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 const CATEGORIES = [
   { value: "all", label: "Todas as Categorias" },
   { value: "times", label: "Times Brasileiros" },
-  { value: "selecoes", label: "Seleções Nacionais" },
+  { value: "selecoes", label: "Seleções" },
   { value: "retro", label: "Coleção Retrô" },
 ];
 

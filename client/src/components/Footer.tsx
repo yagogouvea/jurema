@@ -77,7 +77,7 @@ export default function Footer() {
             <ul className="space-y-2">
               {[
                 { label: "Times Brasileiros", href: "/produtos?categoria=times" },
-                { label: "Seleções Nacionais", href: "/produtos?categoria=selecoes" },
+                { label: "Seleções", href: "/produtos?categoria=selecoes" },
                 { label: "Camisas Retrô", href: "/produtos?categoria=retro" },
                 { label: "Masculino", href: "/produtos?genero=masculino" },
                 { label: "Feminino", href: "/produtos?genero=feminino" },

@@ -232,7 +232,7 @@ function ProductsTab() {
                 </SelectTrigger>
                 <SelectContent className="bg-[#1A1A1A] border-[#333]">
                   <SelectItem value="times" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Times Brasileiros</SelectItem>
-                  <SelectItem value="selecoes" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Seleções Nacionais</SelectItem>
+                  <SelectItem value="selecoes" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Seleções</SelectItem>
                   <SelectItem value="retro" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Coleção Retrô</SelectItem>
                 </SelectContent>
               </Select>

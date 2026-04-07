@@ -195,7 +195,7 @@ function CategorySection() {
       iconBg: "bg-[#C8102E]/10",
     },
     {
-      title: "Seleções Nacionais",
+      title: "Seleções",
       subtitle: "Brasil, Argentina, Portugal e mais",
       href: "/produtos?categoria=selecoes",
       Icon: Globe,
