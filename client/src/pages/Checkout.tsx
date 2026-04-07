@@ -4,8 +4,10 @@ import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ShoppingCart, MessageCircle, CheckCircle2, Lock } from "lucide-react";
+import { ShoppingCart, MessageCircle, CheckCircle2, Lock, Edit2 } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Checkout() {
@@ -13,6 +15,20 @@ export default function Checkout() {
   const { user, loading } = useAuth();
   const [, navigate] = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [step, setStep] = useState<'review' | 'confirm'>('review');
+  
+  // Dados editáveis
+  const [formData, setFormData] = useState({
+    name: user?.name || '',
+    cpf: '',
+    addressZip: '',
+    addressStreet: '',
+    addressNumber: '',
+    addressComplement: '',
+    addressNeighborhood: '',
+    addressCity: '',
+    addressState: '',
+  });
 
   const createOrder = trpc.orders.create.useMutation();
 
@@ -65,9 +81,13 @@ export default function Checkout() {
     );
   }
 
+  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
   const handleConfirmAndSendWhatsApp = async () => {
-    if (!user.email || !user.name) {
-      toast.error("Dados de usuário incompletos");
+    if (!user.email || !formData.name) {
+      toast.error("Nome é obrigatório");
       return;
     }
 
@@ -75,16 +95,16 @@ export default function Checkout() {
     try {
       // Criar pedido no banco de dados
       const order = await createOrder.mutateAsync({
-        customerName: user.name,
+        customerName: formData.name,
         customerEmail: user.email,
         customerPhone: "",
-        addressZip: "",
-        addressStreet: "",
-        addressNumber: "",
-        addressComplement: "",
-        addressNeighborhood: "",
-        addressCity: "",
-        addressState: "",
+        addressZip: formData.addressZip,
+        addressStreet: formData.addressStreet,
+        addressNumber: formData.addressNumber,
+        addressComplement: formData.addressComplement,
+        addressNeighborhood: formData.addressNeighborhood,
+        addressCity: formData.addressCity,
+        addressState: formData.addressState,
         paymentMethod: "pix",
         subtotal: subtotal.toFixed(2),
         shippingCost: shippingCost.toFixed(2),
@@ -100,29 +120,42 @@ export default function Checkout() {
         })),
       });
 
-      // Construir mensagem detalhada para WhatsApp
+      // Construir mensagem detalhada para WhatsApp (SEM EMOTICONS)
       const productsList = items
-        .map(item => `• ${item.productName} (${item.size}) - Qtd: ${item.quantity} x R$ ${item.unitPrice.toFixed(2).replace(".", ",")} = R$ ${(item.unitPrice * item.quantity).toFixed(2).replace(".", ",")}`)
+        .map(item => `* ${item.productName} (${item.size}) - Qtd: ${item.quantity} x R$ ${item.unitPrice.toFixed(2).replace(".", ",")} = R$ ${(item.unitPrice * item.quantity).toFixed(2).replace(".", ",")}`)
         .join("\n");
 
-      const message = `
-*NOVO PEDIDO - JUMERA SPORT*
+      const endereco = [
+        formData.addressStreet,
+        formData.addressNumber,
+        formData.addressComplement,
+        formData.addressNeighborhood,
+        formData.addressCity,
+        formData.addressState,
+        formData.addressZip
+      ].filter(Boolean).join(", ");
 
-*Número do Pedido:* ${order.orderNumber}
+      const message = `NOVO PEDIDO - JUMERA SPORT
 
-*Cliente:* ${user.name}
-*Email:* ${user.email}
+Numero do Pedido: ${order.orderNumber}
 
-*PRODUTOS:*
+DADOS DO CLIENTE:
+Nome: ${formData.name}
+Email: ${user.email}
+CPF: ${formData.cpf || "Nao informado"}
+
+ENDERECO DE ENTREGA:
+${endereco || "Nao informado"}
+
+PRODUTOS:
 ${productsList}
 
-*Resumo:*
+RESUMO:
 Subtotal: R$ ${subtotal.toFixed(2).replace(".", ",")}
-Frete: ${shippingCost === 0 ? "GRÁTIS" : `R$ ${shippingCost.toFixed(2).replace(".", ",")}`}
-*TOTAL: R$ ${total.toFixed(2).replace(".", ",")}*
+Frete: ${shippingCost === 0 ? "GRATIS" : `R$ ${shippingCost.toFixed(2).replace(".", ",")}`}
+TOTAL: R$ ${total.toFixed(2).replace(".", ",")}
 
-Clique no link para confirmar: ${window.location.origin}/pedido/${order.orderNumber}
-      `.trim();
+Link de confirmacao: ${window.location.origin}/pedido/${order.orderNumber}`;
 
       // Enviar para WhatsApp (número será configurado no backend)
       const whatsappNumber = "5585987654321"; // Será substituído pela configuração real
@@ -157,90 +190,229 @@ Clique no link para confirmar: ${window.location.origin}/pedido/${order.orderNum
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Resumo do Pedido */}
+          {/* Conteúdo Principal */}
           <div className="lg:col-span-2">
-            <div className="bg-[#111111] rounded-xl p-6 border border-[#1E1E1E] mb-6">
-              <h2 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider mb-5">RESUMO DO PEDIDO</h2>
-              
-              {/* Produtos */}
-              <div className="space-y-3 mb-6">
-                {items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-start pb-3 border-b border-[#1E1E1E]">
-                    <div className="flex-1">
-                      <p className="text-white font-semibold">{item.productName}</p>
-                      <p className="text-gray-500 text-sm">Tamanho: {item.size} | Qtd: {item.quantity}</p>
-                    </div>
-                    <p className="text-[#C8102E] font-bold">R$ {(item.unitPrice * item.quantity).toFixed(2).replace(".", ",")}</p>
+            {step === 'review' && (
+              <>
+                {/* Resumo do Pedido */}
+                <div className="bg-[#111111] rounded-xl p-6 border border-[#1E1E1E] mb-6">
+                  <h2 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider mb-5">RESUMO DO PEDIDO</h2>
+                  
+                  {/* Produtos */}
+                  <div className="space-y-3 mb-6">
+                    {items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-start pb-3 border-b border-[#1E1E1E]">
+                        <div className="flex-1">
+                          <p className="text-white font-semibold">{item.productName}</p>
+                          <p className="text-gray-500 text-sm">Tamanho: {item.size} | Qtd: {item.quantity}</p>
+                        </div>
+                        <p className="text-[#C8102E] font-bold">R$ {(item.unitPrice * item.quantity).toFixed(2).replace(".", ",")}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              {/* Totais */}
-              <div className="space-y-2 bg-[#0A0A0A] p-4 rounded-lg">
-                <div className="flex justify-between text-gray-400">
-                  <span>Subtotal:</span>
-                  <span>R$ {subtotal.toFixed(2).replace(".", ",")}</span>
+                  {/* Totais */}
+                  <div className="space-y-2 bg-[#0A0A0A] p-4 rounded-lg">
+                    <div className="flex justify-between text-gray-400">
+                      <span>Subtotal:</span>
+                      <span>R$ {subtotal.toFixed(2).replace(".", ",")}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-400">
+                      <span>Frete:</span>
+                      <span>{shippingCost === 0 ? "GRATIS" : `R$ ${shippingCost.toFixed(2).replace(".", ",")}`}</span>
+                    </div>
+                    <div className="flex justify-between text-white font-bold text-lg pt-2 border-t border-[#1E1E1E]">
+                      <span>Total:</span>
+                      <span className="text-[#C8102E]">R$ {total.toFixed(2).replace(".", ",")}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between text-gray-400">
-                  <span>Frete:</span>
-                  <span>{shippingCost === 0 ? "GRÁTIS" : `R$ ${shippingCost.toFixed(2).replace(".", ",")}`}</span>
+
+                {/* Dados do Cliente */}
+                <div className="bg-[#111111] rounded-xl p-6 border border-[#1E1E1E]">
+                  <h2 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider mb-5 flex items-center gap-2">
+                    <CheckCircle2 size={20} className="text-green-500" /> SEUS DADOS
+                  </h2>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-gray-500 text-xs mb-1">Nome</p>
+                      <p className="text-white font-semibold">{user.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 text-xs mb-1">Email</p>
+                      <p className="text-white font-semibold">{user.email}</p>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={() => setStep('confirm')}
+                    className="w-full mt-6 bg-[#C8102E] hover:bg-red-700 text-white font-bold py-3 flex items-center justify-center gap-2"
+                  >
+                    <Edit2 size={18} />
+                    Confirmar e Editar Dados
+                  </Button>
                 </div>
-                <div className="flex justify-between text-white font-bold text-lg pt-2 border-t border-[#1E1E1E]">
-                  <span>Total:</span>
-                  <span className="text-[#C8102E]">R$ {total.toFixed(2).replace(".", ",")}</span>
+              </>
+            )}
+
+            {step === 'confirm' && (
+              <div className="bg-[#111111] rounded-xl p-6 border border-[#1E1E1E]">
+                <h2 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider mb-5">CONFIRME SEUS DADOS</h2>
+                
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <Label className="text-gray-400 text-xs mb-1">Nome Completo *</Label>
+                    <Input
+                      name="name"
+                      value={formData.name}
+                      onChange={handleFormChange}
+                      placeholder="Seu nome completo"
+                      className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
+                    />
+                  </div>
+
+                  <div>
+                    <Label className="text-gray-400 text-xs mb-1">CPF *</Label>
+                    <Input
+                      name="cpf"
+                      value={formData.cpf}
+                      onChange={handleFormChange}
+                      placeholder="000.000.000-00"
+                      className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-gray-400 text-xs mb-1">CEP</Label>
+                      <Input
+                        name="addressZip"
+                        value={formData.addressZip}
+                        onChange={handleFormChange}
+                        placeholder="00000-000"
+                        className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-gray-400 text-xs mb-1">Estado</Label>
+                      <Input
+                        name="addressState"
+                        value={formData.addressState}
+                        onChange={handleFormChange}
+                        placeholder="SP"
+                        className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-gray-400 text-xs mb-1">Endereço *</Label>
+                    <Input
+                      name="addressStreet"
+                      value={formData.addressStreet}
+                      onChange={handleFormChange}
+                      placeholder="Rua, Avenida..."
+                      className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-gray-400 text-xs mb-1">Número</Label>
+                      <Input
+                        name="addressNumber"
+                        value={formData.addressNumber}
+                        onChange={handleFormChange}
+                        placeholder="123"
+                        className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-gray-400 text-xs mb-1">Complemento</Label>
+                      <Input
+                        name="addressComplement"
+                        value={formData.addressComplement}
+                        onChange={handleFormChange}
+                        placeholder="Apto, Bloco..."
+                        className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-gray-400 text-xs mb-1">Bairro</Label>
+                      <Input
+                        name="addressNeighborhood"
+                        value={formData.addressNeighborhood}
+                        onChange={handleFormChange}
+                        placeholder="Bairro"
+                        className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-gray-400 text-xs mb-1">Cidade *</Label>
+                      <Input
+                        name="addressCity"
+                        value={formData.addressCity}
+                        onChange={handleFormChange}
+                        placeholder="Cidade"
+                        className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => setStep('review')}
+                    variant="outline"
+                    className="flex-1 border-[#333] text-gray-300 hover:text-white bg-transparent"
+                  >
+                    Voltar
+                  </Button>
+                  <Button
+                    onClick={handleConfirmAndSendWhatsApp}
+                    disabled={isSubmitting}
+                    className="flex-1 bg-[#25D366] hover:bg-green-600 text-white font-bold py-3"
+                  >
+                    {isSubmitting ? "Processando..." : "Enviar para WhatsApp"}
+                  </Button>
                 </div>
               </div>
-            </div>
-
-            {/* Dados do Cliente */}
-            <div className="bg-[#111111] rounded-xl p-6 border border-[#1E1E1E]">
-              <h2 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider mb-5 flex items-center gap-2">
-                <CheckCircle2 size={20} className="text-green-500" /> SEUS DADOS
-              </h2>
-              
-              <div className="space-y-3">
-                <div>
-                  <p className="text-gray-500 text-xs mb-1">Nome</p>
-                  <p className="text-white font-semibold">{user.name}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 text-xs mb-1">Email</p>
-                  <p className="text-white font-semibold">{user.email}</p>
-                </div>
-              </div>
-
-              <p className="text-gray-500 text-xs mt-4">
-                Para alterar seus dados, acesse a página de perfil.
-              </p>
-            </div>
+            )}
           </div>
 
-          {/* Sidebar - Ação */}
-          <div>
-            <div className="bg-[#111111] rounded-xl p-6 border border-[#1E1E1E] sticky top-24">
-              <h3 className="font-['Bebas_Neue'] text-xl text-white tracking-wider mb-4">FINALIZAR COMPRA</h3>
-              
-              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-6">
-                <p className="text-blue-300 text-sm">
-                  <MessageCircle size={16} className="inline mr-2" />
-                  Você será redirecionado para o WhatsApp para confirmar seu pedido.
-                </p>
+          {/* Sidebar - Resumo */}
+          {step === 'review' && (
+            <div>
+              <div className="bg-[#111111] rounded-xl p-6 border border-[#1E1E1E] sticky top-24">
+                <h3 className="font-['Bebas_Neue'] text-xl text-white tracking-wider mb-4">TOTAL DO PEDIDO</h3>
+                
+                <div className="space-y-2 bg-[#0A0A0A] p-4 rounded-lg mb-6">
+                  <div className="flex justify-between text-gray-400">
+                    <span>Subtotal:</span>
+                    <span>R$ {subtotal.toFixed(2).replace(".", ",")}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-400">
+                    <span>Frete:</span>
+                    <span>{shippingCost === 0 ? "GRATIS" : `R$ ${shippingCost.toFixed(2).replace(".", ",")}`}</span>
+                  </div>
+                  <div className="flex justify-between text-white font-bold text-lg pt-2 border-t border-[#1E1E1E]">
+                    <span>Total:</span>
+                    <span className="text-[#C8102E]">R$ {total.toFixed(2).replace(".", ",")}</span>
+                  </div>
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                  <p className="text-blue-300 text-sm">
+                    Voce sera redirecionado para o WhatsApp para confirmar seu pedido.
+                  </p>
+                </div>
               </div>
-
-              <Button
-                onClick={handleConfirmAndSendWhatsApp}
-                disabled={isSubmitting}
-                className="w-full bg-[#25D366] hover:bg-green-600 text-white font-bold py-3 mb-3 flex items-center justify-center gap-2"
-              >
-                <MessageCircle size={18} />
-                {isSubmitting ? "Processando..." : "Enviar para WhatsApp"}
-              </Button>
-
-              <p className="text-gray-500 text-xs text-center">
-                Você receberá um link de confirmação via WhatsApp
-              </p>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
