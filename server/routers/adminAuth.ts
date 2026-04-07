@@ -9,6 +9,8 @@ import { eq } from "drizzle-orm";
 
 
 
+
+
 const ADMIN_JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "jumera-admin-secret-2026"
 );
@@ -54,7 +56,15 @@ export const adminAuthRouter = router({
     }),
 
   me: publicProcedure.query(async ({ ctx }) => {
-    const token = ctx.req.cookies?.[ADMIN_COOKIE];
+    // Parse manual do cookie (cookie-parser pode não estar configurado)
+    const cookieHeader = ctx.req.headers.cookie || "";
+    const cookies = cookieHeader.split("; ").reduce((acc, cookie) => {
+      const [key, value] = cookie.split("=");
+      acc[key] = decodeURIComponent(value || "");
+      return acc;
+    }, {} as Record<string, string>);
+    
+    const token = cookies[ADMIN_COOKIE];
     if (!token) return null;
     try {
       const { payload } = await jwtVerify(token, ADMIN_JWT_SECRET);
@@ -69,6 +79,7 @@ export const adminAuthRouter = router({
   }),
 
   logout: publicProcedure.mutation(({ ctx }) => {
+    // Limpar cookie com as mesmas opções que foram usadas para criar
     ctx.res.clearCookie(ADMIN_COOKIE, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
