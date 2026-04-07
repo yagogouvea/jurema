@@ -8,6 +8,7 @@ import { notifyOwner } from "./_core/notification";
 import { generateImage } from "./_core/imageGeneration";
 import { storagePut } from "./storage";
 import { customerAuthRouter } from "./routers/customerAuth";
+import { adminAuthRouter } from "./routers/adminAuth";
 import {
   getProducts, getProductBySlug, getProductById, createProduct, updateProduct, deleteProduct,
   createOrder, getOrders, getOrderById, updateOrderStatus, getDashboardStats,
@@ -26,6 +27,7 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
 export const appRouter = router({
   system: systemRouter,
   customerAuth: customerAuthRouter,
+  adminAuth: adminAuthRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),

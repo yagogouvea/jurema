@@ -307,22 +307,22 @@ function CategorySection() {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
       {categories.map(cat => (
         <Link key={cat.href} href={cat.href}>
-          <div className={`relative overflow-hidden rounded-xl ${cat.bg} border ${cat.borderColor} ${cat.hoverBorder} p-6 cursor-pointer group transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl`}>
+          <div className={`relative overflow-hidden rounded-xl ${cat.bg} border ${cat.borderColor} ${cat.hoverBorder} p-3 md:p-6 cursor-pointer group transition-all duration-300 active:scale-95 hover:scale-[1.02] hover:shadow-2xl`}>
             {/* Decorative diagonal stripe */}
             <div className="absolute top-0 right-0 w-24 h-24 opacity-5" style={{ background: `linear-gradient(135deg, ${cat.accent} 50%, transparent 50%)` }} />
             {/* Icon */}
-            <div className={`w-12 h-12 rounded-lg ${cat.iconBg} flex items-center justify-center mb-4 transition-transform group-hover:scale-110`}>
-              <cat.Icon size={24} style={{ color: cat.accent }} />
+            <div className={`w-9 h-9 md:w-12 md:h-12 rounded-lg ${cat.iconBg} flex items-center justify-center mb-2 md:mb-4 transition-transform group-hover:scale-110`}>
+              <cat.Icon size={18} style={{ color: cat.accent }} />
             </div>
-            <h3 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider group-hover:text-[#C8102E] transition-colors">
+            <h3 className="font-['Bebas_Neue'] text-base md:text-2xl text-white tracking-wider group-hover:text-[#C8102E] transition-colors leading-tight">
               {cat.title}
             </h3>
-            <p className="text-gray-500 text-sm mt-1 mb-4">{cat.subtitle}</p>
-            <div className="flex items-center gap-1 text-sm font-semibold transition-all group-hover:gap-2" style={{ color: cat.accent }}>
-              Ver coleção <ArrowRight size={14} />
+            <p className="text-gray-500 text-xs mt-0.5 mb-2 md:mb-4 hidden sm:block">{cat.subtitle}</p>
+            <div className="flex items-center gap-1 text-xs md:text-sm font-semibold transition-all group-hover:gap-2 mt-1" style={{ color: cat.accent }}>
+              Ver <ArrowRight size={12} />
             </div>
           </div>
         </Link>
@@ -528,15 +528,15 @@ export default function Home() {
       <StatsBar />
 
       {/* Featured Products */}
-      <section className="py-12 md:py-16">
+      <section className="py-8 md:py-16">
         <div className="container">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-5 md:mb-8">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <div className="w-6 h-0.5 bg-[#C8102E]" />
                 <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Selecionados</span>
               </div>
-              <h2 className="font-['Bebas_Neue'] text-4xl text-white tracking-wider">PRODUTOS EM DESTAQUE</h2>
+              <h2 className="font-['Bebas_Neue'] text-2xl md:text-4xl text-white tracking-wider">PRODUTOS EM DESTAQUE</h2>
             </div>
             <Link href="/produtos">
               <Button variant="outline" className="hidden md:flex border-[#C8102E]/50 text-[#C8102E] hover:bg-[#C8102E] hover:text-white bg-transparent gap-2">
@@ -554,44 +554,43 @@ export default function Home() {
       </section>
 
       {/* Categories */}
-      <section className="py-12 bg-[#0A0A0A]">
+      <section className="py-8 md:py-12 bg-[#0A0A0A]">
         <div className="container">
-          <div className="mb-8">
+          <div className="mb-5 md:mb-8">
             <div className="flex items-center gap-2 mb-1">
               <div className="w-6 h-0.5 bg-[#C8102E]" />
               <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Explore</span>
             </div>
-            <h2 className="font-['Bebas_Neue'] text-4xl text-white tracking-wider">CATEGORIAS</h2>
+            <h2 className="font-['Bebas_Neue'] text-2xl md:text-4xl text-white tracking-wider">CATEGORIAS</h2>
           </div>
           <CategorySection />
         </div>
       </section>
 
       {/* Gender Section */}
-      <section className="py-12">
-        <div className="container">
-          <div className="mb-8 text-center">
+      <section className="py-8 md:py-12">
+        <div className="container">          <div className="mb-5 md:mb-8 text-center">
             <div className="flex items-center justify-center gap-2 mb-1">
               <div className="w-6 h-0.5 bg-[#C8102E]" />
               <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Para todos</span>
               <div className="w-6 h-0.5 bg-[#C8102E]" />
             </div>
-            <h2 className="font-['Bebas_Neue'] text-4xl text-white tracking-wider">COMPRE POR GÊNERO</h2>
+            <h2 className="font-['Bebas_Neue'] text-2xl md:text-4xl text-white tracking-wider">COMPRE POR GÊNERO</h2>
           </div>
           <GenderSection />
         </div>
       </section>
 
       {/* Mais Vendidos */}
-      <section className="py-12 md:py-16 bg-[#0A0A0A]">
+      <section className="py-8 md:py-16 bg-[#0A0A0A]">
         <div className="container">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-5 md:mb-8">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp size={14} className="text-[#C8102E]" />
                 <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Campeões de venda</span>
               </div>
-              <h2 className="font-['Bebas_Neue'] text-4xl text-white tracking-wider">MAIS VENDIDOS</h2>
+              <h2 className="font-['Bebas_Neue'] text-2xl md:text-4xl text-white tracking-wider">MAIS VENDIDOS</h2>
             </div>
             <Link href="/produtos?ordem=bestseller">
               <Button variant="outline" className="hidden md:flex border-[#C8102E]/50 text-[#C8102E] hover:bg-[#C8102E] hover:text-white bg-transparent gap-2">
@@ -609,15 +608,15 @@ export default function Home() {
       </section>
 
       {/* Nova Coleção */}
-      <section className="py-12 md:py-16">
+      <section className="py-8 md:py-16">
         <div className="container">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-5 md:mb-8">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Sparkles size={14} className="text-[#C8102E]" />
                 <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Recém chegados</span>
               </div>
-              <h2 className="font-['Bebas_Neue'] text-4xl text-white tracking-wider">NOVA COLEÇÃO</h2>
+              <h2 className="font-['Bebas_Neue'] text-2xl md:text-4xl text-white tracking-wider">NOVA COLEÇÃO</h2>
             </div>
             <Link href="/produtos?ordem=newest">
               <Button variant="outline" className="hidden md:flex border-[#C8102E]/50 text-[#C8102E] hover:bg-[#C8102E] hover:text-white bg-transparent gap-2">

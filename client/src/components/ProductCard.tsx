@@ -33,13 +33,6 @@ export default function ProductCard({
     images?.[0] ||
     `https://placehold.co/400x400/1A1A1A/C8102E?text=${encodeURIComponent(name.split(' ')[0])}`;
 
-  const genderLabel: Record<string, string> = {
-    masculino: 'Masculino', feminino: 'Feminino', infantil: 'Infantil',
-  };
-  const categoryLabel: Record<string, string> = {
-    times: 'Times', selecoes: 'Seleções', retro: 'Retrô',
-  };
-
   const handleOpenModal = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -48,31 +41,33 @@ export default function ProductCard({
 
   return (
     <>
-      <Link href={`/produto/${slug}`}>
-        <div className="product-card bg-[#111111] rounded-xl overflow-hidden cursor-pointer group border border-[#1E1E1E] hover:border-[#C8102E]/40">
-          {/* Image */}
-          <div className="relative aspect-square overflow-hidden bg-[#1A1A1A]">
+      <div className="product-card bg-[#111111] rounded-xl overflow-hidden border border-[#1E1E1E] hover:border-[#C8102E]/40 transition-all group">
+        {/* Image */}
+        <Link href={`/produto/${slug}`}>
+          <div className="relative aspect-square overflow-hidden bg-[#1A1A1A] cursor-pointer">
             <img
               src={imageUrl}
               alt={name}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               loading="lazy"
             />
 
             {/* Badges */}
-            {isFeatured && (
-              <span className="absolute top-2 left-2 bg-[#C8102E] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                Destaque
-              </span>
-            )}
-            {discount && discount > 0 && (
-              <span className="absolute top-2 right-2 bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">
-                -{discount}%
-              </span>
-            )}
+            <div className="absolute top-2 left-2 flex flex-col gap-1">
+              {isFeatured && (
+                <span className="bg-[#C8102E] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Destaque
+                </span>
+              )}
+              {discount && discount > 0 && (
+                <span className="bg-yellow-500 text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                  -{discount}%
+                </span>
+              )}
+            </div>
 
-            {/* Quick add overlay — abre o modal */}
-            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
+            {/* Quick add overlay — desktop hover */}
+            <div className="hidden md:flex absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity items-end justify-center pb-4">
               <button
                 onClick={handleOpenModal}
                 className="flex items-center gap-2 bg-[#C8102E] hover:bg-red-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition-all transform translate-y-2 group-hover:translate-y-0 shadow-lg"
@@ -82,43 +77,53 @@ export default function ProductCard({
               </button>
             </div>
           </div>
+        </Link>
 
-          {/* Info */}
-          <div className="p-3">
-            {team && (
-              <p className="text-[#C8102E] text-xs font-semibold uppercase tracking-wider mb-1">
-                {team}
-              </p>
-            )}
-            <h3 className="text-white text-sm font-semibold leading-tight mb-1 line-clamp-2 group-hover:text-[#C8102E] transition-colors">
+        {/* Info */}
+        <div className="p-2.5 md:p-3">
+          {team && (
+            <p className="text-[#C8102E] text-[10px] font-bold uppercase tracking-wider mb-0.5 truncate">
+              {team}
+            </p>
+          )}
+          <Link href={`/produto/${slug}`}>
+            <h3 className="text-white text-xs md:text-sm font-semibold leading-tight mb-1.5 line-clamp-2 hover:text-[#C8102E] transition-colors cursor-pointer">
               {name}
             </h3>
-            <div className="flex items-center gap-1 mb-2">
-              <span className="text-gray-600 text-[10px]">
-                {genderLabel[gender]} • {categoryLabel[category]}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                {numOriginal && numOriginal > numPrice && (
-                  <p className="text-gray-600 text-xs line-through">
-                    R$ {numOriginal.toFixed(2).replace('.', ',')}
-                  </p>
-                )}
-                <p className="text-white font-bold text-base">
-                  R$ {numPrice.toFixed(2).replace('.', ',')}
+          </Link>
+
+          {/* Price + Add button row */}
+          <div className="flex items-center justify-between gap-1">
+            <div className="min-w-0">
+              {numOriginal && numOriginal > numPrice && (
+                <p className="text-gray-600 text-[10px] line-through leading-none">
+                  R$ {numOriginal.toFixed(2).replace('.', ',')}
                 </p>
-              </div>
+              )}
+              <p className="text-white font-bold text-sm md:text-base leading-tight">
+                R$ {numPrice.toFixed(2).replace('.', ',')}
+              </p>
               {salesCount && salesCount > 0 ? (
-                <div className="flex items-center gap-1 text-yellow-500">
-                  <Star size={12} fill="currentColor" />
-                  <span className="text-xs text-gray-500">{salesCount} vendas</span>
+                <div className="flex items-center gap-0.5 mt-0.5">
+                  <Star size={10} className="text-yellow-500 fill-yellow-500" />
+                  <span className="text-[10px] text-gray-500">{salesCount} vendas</span>
                 </div>
               ) : null}
             </div>
+
+            {/* Add button — always visible on mobile */}
+            <button
+              onClick={handleOpenModal}
+              className="flex-shrink-0 flex items-center justify-center gap-1 bg-[#C8102E] hover:bg-red-700 active:bg-red-800 text-white font-bold rounded-lg transition-colors
+                px-2.5 py-2 text-[10px] md:px-3 md:py-2 md:text-xs"
+              title="Selecionar tamanho"
+            >
+              <ShoppingCart size={13} />
+              <span className="hidden sm:block">COMPRAR</span>
+            </button>
           </div>
         </div>
-      </Link>
+      </div>
 
       {/* Modal de seleção de tamanho/quantidade (atacado) */}
       <QuickAddModal

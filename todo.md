@@ -101,3 +101,8 @@
 - [x] Atualizar página de Produtos com filtros pelas novas seções
 - [x] Atualizar home com cards das novas seções
 - [x] Atualizar produtos fictícios no banco com as novas categorias
+
+## Admin Independente + Mobile (v9)
+- [ ] Login admin independente (sem Manus OAuth) com credenciais jurema@adm / jurema@adm
+- [ ] Painel admin simplificado: gestão de fotos e valores (sem controle de estoque)
+- [ ] Melhorar experiência mobile: header, home, catálogo, cards de produto

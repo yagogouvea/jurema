@@ -7,12 +7,14 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { CartProvider } from "./contexts/CartContext";
 import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
+import { AdminAuthProvider } from "./contexts/AdminAuthContext";
 import Home from "./pages/Home";
 import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
 import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
-import Admin from "./pages/Admin";
+import AdminPanel from "./pages/AdminPanel";
+import AdminLogin from "./pages/AdminLogin";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Header from "./components/Header";
@@ -42,12 +44,13 @@ function Router() {
       <Route path="/produto/:slug" component={() => <Layout><ProductDetail /></Layout>} />
       <Route path="/checkout" component={() => <Layout><Checkout /></Layout>} />
       <Route path="/pedido/confirmacao" component={() => <Layout><OrderConfirmation /></Layout>} />
-      {/* Auth pages — sem Header/Footer para foco total */}
+      {/* Auth pages — sem Header/Footer */}
       <Route path="/login" component={Login} />
       <Route path="/cadastro" component={Register} />
-      {/* Admin */}
-      <Route path="/admin" component={Admin} />
-      <Route path="/admin/:rest*" component={Admin} />
+      {/* Admin independente */}
+      <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin" component={AdminPanel} />
+      <Route path="/admin/:rest*" component={AdminPanel} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -58,14 +61,16 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
-        <CustomerAuthProvider>
-          <CartProvider>
-            <TooltipProvider>
-              <Toaster richColors position="top-right" />
-              <Router />
-            </TooltipProvider>
-          </CartProvider>
-        </CustomerAuthProvider>
+        <AdminAuthProvider>
+          <CustomerAuthProvider>
+            <CartProvider>
+              <TooltipProvider>
+                <Toaster richColors position="top-right" />
+                <Router />
+              </TooltipProvider>
+            </CartProvider>
+          </CustomerAuthProvider>
+        </AdminAuthProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );
