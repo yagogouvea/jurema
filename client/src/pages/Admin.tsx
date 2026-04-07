@@ -121,14 +121,14 @@ function ProductsTab() {
 
   const [form, setForm] = useState({
     name: '', slug: '', description: '', price: '', originalPrice: '',
-    team: '', category: 'times' as any, gender: 'masculino' as any,
+    team: '', category: 'tailandesa' as any, gender: 'masculino' as any,
     isActive: true, isFeatured: false,
     images: [] as string[],
     stock: SIZES.map(s => ({ size: s, quantity: 0 })),
   });
 
   const openCreate = () => {
-    setForm({ name: '', slug: '', description: '', price: '', originalPrice: '', team: '', category: 'times', gender: 'masculino', isActive: true, isFeatured: false, images: [], stock: SIZES.map(s => ({ size: s, quantity: 0 })) });
+    setForm({ name: '', slug: '', description: '', price: '', originalPrice: '', team: '', category: 'tailandesa', gender: 'masculino', isActive: true, isFeatured: false, images: [], stock: SIZES.map(s => ({ size: s, quantity: 0 })) });
     setEditing(null);
     setShowForm(true);
   };
@@ -231,9 +231,17 @@ function ProductsTab() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#1A1A1A] border-[#333]">
-                  <SelectItem value="times" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Times Brasileiros</SelectItem>
-                  <SelectItem value="selecoes" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Seleções</SelectItem>
-                  <SelectItem value="retro" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Coleção Retrô</SelectItem>
+                  <SelectItem value="1linha-nacional" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$30,00/at - 1 LINHA - NACIONAL</SelectItem>
+                  <SelectItem value="tailandesa-promocao" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$35,00/at - TAILANDESA Promoção</SelectItem>
+                  <SelectItem value="conj-calor-nacional" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$50,00/at - CONJ CALOR NACIONAL</SelectItem>
+                  <SelectItem value="conj-calor-tailandesa" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$75,00/at - CONJ CALOR TAILANDESA</SelectItem>
+                  <SelectItem value="tailandesa" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$80,00/at - TAILANDESA</SelectItem>
+                  <SelectItem value="infantil" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$80,00/at - Infantil</SelectItem>
+                  <SelectItem value="jogador-tailandesa" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$110,00/at - JOGADOR TAILANDESA</SelectItem>
+                  <SelectItem value="retro-tailandesa" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$110,00/at - RETRO TAILANDESA</SelectItem>
+                  <SelectItem value="conj-frio-tailandes" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$180,00/at - CONJ FRIO TAILANDÊS</SelectItem>
+                  <SelectItem value="tailandesa-3xl" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$variado - tailandesa 3XL</SelectItem>
+                  <SelectItem value="tailandesa-4xl" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$variados - tailandesa 4XL</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -8,10 +8,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 
 const CATEGORIES = [
-  { value: "all", label: "Todas as Categorias" },
-  { value: "times", label: "Times Brasileiros" },
-  { value: "selecoes", label: "Seleções" },
-  { value: "retro", label: "Coleção Retrô" },
+  { value: "all",                  label: "Todas as Categorias" },
+  { value: "1linha-nacional",       label: "R$30,00/at - 1 LINHA - NACIONAL" },
+  { value: "tailandesa-promocao",   label: "R$35,00/at - TAILANDESA Promoção (PEQUENAS MANCHAS)" },
+  { value: "conj-calor-nacional",   label: "R$50,00/at - CONJ CALOR - NACIONAL" },
+  { value: "conj-calor-tailandesa", label: "R$75,00/at - CONJ CALOR TAILANDESA" },
+  { value: "tailandesa",            label: "R$80,00/at - TAILANDESA" },
+  { value: "infantil",              label: "R$80,00/at Infantil" },
+  { value: "jogador-tailandesa",    label: "R$110,00/at - JOGADOR TAILANDESA" },
+  { value: "retro-tailandesa",      label: "R$110,00/at - RETRO TAILANDESA" },
+  { value: "conj-frio-tailandes",   label: "R$180,00/at - CONJ FRIO TAILANDÊS" },
+  { value: "tailandesa-3xl",        label: "R$variado - tailandesa 3XL" },
+  { value: "tailandesa-4xl",        label: "R$variados - tailandesa 4XL" },
 ];
 
 const GENDERS = [

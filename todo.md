@@ -87,3 +87,17 @@
 ## Popup de Seleção Atacado (v6)
 - [x] Criar QuickAddModal com grade de tamanhos e contadores independentes por tamanho
 - [x] Integrar modal ao ProductCard (clique no card abre o popup)
+
+## Reestruturação de Seções (v7)
+- [ ] Atualizar schema: nova coluna `subcategory` (time/seleção específica) e `gender` separado de categoria
+- [ ] Atualizar produtos no banco com nova estrutura (Times, Seleções, Retrô, Infantil + subcategorias)
+- [ ] Atualizar Header com menu dropdown para as 4 seções e subseções
+- [ ] Atualizar página de Produtos com filtros por seção e subseção
+- [ ] Atualizar Home com cards das 4 seções principais
+
+## Reestruturação com Nomes Reais do Catálogo (v8)
+- [x] Atualizar enum category no schema com nomes reais das pastas do catálogo
+- [x] Atualizar Header com menu dropdown usando nomes reais
+- [x] Atualizar página de Produtos com filtros pelas novas seções
+- [x] Atualizar home com cards das novas seções
+- [x] Atualizar produtos fictícios no banco com as novas categorias

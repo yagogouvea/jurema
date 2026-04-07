@@ -58,8 +58,22 @@ export const products = mysqlTable("products", {
   originalPrice: decimal("originalPrice", { precision: 10, scale: 2 }),
   images: json("images").$type<string[]>().default([]),
   team: varchar("team", { length: 100 }),
-  category: mysqlEnum("category", ["times", "selecoes", "retro"]).default("times").notNull(),
+  category: mysqlEnum("category", [
+    "1linha-nacional",
+    "tailandesa-promocao",
+    "conj-calor-nacional",
+    "conj-calor-tailandesa",
+    "tailandesa",
+    "infantil",
+    "jogador-tailandesa",
+    "retro-tailandesa",
+    "conj-frio-tailandes",
+    "tailandesa-3xl",
+    "tailandesa-4xl"
+  ]).default("tailandesa").notNull(),
   gender: mysqlEnum("gender", ["masculino", "feminino", "infantil"]).default("masculino").notNull(),
+  // Subcategoria: nome do time ou seleção específica (ex: "Corinthians", "Brasil", "Flamengo")
+  subcategory: varchar("subcategory", { length: 100 }),
   isActive: boolean("isActive").default(true).notNull(),
   isFeatured: boolean("isFeatured").default(false).notNull(),
   salesCount: int("salesCount").default(0).notNull(),
