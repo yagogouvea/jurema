@@ -20,7 +20,6 @@ export default function Checkout() {
   // Dados editáveis
   const [formData, setFormData] = useState({
     name: user?.name || '',
-    cpf: '',
     addressZip: '',
     addressStreet: '',
     addressNumber: '',
@@ -120,7 +119,7 @@ export default function Checkout() {
         })),
       });
 
-      // Construir mensagem detalhada para WhatsApp (SEM EMOTICONS)
+      // Construir mensagem detalhada para WhatsApp (SEM EMOTICONS E SEM CPF)
       const productsList = items
         .map(item => `* ${item.productName} (${item.size}) - Qtd: ${item.quantity} x R$ ${item.unitPrice.toFixed(2).replace(".", ",")} = R$ ${(item.unitPrice * item.quantity).toFixed(2).replace(".", ",")}`)
         .join("\n");
@@ -142,7 +141,6 @@ Numero do Pedido: ${order.orderNumber}
 DADOS DO CLIENTE:
 Nome: ${formData.name}
 Email: ${user.email}
-CPF: ${formData.cpf || "Nao informado"}
 
 ENDERECO DE ENTREGA:
 ${endereco || "Nao informado"}
@@ -250,7 +248,7 @@ Link de confirmacao: ${window.location.origin}/pedido/${order.orderNumber}`;
                     className="w-full mt-6 bg-[#C8102E] hover:bg-red-700 text-white font-bold py-3 flex items-center justify-center gap-2"
                   >
                     <Edit2 size={18} />
-                    Confirmar e Editar Dados
+                    Confirmar e Editar Endereco
                   </Button>
                 </div>
               </>
@@ -258,7 +256,7 @@ Link de confirmacao: ${window.location.origin}/pedido/${order.orderNumber}`;
 
             {step === 'confirm' && (
               <div className="bg-[#111111] rounded-xl p-6 border border-[#1E1E1E]">
-                <h2 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider mb-5">CONFIRME SEUS DADOS</h2>
+                <h2 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider mb-5">CONFIRME SEU ENDERECO</h2>
                 
                 <div className="space-y-4 mb-6">
                   <div>
@@ -268,17 +266,6 @@ Link de confirmacao: ${window.location.origin}/pedido/${order.orderNumber}`;
                       value={formData.name}
                       onChange={handleFormChange}
                       placeholder="Seu nome completo"
-                      className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="text-gray-400 text-xs mb-1">CPF *</Label>
-                    <Input
-                      name="cpf"
-                      value={formData.cpf}
-                      onChange={handleFormChange}
-                      placeholder="000.000.000-00"
                       className="bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600"
                     />
                   </div>
@@ -307,7 +294,7 @@ Link de confirmacao: ${window.location.origin}/pedido/${order.orderNumber}`;
                   </div>
 
                   <div>
-                    <Label className="text-gray-400 text-xs mb-1">Endereço *</Label>
+                    <Label className="text-gray-400 text-xs mb-1">Endereco *</Label>
                     <Input
                       name="addressStreet"
                       value={formData.addressStreet}
@@ -319,7 +306,7 @@ Link de confirmacao: ${window.location.origin}/pedido/${order.orderNumber}`;
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-gray-400 text-xs mb-1">Número</Label>
+                      <Label className="text-gray-400 text-xs mb-1">Numero</Label>
                       <Input
                         name="addressNumber"
                         value={formData.addressNumber}
