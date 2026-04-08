@@ -124,7 +124,7 @@ function parsePrice(priceStr: string | undefined): string | null {
 export async function createProduct(data: {
   name: string; slug: string; description?: string; price: string; originalPrice?: string;
   team?: string; category: string; gender: string; isActive: boolean; isFeatured: boolean;
-  featuredSection?: string; images: string[]; stock: { size: string; quantity: number }[];
+  featuredSection?: string; reference?: string; images: string[]; stock: { size: string; quantity: number }[];
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -133,6 +133,7 @@ export async function createProduct(data: {
     price: parsePrice(data.price) || "0.00", originalPrice: parsePrice(data.originalPrice),
     team: data.team || null, category: data.category as any, gender: data.gender as any,
     isActive: data.isActive, isFeatured: data.isFeatured, featuredSection: (data.featuredSection as any) || null,
+    reference: data.reference || null,
     images: data.images,
   });
   const productId = (result as any).insertId;
@@ -147,7 +148,7 @@ export async function createProduct(data: {
 export async function updateProduct(id: number, data: Partial<{
   name: string; slug: string; description: string; price: string; originalPrice: string;
   team: string; category: string; gender: string; isActive: boolean; isFeatured: boolean;
-  featuredSection: string; images: string[]; stock: { size: string; quantity: number }[];
+  featuredSection: string; reference: string; images: string[]; stock: { size: string; quantity: number }[];
 }>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -163,6 +164,7 @@ export async function updateProduct(id: number, data: Partial<{
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
   if (data.isFeatured !== undefined) updateData.isFeatured = data.isFeatured;
   if (data.featuredSection !== undefined) updateData.featuredSection = (data.featuredSection as any) || null;
+  if (data.reference !== undefined) updateData.reference = data.reference || null;
   if (data.images !== undefined) updateData.images = data.images;
   if (Object.keys(updateData).length > 0) {
     await db.update(products).set(updateData).where(eq(products.id, id));

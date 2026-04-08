@@ -90,6 +90,7 @@ export const appRouter = router({
         isActive: z.boolean().default(true),
         isFeatured: z.boolean().default(false),
         featuredSection: z.enum(['destaque', 'mais-vendidos', 'nova-colecao']).optional(),
+        reference: z.string().optional(),
         stock: z.array(z.object({ size: z.string(), quantity: z.number() })).optional(),
       }))
       .mutation(async ({ input }) => {
@@ -122,6 +123,7 @@ export const appRouter = router({
         isActive: z.boolean().optional(),
         isFeatured: z.boolean().optional(),
         featuredSection: z.enum(['destaque', 'mais-vendidos', 'nova-colecao']).optional(),
+        reference: z.string().optional(),
         stock: z.array(z.object({ size: z.string(), quantity: z.number() })).optional(),
       }))
       .mutation(async ({ input }) => {

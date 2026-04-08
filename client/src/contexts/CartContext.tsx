@@ -8,6 +8,7 @@ export interface CartItem {
   quantity: number;
   unitPrice: number;
   team?: string;
+  reference?: string;
 }
 
 interface CartContextType {

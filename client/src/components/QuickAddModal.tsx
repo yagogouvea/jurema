@@ -16,6 +16,7 @@ interface QuickAddModalProps {
     originalPrice?: number | null;
     image: string;
     team?: string | null;
+    reference?: string;
   };
 }
 
@@ -65,6 +66,7 @@ export default function QuickAddModal({ isOpen, onClose, product }: QuickAddModa
         quantity: quantities[size],
         unitPrice: product.price,
         team: product.team || undefined,
+        reference: product.reference || undefined,
       });
     });
     const totalQty = selected.reduce((sum, s) => sum + quantities[s], 0);

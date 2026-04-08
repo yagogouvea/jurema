@@ -85,6 +85,7 @@ export default function ProductDetail() {
       quantity,
       unitPrice: numPrice,
       team: product.team || undefined,
+      reference: product.reference || undefined,
     });
     toast.success("Produto adicionado ao carrinho!", { duration: 2000 });
   };

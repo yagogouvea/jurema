@@ -51,6 +51,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
     featuredSection: product?.featuredSection || "",
     images: (product?.images as string[]) || [],
     stock: product?.stock?.map((s: any) => s.size) || [],
+    reference: product?.reference || "",
   });
 
   const createMutation = trpc.products.create.useMutation({
@@ -251,6 +252,17 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Referência */}
+          <div>
+            <Label className="text-gray-400 text-xs mb-1 block">REFERÊNCIA</Label>
+            <Input
+              value={form.reference}
+              onChange={e => setForm(p => ({ ...p, reference: e.target.value }))}
+              placeholder="Ex: CAM-FLA-2025-01"
+              className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]"
+            />
           </div>
 
           {/* Descrição */}

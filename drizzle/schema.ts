@@ -77,6 +77,7 @@ export const products = mysqlTable("products", {
   isActive: boolean("isActive").default(true).notNull(),
   isFeatured: boolean("isFeatured").default(false).notNull(),
   featuredSection: mysqlEnum("featuredSection", ["destaque", "mais-vendidos", "nova-colecao"]),
+  reference: varchar("reference", { length: 100 }),
   salesCount: int("salesCount").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

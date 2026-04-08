@@ -15,10 +15,11 @@ interface ProductCardProps {
   category: string;
   isFeatured?: boolean;
   salesCount?: number;
+  reference?: string | null;
 }
 
 export default function ProductCard({
-  id, name, slug, price, originalPrice, images, team, gender, category, isFeatured, salesCount
+  id, name, slug, price, originalPrice, images, team, gender, category, isFeatured, salesCount, reference
 }: ProductCardProps) {
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -137,6 +138,7 @@ export default function ProductCard({
           originalPrice: numOriginal,
           image: imageUrl,
           team,
+          reference: reference || undefined,
         }}
       />
     </>

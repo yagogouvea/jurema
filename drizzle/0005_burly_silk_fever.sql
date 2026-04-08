@@ -1,0 +1,1 @@
+ALTER TABLE `products` ADD `reference` varchar(100);

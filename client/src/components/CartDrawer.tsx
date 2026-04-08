@@ -25,7 +25,7 @@ function maskCEP(value: string) {
 
 function buildWhatsAppMessage(
   customer: { name: string; phone: string; cep: string },
-  items: Array<{ productName: string; size: string; quantity: number; unitPrice: number }>,
+  items: Array<{ productName: string; size: string; quantity: number; unitPrice: number; reference?: string }>,
   subtotal: number
 ): string {
   const lines: string[] = [];
@@ -43,8 +43,9 @@ function buildWhatsAppMessage(
   items.forEach((item, i) => {
     const itemTotal = (item.unitPrice * item.quantity).toFixed(2).replace(".", ",");
     const unitFmt = item.unitPrice.toFixed(2).replace(".", ",");
+    const refLine = item.reference ? `\n   Ref: ${item.reference}` : "";
     lines.push(
-      `${i + 1}. ${item.productName}\n   Tamanho: ${item.size} | Qtd: ${item.quantity} | R$ ${unitFmt} cada\n   Subtotal: R$ ${itemTotal}`
+      `${i + 1}. ${item.productName}${refLine}\n   Tamanho: ${item.size} | Qtd: ${item.quantity} | R$ ${unitFmt} cada\n   Subtotal: R$ ${itemTotal}`
     );
   });
 
