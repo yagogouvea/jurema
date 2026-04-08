@@ -26,43 +26,8 @@ const CATEGORIES = [
 ];
 
 function CustomerHeaderButton() {
-  const { customer, isAuthenticated } = useCustomerAuth();
-  const logout = trpc.customerAuth.logout.useMutation({
-    onSuccess: () => { toast.success("Saiu com sucesso!"); window.location.href = "/"; },
-  });
-
-  if (isAuthenticated && customer) {
-    return (
-      <div className="flex items-center gap-1">
-        <Link
-          href="/minha-conta"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-md transition-colors"
-        >
-          <User size={14} className="text-[#C8102E]" />
-          <span className="max-w-[70px] truncate hidden sm:block">{customer.name.split(" ")[0]}</span>
-        </Link>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-gray-500 hover:text-red-400"
-          onClick={() => logout.mutate()}
-          title="Sair"
-        >
-          <LogOut size={14} />
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      href="/login"
-      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-white bg-[#C8102E] hover:bg-[#a00d24] rounded-md transition-colors"
-    >
-      <User size={14} />
-      <span className="hidden sm:block">ENTRAR</span>
-    </Link>
-  );
+  // Removido - não há mais autenticação de cliente
+  return null;
 }
 
 function CatalogDropdown() {

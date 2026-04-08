@@ -15,8 +15,8 @@ import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
 import AdminPanel from "./pages/AdminPanel";
 import AdminLogin from "./pages/AdminLogin";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
+// import Login from "./pages/Login";
+// import Register from "./pages/Register";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import WhatsAppButton from "./components/WhatsAppButton";
@@ -44,9 +44,7 @@ function Router() {
       <Route path="/produto/:slug" component={() => <Layout><ProductDetail /></Layout>} />
       <Route path="/checkout" component={() => <Layout><Checkout /></Layout>} />
       <Route path="/pedido/confirmacao" component={() => <Layout><OrderConfirmation /></Layout>} />
-      {/* Auth pages — sem Header/Footer */}
-      <Route path="/login" component={Login} />
-      <Route path="/cadastro" component={Register} />
+      {/* Auth pages — removidas, usar carrinho para dados */}
       {/* Admin independente */}
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminPanel} />
