@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "wouter";
-import { ShoppingCart, Heart, ChevronLeft, ChevronRight, Truck, Shield, RotateCcw, Minus, Plus, Star } from "lucide-react";
+import { ShoppingCart, Heart, ChevronLeft, ChevronRight, Truck, Shield, RotateCcw, Minus, Plus } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,6 @@ export default function ProductDetail() {
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [currentImage, setCurrentImage] = useState(0);
-  const [activeTab, setActiveTab] = useState<'desc' | 'medidas' | 'troca'>('desc');
   const { addItem } = useCart();
 
   if (isLoading) {
@@ -189,7 +188,6 @@ export default function ProductDetail() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-gray-300 text-sm font-semibold">Tamanho</label>
-                <button className="text-[#C8102E] text-xs hover:underline">Guia de tamanhos</button>
               </div>
               <div className="flex flex-wrap gap-2">
                 {SIZES.map(size => {
@@ -268,17 +266,7 @@ export default function ProductDetail() {
               </Button>
             </div>
 
-            <Button
-              onClick={() => {
-                if (!selectedSize) { toast.error("Selecione um tamanho"); return; }
-                handleAddToCart();
-                window.location.href = '/checkout';
-              }}
-              variant="outline"
-              className="w-full border-[#C8102E]/50 text-[#C8102E] hover:bg-[#C8102E] hover:text-white bg-transparent font-bold py-3 text-base"
-            >
-              Comprar Agora
-            </Button>
+
 
             {/* Trust badges */}
             <div className="grid grid-cols-3 gap-3 pt-2">
@@ -294,50 +282,13 @@ export default function ProductDetail() {
               ))}
             </div>
 
-            {/* Tabs */}
-            <div className="border-t border-[#1E1E1E] pt-4">
-              <div className="flex gap-1 mb-4">
-                {(['desc', 'medidas', 'troca'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
-                      activeTab === tab ? 'bg-[#C8102E] text-white' : 'text-gray-500 hover:text-white'
-                    }`}
-                  >
-                    {tab === 'desc' ? 'Descrição' : tab === 'medidas' ? 'Medidas' : 'Trocas'}
-                  </button>
-                ))}
+            {/* Descrição */}
+            {product.description && (
+              <div className="border-t border-[#1E1E1E] pt-4">
+                <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">Descrição</p>
+                <p className="text-gray-300 text-sm leading-relaxed">{product.description}</p>
               </div>
-              <div className="text-gray-400 text-sm leading-relaxed">
-                {activeTab === 'desc' && (
-                  <p>{product.description || 'Camisa oficial de alta qualidade. Material respirável e confortável para uso esportivo e casual.'}</p>
-                )}
-                {activeTab === 'medidas' && (
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-[#1E1E1E]">
-                        <th className="text-left py-2 text-gray-500">Tamanho</th>
-                        <th className="text-left py-2 text-gray-500">Tórax (cm)</th>
-                        <th className="text-left py-2 text-gray-500">Comprimento (cm)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[['PP','84-88','67'],['P','88-92','69'],['M','92-96','71'],['G','96-100','73'],['GG','100-104','75'],['XGG','104-110','77']].map(([s,t,c]) => (
-                        <tr key={s} className="border-b border-[#111111]">
-                          <td className="py-2 font-bold text-white">{s}</td>
-                          <td className="py-2">{t}</td>
-                          <td className="py-2">{c}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-                {activeTab === 'troca' && (
-                  <p>Aceitamos trocas em até 30 dias após o recebimento. O produto deve estar sem uso, com etiqueta e na embalagem original. Entre em contato pelo WhatsApp para solicitar a troca.</p>
-                )}
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
