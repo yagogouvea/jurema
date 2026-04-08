@@ -265,6 +265,17 @@ export default function CartDrawer() {
                 >
                   Continuar Comprando
                 </Button>
+
+                <Button
+                  variant="outline"
+                  className="w-full border-red-500/30 text-red-400 hover:text-red-300 hover:border-red-500 hover:bg-red-500/5 bg-transparent"
+                  onClick={() => {
+                    clearCart();
+                    toast.success("Carrinho limpo com sucesso!");
+                  }}
+                >
+                  Limpar Carrinho
+                </Button>
               </div>
             )}
           </>
