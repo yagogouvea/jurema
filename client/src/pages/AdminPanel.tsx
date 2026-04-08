@@ -95,10 +95,12 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
   const handleSubmit = () => {
     if (!form.name || !form.price) { toast.error("Nome e preço são obrigatórios"); return; }
     const slug = form.slug || generateSlug(form.name);
-    const data = { ...form, slug };
+    // Converter stock: array de strings → array de objetos {size, quantity}
+    const stockObjects = (form.stock as unknown as string[]).map((size: string) => ({ size, quantity: 100 }));
+    const data = { ...form, slug, stock: stockObjects };
     // Enviar featuredSection apenas se isFeatured e tiver valor
     if (!form.isFeatured) {
-      data.featuredSection = undefined;
+      (data as any).featuredSection = undefined;
     } else if (!data.featuredSection) {
       toast.error("Selecione uma seção de destaque");
       return;
@@ -106,7 +108,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
     if (product) {
       updateMutation.mutate({ id: product.id, ...data });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(data as any);
     }
   };
 
