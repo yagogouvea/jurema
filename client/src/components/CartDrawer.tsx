@@ -48,6 +48,12 @@ export default function CartDrawer() {
   if (!isOpen) return null;
 
   function handleFinalizarCompra() {
+    // Validar quantidade mínima
+    if (itemCount < 10) {
+      toast.error("Quantidade mínima: 10 peças. Você tem " + itemCount + " peça(s) no carrinho.");
+      return;
+    }
+
     if (!isAuthenticated || !customer) {
       setIsOpen(false);
       toast.info("Faça login para finalizar sua compra.");
@@ -161,6 +167,16 @@ export default function CartDrawer() {
               </span>
             </div>
 
+            {/* Aviso de quantidade mínima */}
+            {itemCount < 10 && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-start gap-2">
+                <span className="text-red-400 text-xs font-semibold">Atenção!</span>
+                <p className="text-red-300 text-xs">
+                  Quantidade mínima: 10 peças. Você tem {itemCount} peça(s). Adicione mais itens para continuar.
+                </p>
+              </div>
+            )}
+
             {/* Aviso de login se não autenticado */}
             {!isAuthenticated && (
               <div className="bg-[#1A1A1A] border border-[#C8102E]/30 rounded-lg p-3 flex items-start gap-2">
@@ -188,12 +204,13 @@ export default function CartDrawer() {
 
             {/* Botão principal */}
             <Button
-              className="w-full bg-[#25D366] hover:bg-[#1ebe5d] text-white font-black py-3 text-base flex items-center gap-2 justify-center"
+              disabled={itemCount < 10}
+              className="w-full bg-[#25D366] hover:bg-[#1ebe5d] disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-black py-3 text-base flex items-center gap-2 justify-center"
               style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.1em" }}
               onClick={handleFinalizarCompra}
             >
               <MessageCircle size={20} />
-              {isAuthenticated ? "FINALIZAR VIA WHATSAPP" : "ENTRAR E FINALIZAR"}
+              {itemCount < 10 ? `ADICIONE ${10 - itemCount} PEÇA(S)` : isAuthenticated ? "FINALIZAR VIA WHATSAPP" : "ENTRAR E FINALIZAR"}
             </Button>
 
             <Button
