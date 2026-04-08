@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -37,6 +37,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
   const utils = trpc.useUtils();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [formReady, setFormReady] = useState(!product?.id);
 
   const [form, setForm] = useState({
     name: product?.name || "",
@@ -54,6 +55,34 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
     stock: product?.stock?.map((s: any) => s.size) || [],
     reference: product?.reference || "",
   });
+
+  // Buscar produto completo com stock ao editar
+  const { data: fullProduct } = trpc.products.byId.useQuery(
+    { id: product?.id ?? 0 },
+    { enabled: !!product?.id }
+  );
+
+  useEffect(() => {
+    if (fullProduct && product?.id) {
+      setForm({
+        name: fullProduct.name || "",
+        slug: fullProduct.slug || "",
+        description: fullProduct.description || "",
+        price: fullProduct.price ? String(fullProduct.price) : "",
+        originalPrice: fullProduct.originalPrice ? String(fullProduct.originalPrice) : "",
+        team: fullProduct.team || "",
+        category: fullProduct.category || "tailandesa",
+        gender: fullProduct.gender || "masculino",
+        isActive: fullProduct.isActive ?? true,
+        isFeatured: fullProduct.isFeatured ?? false,
+        featuredSection: fullProduct.featuredSection || "",
+        images: (fullProduct.images as string[]) || [],
+        stock: fullProduct.stock?.map((s: any) => s.size) || [],
+        reference: fullProduct.reference || "",
+      });
+      setFormReady(true);
+    }
+  }, [fullProduct]);
 
   const createMutation = trpc.products.create.useMutation({
     onSuccess: (res) => {
