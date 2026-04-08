@@ -61,7 +61,11 @@ export default function ProductDetail() {
   const discount = numOriginal ? Math.round((1 - numPrice / numOriginal) * 100) : null;
 
   const stockMap: Record<string, number> = {};
-  (product.stock || []).forEach((s: any) => { stockMap[s.size] = s.quantity; });
+  (product.stock || []).forEach((s: any) => { 
+    stockMap[s.size] = s.quantity; 
+  });
+  
+  const availableSizes = product.stock?.map((s: any) => s.size) || [];
 
   const selectedStockQty = selectedSize ? (stockMap[selectedSize] ?? 0) : null;
 
@@ -191,6 +195,10 @@ export default function ProductDetail() {
                 {SIZES.map(size => {
                   const qty = stockMap[size] ?? 0;
                   const outOfStock = qty === 0;
+                  const isAvailable = product.stock?.some((s: any) => s.size === size) ?? false;
+                  
+                  if (!isAvailable) return null;
+                  
                   return (
                     <button
                       key={size}
@@ -209,6 +217,9 @@ export default function ProductDetail() {
                   );
                 })}
               </div>
+              {availableSizes.length === 0 && (
+                <p className="text-xs mt-2 text-red-500">Nenhum tamanho disponível</p>
+              )}
               {selectedSize && selectedStockQty !== null && (
                 <p className={`text-xs mt-2 ${selectedStockQty <= 3 ? 'text-yellow-500' : 'text-green-500'}`}>
                   {selectedStockQty <= 0 ? 'Sem estoque' :

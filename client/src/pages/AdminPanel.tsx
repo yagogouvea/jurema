@@ -50,7 +50,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
     isFeatured: product?.isFeatured ?? false,
     featuredSection: product?.featuredSection || "",
     images: (product?.images as string[]) || [],
-    stock: [],
+    stock: product?.stock?.map((s: any) => s.size) || [],
   });
 
   const createMutation = trpc.products.create.useMutation({
@@ -285,6 +285,33 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
               {form.isFeatured ? <Star size={16} /> : <StarOff size={16} />}
               {form.isFeatured ? "Destaque" : "Sem destaque"}
             </button>
+          </div>
+
+          {/* Tamanhos Disponíveis */}
+          <div>
+            <Label className="text-gray-400 text-xs mb-2 block">TAMANHOS DISPONÍVEIS</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {["PP", "P", "M", "G", "GG", "XGG"].map(size => (
+                <button
+                  key={size}
+                  onClick={() => {
+                    const sizes = form.stock || [];
+                    const hasSize = sizes.includes(size);
+                    setForm(p => ({
+                      ...p,
+                      stock: hasSize ? sizes.filter((s: string) => s !== size) : [...sizes, size]
+                    }));
+                  }}
+                  className={`py-2 rounded-lg text-sm font-semibold border transition-all ${
+                    (form.stock || []).includes(size)
+                      ? "bg-[#C8102E] border-[#C8102E] text-white"
+                      : "bg-[#1A1A1A] border-[#333] text-gray-400 hover:border-[#C8102E]/50"
+                  }`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Seção de Destaque */}
