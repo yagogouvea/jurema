@@ -8,7 +8,7 @@ import { toast } from "sonner";
 const WHATSAPP_NUMBER = "5511981693476";
 
 function buildWhatsAppMessage(
-  customer: { name: string; phone: string; addressStreet?: string; addressNumber?: string; addressComplement?: string; addressNeighborhood?: string; addressCity?: string; addressState?: string; addressZip?: string },
+  customer: { name: string; phone: string },
   items: Array<{ productName: string; size: string; quantity: number; unitPrice: number }>,
   subtotal: number
 ): string {
@@ -19,21 +19,6 @@ function buildWhatsAppMessage(
   lines.push("DADOS DO CLIENTE:");
   lines.push(`Nome: ${customer.name}`);
   lines.push(`Telefone: ${customer.phone}\n`);
-  
-  // Endereço de entrega
-  const endereco = [
-    customer.addressStreet,
-    customer.addressNumber,
-    customer.addressComplement,
-    customer.addressNeighborhood,
-    customer.addressCity,
-    customer.addressState,
-    customer.addressZip
-  ].filter(Boolean).join(", ");
-  
-  lines.push("ENDERECO DE ENTREGA:");
-  lines.push(endereco || "Nao informado");
-  lines.push("");
   lines.push("=============================\n");
   lines.push("ITENS DO PEDIDO:");
   lines.push("");
@@ -74,14 +59,7 @@ export default function CartDrawer() {
     const message = buildWhatsAppMessage(
       { 
         name: customer.name, 
-        phone: customer.phone,
-        addressStreet: customer.addressStreet || undefined,
-        addressNumber: customer.addressNumber || undefined,
-        addressComplement: customer.addressComplement || undefined,
-        addressNeighborhood: customer.addressNeighborhood || undefined,
-        addressCity: customer.addressCity || undefined,
-        addressState: customer.addressState || undefined,
-        addressZip: customer.addressZip || undefined
+        phone: customer.phone
       },
       items,
       subtotal
