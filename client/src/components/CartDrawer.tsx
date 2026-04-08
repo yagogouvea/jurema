@@ -8,34 +8,49 @@ import { toast } from "sonner";
 const WHATSAPP_NUMBER = "5511981693476";
 
 function buildWhatsAppMessage(
-  customer: { name: string; cpf: string; phone: string },
+  customer: { name: string; phone: string; addressStreet?: string; addressNumber?: string; addressComplement?: string; addressNeighborhood?: string; addressCity?: string; addressState?: string; addressZip?: string },
   items: Array<{ productName: string; size: string; quantity: number; unitPrice: number }>,
   subtotal: number
 ): string {
   const lines: string[] = [];
 
-  lines.push("🛒 *NOVO PEDIDO — JUMERA SPORT*");
-  lines.push("─────────────────────────────");
-  lines.push(`👤 *Nome:* ${customer.name}`);
-  lines.push(`🪪 *CPF:* ${customer.cpf}`);
-  lines.push(`📱 *Telefone:* ${customer.phone}`);
-  lines.push("─────────────────────────────");
-  lines.push("*ITENS DO PEDIDO:*");
+  lines.push("NOVO PEDIDO - JUMERA SPORT");
+  lines.push("=============================\n");
+  lines.push("DADOS DO CLIENTE:");
+  lines.push(`Nome: ${customer.name}`);
+  lines.push(`Telefone: ${customer.phone}\n`);
+  
+  // Endereço de entrega
+  const endereco = [
+    customer.addressStreet,
+    customer.addressNumber,
+    customer.addressComplement,
+    customer.addressNeighborhood,
+    customer.addressCity,
+    customer.addressState,
+    customer.addressZip
+  ].filter(Boolean).join(", ");
+  
+  lines.push("ENDERECO DE ENTREGA:");
+  lines.push(endereco || "Nao informado");
+  lines.push("");
+  lines.push("=============================\n");
+  lines.push("ITENS DO PEDIDO:");
   lines.push("");
 
   items.forEach((item, i) => {
     const itemTotal = (item.unitPrice * item.quantity).toFixed(2).replace(".", ",");
     const unitFmt = item.unitPrice.toFixed(2).replace(".", ",");
     lines.push(
-      `${i + 1}. *${item.productName}*\n   Tamanho: ${item.size} | Qtd: ${item.quantity} | R$ ${unitFmt} cada\n   Subtotal: R$ ${itemTotal}`
+      `${i + 1}. ${item.productName}\n   Tamanho: ${item.size} | Qtd: ${item.quantity} | R$ ${unitFmt} cada\n   Subtotal: R$ ${itemTotal}`
     );
   });
 
   lines.push("");
-  lines.push("─────────────────────────────");
-  lines.push(`💰 *TOTAL: R$ ${subtotal.toFixed(2).replace(".", ",")}*`);
-  lines.push("─────────────────────────────");
-  lines.push("_Pedido realizado via Jumera Sport_");
+  lines.push("=============================");
+  lines.push(`TOTAL: R$ ${subtotal.toFixed(2).replace(".", ",")}`);
+  lines.push("=============================");
+  lines.push("Pedido realizado via Jumera Sport");
 
   return lines.join("\n");
 }
@@ -57,7 +72,17 @@ export default function CartDrawer() {
 
     // Monta a mensagem WhatsApp
     const message = buildWhatsAppMessage(
-      { name: customer.name, cpf: customer.cpf, phone: customer.phone },
+      { 
+        name: customer.name, 
+        phone: customer.phone,
+        addressStreet: customer.addressStreet || undefined,
+        addressNumber: customer.addressNumber || undefined,
+        addressComplement: customer.addressComplement || undefined,
+        addressNeighborhood: customer.addressNeighborhood || undefined,
+        addressCity: customer.addressCity || undefined,
+        addressState: customer.addressState || undefined,
+        addressZip: customer.addressZip || undefined
+      },
       items,
       subtotal
     );
