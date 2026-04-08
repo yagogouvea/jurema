@@ -55,11 +55,27 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
   });
 
   const createMutation = trpc.products.create.useMutation({
-    onSuccess: () => { utils.products.list.invalidate(); toast.success("Produto criado!"); onClose(); },
+    onSuccess: (res) => {
+      if (res.limitReached) {
+        toast.warning(res.message);
+        return;
+      }
+      utils.products.list.invalidate();
+      toast.success("Produto criado!");
+      onClose();
+    },
     onError: (e) => toast.error(e.message),
   });
   const updateMutation = trpc.products.update.useMutation({
-    onSuccess: () => { utils.products.list.invalidate(); toast.success("Produto atualizado!"); onClose(); },
+    onSuccess: (res) => {
+      if (res.limitReached) {
+        toast.warning(res.message);
+        return;
+      }
+      utils.products.list.invalidate();
+      toast.success("Produto atualizado!");
+      onClose();
+    },
     onError: (e) => toast.error(e.message),
   });
 

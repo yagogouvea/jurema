@@ -114,12 +114,13 @@ export const appRouter = router({
             const result = await db.select({ count: sql`count(*)` }).from(products).where(and(eq(products.isFeatured, true), eq(products.featuredSection, input.featuredSection as any)));
             const count = Number(result?.[0]?.count ?? 0);
             if (count >= 8) {
-              throw new TRPCError({ code: 'BAD_REQUEST', message: `Seção "${input.featuredSection}" já tem 8 produtos. Remova um para adicionar outro.` });
+              const sectionNames: Record<string, string> = { 'destaque': 'PRODUTOS EM DESTAQUE', 'mais-vendidos': 'MAIS VENDIDOS', 'nova-colecao': 'NOVA COLEÇÃO' };
+              return { success: false, limitReached: true, message: `A seção "${sectionNames[input.featuredSection] ?? input.featuredSection}" já possui 8 produtos. Remova um produto dessa seção para adicionar outro.` };
             }
           }
         }
         await createProduct(input as any);
-        return { success: true };
+        return { success: true, limitReached: false };
       }),
 
     update: adminProcedure
@@ -148,12 +149,13 @@ export const appRouter = router({
             const result = await db.select({ count: sql`count(*)` }).from(products).where(and(eq(products.isFeatured, true), eq(products.featuredSection, data.featuredSection as any), ne(products.id, id)));
             const count = Number(result?.[0]?.count ?? 0);
             if (count >= 8) {
-              throw new TRPCError({ code: 'BAD_REQUEST', message: `Seção "${data.featuredSection}" já tem 8 produtos. Remova um para adicionar outro.` });
+              const sectionNames: Record<string, string> = { 'destaque': 'PRODUTOS EM DESTAQUE', 'mais-vendidos': 'MAIS VENDIDOS', 'nova-colecao': 'NOVA COLEÇÃO' };
+              return { success: false, limitReached: true, message: `A seção "${sectionNames[data.featuredSection] ?? data.featuredSection}" já possui 8 produtos. Remova um produto dessa seção para adicionar outro.` };
             }
           }
         }
         await updateProduct(id, data as any);
-        return { success: true };
+        return { success: true, limitReached: false };
       }),
 
     delete: adminProcedure
