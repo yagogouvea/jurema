@@ -68,8 +68,8 @@ function HeroBanner() {
         style={{ backgroundImage: `url(${banner.imageUrl})` }}
       />
       {/* Overlays */}
-      <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D0D] via-[#0D0D0D]/85 to-[#0D0D0D]/50" />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0D]/80 via-transparent to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D0D]/90 via-[#0D0D0D]/60 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0D]/40 via-transparent to-transparent" />
 
       {/* Content — define a altura real do banner */}
       <div className="relative z-10">
