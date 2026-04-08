@@ -18,6 +18,7 @@ const LOGO_URL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663427629051/9BCf3
 const CATEGORIES = [
   { value: "1linha-nacional",       label: "R$30 - 1 LINHA NACIONAL" },
   { value: "tailandesa-promocao",   label: "R$35 - TAILANDESA PROMOÇÃO" },
+  { value: "itens-brasil",          label: "ITENS BRASIL" },
   { value: "conj-calor-nacional",   label: "R$50 - CONJ CALOR NACIONAL" },
   { value: "conj-calor-tailandesa", label: "R$75 - CONJ CALOR TAILANDESA" },
   { value: "tailandesa",            label: "R$80 - TAILANDESA" },

@@ -43,6 +43,13 @@
       "when": 1775608343180,
       "tag": "0005_burly_silk_fever",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1775610103387,
+      "tag": "0006_flippant_prodigy",
+      "breakpoints": true
     }
   ]
 }

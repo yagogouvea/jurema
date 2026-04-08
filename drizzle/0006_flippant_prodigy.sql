@@ -1,0 +1,1 @@
+ALTER TABLE `products` MODIFY COLUMN `category` enum('1linha-nacional','tailandesa-promocao','itens-brasil','conj-calor-nacional','conj-calor-tailandesa','tailandesa','infantil','jogador-tailandesa','retro-tailandesa','conj-frio-tailandes','tailandesa-3xl','tailandesa-4xl') NOT NULL DEFAULT 'tailandesa';

@@ -206,6 +206,17 @@ function CategorySection() {
       iconBg: "bg-[#F59E0B]/10",
     },
     {
+      title: "ITENS BRASIL",
+      subtitle: "Produtos exclusivos da Seleção Brasileira",
+      href: "/produtos?categoria=itens-brasil",
+      Icon: Flag,
+      accent: "#009C3B",
+      borderColor: "border-[#009C3B]/30",
+      hoverBorder: "hover:border-[#009C3B]",
+      bg: "bg-gradient-to-br from-[#001A08] to-[#0D0D0D]",
+      iconBg: "bg-[#009C3B]/10",
+    },
+    {
       title: "CONJ CALOR - NACIONAL",
       subtitle: "R$50,00/at — Conjunto calor nacional",
       href: "/produtos?categoria=conj-calor-nacional",

@@ -11,6 +11,7 @@ const CATEGORIES = [
   { value: "all",                  label: "Todas as Categorias" },
   { value: "1linha-nacional",       label: "R$30,00/at - 1 LINHA - NACIONAL" },
   { value: "tailandesa-promocao",   label: "R$35,00/at - TAILANDESA Promoção (PEQUENAS MANCHAS)" },
+  { value: "itens-brasil",          label: "ITENS BRASIL" },
   { value: "conj-calor-nacional",   label: "R$50,00/at - CONJ CALOR - NACIONAL" },
   { value: "conj-calor-tailandesa", label: "R$75,00/at - CONJ CALOR TAILANDESA" },
   { value: "tailandesa",            label: "R$80,00/at - TAILANDESA" },
