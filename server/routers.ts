@@ -3,12 +3,12 @@ import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, router } from "./_core/trpc";
 import { notifyOwner } from "./_core/notification";
 import { generateImage } from "./_core/imageGeneration";
 import { storagePut } from "./storage";
 import { customerAuthRouter } from "./routers/customerAuth";
-import { adminAuthRouter } from "./routers/adminAuth";
+import { adminAuthRouter, ADMIN_COOKIE_NAME, ADMIN_JWT_SECRET } from "./routers/adminAuth";
 import {
   getProducts, getProductBySlug, getProductById, createProduct, updateProduct, deleteProduct,
   createOrder, getOrders, getOrderById, updateOrderStatus, getDashboardStats,
@@ -18,11 +18,24 @@ import {
 import { getDb } from "./db";
 import { sql, and, eq, ne } from "drizzle-orm";
 import { products } from "../drizzle/schema";
+import { jwtVerify } from "jose";
 
-// Admin guard middleware
-const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== 'admin') {
-    throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso restrito a administradores.' });
+// Admin guard middleware usando JWT local (independente do Manus OAuth)
+const adminProcedure = publicProcedure.use(async ({ ctx, next }) => {
+  const cookieHeader = ctx.req.headers.cookie || "";
+  const cookies = cookieHeader.split("; ").reduce((acc: Record<string, string>, c: string) => {
+    const [k, v] = c.split("=");
+    if (k) acc[k.trim()] = decodeURIComponent(v || "");
+    return acc;
+  }, {});
+  const token = cookies[ADMIN_COOKIE_NAME];
+  if (!token) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Acesso restrito: faça login como administrador." });
+  }
+  try {
+    await jwtVerify(token, ADMIN_JWT_SECRET);
+  } catch {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão expirada. Faça login novamente." });
   }
   return next({ ctx });
 });
