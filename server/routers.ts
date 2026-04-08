@@ -67,6 +67,7 @@ export const appRouter = router({
         orderBy: z.string().optional(),
         limit: z.number().min(1).max(100).default(20),
         offset: z.number().min(0).default(0),
+        adminMode: z.boolean().optional(),
       }).optional())
       .query(async ({ input }) => {
         return getProducts(input ?? {});

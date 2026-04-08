@@ -54,20 +54,22 @@ export async function getUserByOpenId(openId: string) {
 export async function getProducts(opts: {
   category?: string; gender?: string; team?: string; search?: string;
   isFeatured?: boolean; featuredSection?: string; orderBy?: string; limit?: number; offset?: number;
+  adminMode?: boolean;
 }) {
   const db = await getDb();
   if (!db) return { items: [], total: 0 };
-  const { category, gender, team, search, isFeatured, featuredSection, orderBy = 'featured', limit = 20, offset = 0 } = opts;
+  const { category, gender, team, search, isFeatured, featuredSection, orderBy = 'featured', limit = 20, offset = 0, adminMode = false } = opts;
 
-  const conditions = [eq(products.isActive, true)];
+  // No adminMode, não filtrar por isActive para mostrar todos os produtos
+  const conditions = adminMode ? [] : [eq(products.isActive, true)];
   if (category) conditions.push(eq(products.category, category as any));
   if (gender) conditions.push(eq(products.gender, gender as any));
   if (team) conditions.push(like(products.team, `%${team}%`));
   if (search) conditions.push(or(like(products.name, `%${search}%`), like(products.team, `%${search}%`)) as any);
   if (isFeatured !== undefined) conditions.push(eq(products.isFeatured, isFeatured));
   if (featuredSection !== undefined) conditions.push(eq(products.featuredSection, featuredSection as any));
-  // Se não está buscando por featured section, excluir produtos em destaque do catálogo
-  else if (isFeatured === undefined && featuredSection === undefined) {
+  // Se não está buscando por featured section E não é adminMode, excluir produtos em destaque do catálogo
+  else if (!adminMode && isFeatured === undefined && featuredSection === undefined) {
     conditions.push(eq(products.isFeatured, false));
   }
 
