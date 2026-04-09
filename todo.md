@@ -106,3 +106,59 @@
 - [ ] Login admin independente (sem Manus OAuth) com credenciais jurema@adm / jurema@adm
 - [ ] Painel admin simplificado: gestão de fotos e valores (sem controle de estoque)
 - [ ] Melhorar experiência mobile: header, home, catálogo, cards de produto
+
+## Sistema PDV Jumera (v10)
+
+### Banco de Dados PDV
+- [x] Schema: tabela pdv_sellers (vendedores com login/senha/role)
+- [x] Schema: tabela pdv_products (catálogo PDV com linha, modelo, time, tamanho, estoque, preços atacado/varejo)
+- [x] Schema: tabela pdv_orders (pedidos com vendedor, canal, cliente, regime, total, status)
+- [x] Schema: tabela pdv_order_items (itens de cada pedido)
+- [x] Schema: tabela pdv_order_payments (formas de pagamento com taxas)
+- [x] Schema: tabela pdv_order_services (serviços extras: Correio, Carreto, Caixinha)
+- [x] Schema: tabela pdv_cash_flow (fluxo de caixa: suprimentos e sangrias)
+- [x] Schema: tabela pdv_goals (metas por vendedor: Bronze, Prata, Ouro)
+- [x] Migration e seed de vendedores iniciais (GIANLUCA, MURILO, VINICIUS, VANESSA, KAWANE)
+
+### Backend PDV
+- [x] Router pdv.auth: login, logout, me (JWT cookie próprio pdv_token)
+- [x] Router pdv.sellers: CRUD de vendedores (admin only)
+- [x] Router pdv.products: list com filtros (linha, time, busca), getById
+- [x] Router pdv.orders: create, list, getById, updateStatus
+- [x] Router pdv.dashboard: faturamento, metas, canais, regimes, vendedores, pagamentos, caixa
+- [x] Router pdv.cashflow: suprimento, sangria, extrato
+
+### Frontend PDV — Login
+- [x] Página /pdv/login com formulário usuário/senha
+- [x] Context PdvAuthContext com estado do vendedor logado
+- [x] Redirect para /pdv após login
+
+### Frontend PDV — PDV Principal
+- [x] Layout PDV com sidebar: PDV, Histórico, Dashboard (admin), Vendedores (admin)
+- [x] Tela 1: Identificação — canal (Balcão/WhatsApp) + nome do cliente
+- [x] Tela 2: Produtos — busca por time/modelo, filtros por linha, cards com tamanhos e estoque
+- [x] Regra automática ATACADO (≥6 peças) / VAREJO (<6 peças)
+- [x] Carrinho lateral com resumo e totais
+- [x] Tela 3: Pagamento — serviços extras + formas de pagamento com taxas automáticas
+- [x] Recibo detalhado com envio via WhatsApp
+
+### Frontend PDV — Dashboard (Admin Only)
+- [x] KPIs: faturamento, pedidos, ticket médio, variação percentual
+- [x] Gráfico de linha: faturamento por dia
+- [x] Gráfico de barras: faturamento por vendedor
+- [x] Gráfico de pizza: canais (Balcão/WhatsApp)
+- [x] Gráfico de pizza: formas de pagamento
+- [x] Gráfico de pizza: regimes (Atacado/Varejo)
+- [x] Progress bars de metas por vendedor (Bronze/Prata/Ouro)
+- [x] Caixa: saldo acumulado + extrato de movimentações
+- [x] Botões Suprimento e Sangria com modal
+
+### Frontend PDV — Gestão de Vendedores (Admin Only)
+- [x] Tabela de vendedores com CRUD
+- [x] Modal criar/editar vendedor (nome, usuário, senha, role)
+- [x] Configuração de metas (Bronze, Prata, Ouro, Meta Loja)
+
+### Frontend PDV — Histórico de Pedidos
+- [x] Tabela de pedidos com filtros (período, vendedor, canal, status)
+- [x] Modal de detalhes do pedido (itens, pagamentos, serviços)
+- [x] Busca por ID do pedido ou nome do cliente

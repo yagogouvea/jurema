@@ -21,6 +21,12 @@ import Header from "./components/Header";
 import Footer from "./components/Footer";
 import WhatsAppButton from "./components/WhatsAppButton";
 import CartDrawer from "./components/CartDrawer";
+import { PdvAuthProvider } from "./contexts/PdvAuthContext";
+import PdvLogin from "./pages/pdv/PdvLogin";
+import PdvMain from "./pages/pdv/PdvMain";
+import PdvDashboard from "./pages/pdv/PdvDashboard";
+import PdvVendedores from "./pages/pdv/PdvVendedores";
+import PdvHistorico from "./pages/pdv/PdvHistorico";
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -49,6 +55,12 @@ function Router() {
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminPanel} />
       <Route path="/admin/:rest*" component={AdminPanel} />
+      {/* PDV independente */}
+      <Route path="/pdv/login" component={PdvLogin} />
+      <Route path="/pdv/dashboard" component={PdvDashboard} />
+      <Route path="/pdv/vendedores" component={PdvVendedores} />
+      <Route path="/pdv/historico" component={PdvHistorico} />
+      <Route path="/pdv" component={PdvMain} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -60,14 +72,16 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
         <AdminAuthProvider>
-          <CustomerAuthProvider>
-            <CartProvider>
-              <TooltipProvider>
-                <Toaster richColors position="top-right" />
-                <Router />
-              </TooltipProvider>
-            </CartProvider>
-          </CustomerAuthProvider>
+          <PdvAuthProvider>
+            <CustomerAuthProvider>
+              <CartProvider>
+                <TooltipProvider>
+                  <Toaster richColors position="top-right" />
+                  <Router />
+                </TooltipProvider>
+              </CartProvider>
+            </CustomerAuthProvider>
+          </PdvAuthProvider>
         </AdminAuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

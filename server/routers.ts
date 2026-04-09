@@ -9,6 +9,11 @@ import { generateImage } from "./_core/imageGeneration";
 import { storagePut } from "./storage";
 import { customerAuthRouter } from "./routers/customerAuth";
 import { adminAuthRouter, ADMIN_COOKIE_NAME, ADMIN_JWT_SECRET } from "./routers/adminAuth";
+import { pdvAuthRouter } from "./routers/pdvAuth";
+import { pdvProductsRouter } from "./routers/pdvProducts";
+import { pdvOrdersRouter } from "./routers/pdvOrders";
+import { pdvDashboardRouter } from "./routers/pdvDashboard";
+import { pdvSellersRouter } from "./routers/pdvSellers";
 import {
   getProducts, getProductBySlug, getProductById, createProduct, updateProduct, deleteProduct,
   createOrder, getOrders, getOrderById, updateOrderStatus, getDashboardStats,
@@ -44,6 +49,11 @@ export const appRouter = router({
   system: systemRouter,
   customerAuth: customerAuthRouter,
   adminAuth: adminAuthRouter,
+  pdvAuth: pdvAuthRouter,
+  pdvProducts: pdvProductsRouter,
+  pdvOrders: pdvOrdersRouter,
+  pdvDashboard: pdvDashboardRouter,
+  pdvSellers: pdvSellersRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),

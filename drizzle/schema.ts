@@ -185,3 +185,138 @@ export const adminUsers = mysqlTable("admin_users", {
 
 export type AdminUser = typeof adminUsers.$inferSelect;
 export type InsertAdminUser = typeof adminUsers.$inferInsert;
+
+// ============================================================
+// PDV JUMERA — Tabelas isoladas do sistema de vendas
+// ============================================================
+
+// Vendedores do PDV
+export const pdvSellers = mysqlTable("pdv_sellers", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  username: varchar("username", { length: 100 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  role: mysqlEnum("role", ["seller", "admin"]).default("seller").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PdvSeller = typeof pdvSellers.$inferSelect;
+export type InsertPdvSeller = typeof pdvSellers.$inferInsert;
+
+// Produtos do PDV (catálogo próprio, independente da loja)
+export const pdvProducts = mysqlTable("pdv_products", {
+  id: int("id").autoincrement().primaryKey(),
+  codigo: varchar("codigo", { length: 100 }),
+  linha: mysqlEnum("linha", ["TAILANDESA", "NACIONAL", "TORCEDOR", "PECA"]).notNull(),
+  modelo: mysqlEnum("modelo", ["TORCEDOR", "JOGADOR", "TAILANDESA", "VENDEDOR"]).notNull(),
+  time: varchar("time", { length: 100 }).notNull(),
+  descricao: varchar("descricao", { length: 255 }),
+  tamanho: varchar("tamanho", { length: 20 }).notNull(),
+  tipo: mysqlEnum("tipo", ["CAMISETA", "CONJUNTO", "OUTRO"]).default("CAMISETA").notNull(),
+  estoque: int("estoque").default(0).notNull(),
+  precoAtacado: decimal("precoAtacado", { precision: 10, scale: 2 }).default("0").notNull(),
+  precoVarejo: decimal("precoVarejo", { precision: 10, scale: 2 }).default("0").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PdvProduct = typeof pdvProducts.$inferSelect;
+export type InsertPdvProduct = typeof pdvProducts.$inferInsert;
+
+// Pedidos do PDV
+export const pdvOrders = mysqlTable("pdv_orders", {
+  id: int("id").autoincrement().primaryKey(),
+  pedidoId: varchar("pedidoId", { length: 50 }).notNull().unique(), // PED-{timestamp}
+  sellerId: int("sellerId").notNull(),
+  sellerName: varchar("sellerName", { length: 255 }).notNull(),
+  canal: mysqlEnum("canal", ["BALCAO", "WHATSAPP"]).notNull(),
+  clienteNome: varchar("clienteNome", { length: 255 }),
+  clienteTelefone: varchar("clienteTelefone", { length: 20 }),
+  regime: mysqlEnum("regime", ["ATACADO", "VAREJO"]).notNull(),
+  totalVarejo: decimal("totalVarejo", { precision: 10, scale: 2 }).default("0").notNull(),
+  totalAtacado: decimal("totalAtacado", { precision: 10, scale: 2 }).default("0").notNull(),
+  totalAplicado: decimal("totalAplicado", { precision: 10, scale: 2 }).notNull(),
+  totalPago: decimal("totalPago", { precision: 10, scale: 2 }).default("0").notNull(),
+  totalPendente: decimal("totalPendente", { precision: 10, scale: 2 }).default("0").notNull(),
+  justificativa: text("justificativa"),
+  status: mysqlEnum("status", ["PAGO", "PENDENTE", "CANCELADO"]).default("PAGO").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PdvOrder = typeof pdvOrders.$inferSelect;
+export type InsertPdvOrder = typeof pdvOrders.$inferInsert;
+
+// Itens dos pedidos PDV
+export const pdvOrderItems = mysqlTable("pdv_order_items", {
+  id: int("id").autoincrement().primaryKey(),
+  pedidoId: varchar("pedidoId", { length: 50 }).notNull(),
+  productId: int("productId"),
+  linha: varchar("linha", { length: 50 }),
+  modelo: varchar("modelo", { length: 50 }),
+  time: varchar("time", { length: 100 }),
+  descricao: varchar("descricao", { length: 255 }),
+  tamanho: varchar("tamanho", { length: 20 }).notNull(),
+  quantidade: int("quantidade").notNull(),
+  precoUnitario: decimal("precoUnitario", { precision: 10, scale: 2 }).notNull(),
+  totalItem: decimal("totalItem", { precision: 10, scale: 2 }).notNull(),
+});
+
+export type PdvOrderItem = typeof pdvOrderItems.$inferSelect;
+export type InsertPdvOrderItem = typeof pdvOrderItems.$inferInsert;
+
+// Pagamentos dos pedidos PDV
+export const pdvOrderPayments = mysqlTable("pdv_order_payments", {
+  id: int("id").autoincrement().primaryKey(),
+  pedidoId: varchar("pedidoId", { length: 50 }).notNull(),
+  formaPagamento: mysqlEnum("formaPagamento", ["PIX", "DINHEIRO", "DEBITO", "CREDITO", "DESCONTO_FOLHA"]).notNull(),
+  valor: decimal("valor", { precision: 10, scale: 2 }).notNull(),
+  taxa: decimal("taxa", { precision: 10, scale: 2 }).default("0").notNull(),
+  valorLiquido: decimal("valorLiquido", { precision: 10, scale: 2 }).notNull(),
+  nomePix: varchar("nomePix", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PdvOrderPayment = typeof pdvOrderPayments.$inferSelect;
+export type InsertPdvOrderPayment = typeof pdvOrderPayments.$inferInsert;
+
+// Serviços extras dos pedidos PDV
+export const pdvOrderServices = mysqlTable("pdv_order_services", {
+  id: int("id").autoincrement().primaryKey(),
+  pedidoId: varchar("pedidoId", { length: 50 }).notNull(),
+  tipo: varchar("tipo", { length: 100 }).notNull(), // CORREIO, CARRETO, CAIXINHA, etc.
+  descricao: varchar("descricao", { length: 255 }),
+  valor: decimal("valor", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PdvOrderService = typeof pdvOrderServices.$inferSelect;
+export type InsertPdvOrderService = typeof pdvOrderServices.$inferInsert;
+
+// Fluxo de caixa PDV (suprimentos e sangrias)
+export const pdvCashFlow = mysqlTable("pdv_cash_flow", {
+  id: int("id").autoincrement().primaryKey(),
+  tipo: mysqlEnum("tipo", ["SUPRIMENTO", "SANGRIA"]).notNull(),
+  descricao: varchar("descricao", { length: 255 }).notNull(),
+  valor: decimal("valor", { precision: 10, scale: 2 }).notNull(), // positivo = entrada, negativo = saída
+  usuario: varchar("usuario", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PdvCashFlow = typeof pdvCashFlow.$inferSelect;
+export type InsertPdvCashFlow = typeof pdvCashFlow.$inferInsert;
+
+// Metas do PDV
+export const pdvGoals = mysqlTable("pdv_goals", {
+  id: int("id").autoincrement().primaryKey(),
+  key: varchar("key", { length: 50 }).notNull().unique(), // BRONZE, PRATA, OURO, META_LOJA
+  label: varchar("label", { length: 100 }).notNull(),
+  value: decimal("value", { precision: 10, scale: 2 }).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PdvGoal = typeof pdvGoals.$inferSelect;
+export type InsertPdvGoal = typeof pdvGoals.$inferInsert;

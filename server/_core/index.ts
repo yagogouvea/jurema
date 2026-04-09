@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerUploadRoutes } from "../uploadHandler";
+import { runPdvMigration, seedPdvData } from "../routers/pdvMigration";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -62,6 +63,10 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    // Run PDV migration and seed after server starts
+    runPdvMigration()
+      .then(() => seedPdvData())
+      .catch(err => console.error("[PDV] Setup error:", err));
   });
 }
 
