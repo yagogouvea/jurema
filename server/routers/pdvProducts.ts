@@ -30,6 +30,7 @@ export const pdvProductsRouter = router({
       search: z.string().optional(),
       linha: z.string().optional(),
       time: z.string().optional(),
+      apenasComEstoque: z.boolean().optional(),
       page: z.number().default(1),
       limit: z.number().default(50),
     }))
@@ -60,6 +61,9 @@ export const pdvProductsRouter = router({
           query += " AND time LIKE ?";
           params.push(`%${input.time}%`);
         }
+        if (input.apenasComEstoque) {
+          query += " AND estoque > 0";
+        }
         
         query += " ORDER BY time ASC, tamanho ASC";
         
@@ -86,6 +90,9 @@ export const pdvProductsRouter = router({
         if (input.time) {
           countQuery += " AND time LIKE ?";
           countParams.push(`%${input.time}%`);
+        }
+        if (input.apenasComEstoque) {
+          countQuery += " AND estoque > 0";
         }
         
         const [countRows] = await db.execute(countQuery, countParams);

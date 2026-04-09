@@ -197,3 +197,7 @@
 
 ## Melhorias PDV (v18)
 - [x] Filtro PDV: busca por múltiplos termos — "Brasil azul" retorna 23 resultados (time=BRASIL AND descricao LIKE '%azul%')
+
+## Melhorias PDV (v19)
+- [x] PDV: validação de estoque no carrinho — bloqueia ao atingir o limite do estoque com toast de aviso
+- [x] PDV: botão "Com estoque" nos filtros do catálogo — exibe apenas os 890 produtos com estoque > 0

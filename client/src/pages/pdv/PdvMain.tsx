@@ -26,6 +26,7 @@ export default function PdvMain() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedLinha, setSelectedLinha] = useState("");
+  const [apenasComEstoque, setApenasComEstoque] = useState(false);
 
   // Debounce search input — espera 350ms antes de disparar a query
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function PdvMain() {
   const { data: productsData, isLoading } = trpc.pdvProducts.list.useQuery({
     search: debouncedSearch || undefined,
     linha: selectedLinha || undefined,
+    apenasComEstoque: apenasComEstoque || undefined,
     limit: 200,
   }, {
     // Mantém dados anteriores enquanto carrega novos (evita flash de "nenhum produto")
@@ -81,9 +83,15 @@ export default function PdvMain() {
       );
       
       if (existing) {
+        // Validar limite de estoque ao incrementar
+        const novaQtd = existing.quantidade + 1;
+        if (novaQtd > product.estoque) {
+          toast.error(`Estoque insuficiente! Disponível: ${product.estoque} un.`);
+          return prev;
+        }
         return prev.map(item =>
           item.productId === product.id && item.tamanho === tamanho
-            ? { ...item, quantidade: item.quantidade + 1, totalItem: (item.quantidade + 1) * item.precoUnitario }
+            ? { ...item, quantidade: novaQtd, totalItem: novaQtd * item.precoUnitario }
             : item
         );
       }
@@ -147,10 +155,19 @@ export default function PdvMain() {
   const updateQuantity = (index: number, delta: number) => {
     setCart(prev => {
       const updated = [...prev];
-      const newQty = updated[index].quantidade + delta;
+      const item = updated[index];
+      const newQty = item.quantidade + delta;
       if (newQty <= 0) {
         updated.splice(index, 1);
       } else {
+        // Validar limite de estoque ao incrementar
+        if (delta > 0 && item.productId) {
+          const product = products.find(p => p.id === item.productId);
+          if (product && newQty > product.estoque) {
+            toast.error(`Estoque insuficiente! Disponível: ${product.estoque} un.`);
+            return prev;
+          }
+        }
         updated[index] = {
           ...updated[index],
           quantidade: newQty,
@@ -321,8 +338,8 @@ export default function PdvMain() {
               )}
             </div>
 
-            {/* Linha filter — botões clicáveis */}
-            <div className="flex gap-1.5 flex-wrap">
+            {/* Linha filter + Filtro de estoque */}
+            <div className="flex gap-1.5 flex-wrap items-center">
               <button
                 onClick={() => setSelectedLinha("")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -346,8 +363,21 @@ export default function PdvMain() {
                   {l}
                 </button>
               ))}
+              {/* Filtro: apenas com estoque */}
+              <button
+                onClick={() => setApenasComEstoque(v => !v)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                  apenasComEstoque
+                    ? "bg-green-700 text-white border border-green-600"
+                    : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white border border-gray-700"
+                }`}
+                title="Mostrar apenas produtos com estoque disponível"
+              >
+                <Package className="w-3 h-3" />
+                Com estoque
+              </button>
               {/* Indicador de busca ativa */}
-              {(search || selectedLinha) && (
+              {(search || selectedLinha || apenasComEstoque) && (
                 <span className="ml-auto text-xs text-gray-500 self-center">
                   {productsData?.total ?? 0} resultado{(productsData?.total ?? 0) !== 1 ? "s" : ""}
                 </span>
