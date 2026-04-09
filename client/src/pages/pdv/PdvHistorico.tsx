@@ -63,14 +63,14 @@ export default function PdvHistorico() {
     { enabled: !!selectedOrder?.pedidoId }
   );
 
-  const cancelMutation = (trpc.pdvOrders as any).cancel?.useMutation({
+  const cancelMutation = trpc.pdvOrders.updateStatus.useMutation({
     onSuccess: () => {
-      toast.success("Pedido cancelado");
+      toast.success("Pedido cancelado — estoque devolvido");
       refetch();
       setSelectedOrder(null);
     },
     onError: (err: any) => toast.error(err.message),
-  }) || { mutate: () => {}, isPending: false };
+  });
 
   const orders = data?.orders || [];
   const total = data?.total || 0;
@@ -378,7 +378,7 @@ export default function PdvHistorico() {
                 <button
                   onClick={() => {
                     if (confirm("Cancelar este pedido?")) {
-                      cancelMutation.mutate({ pedidoId: selectedOrder.pedidoId });
+                      cancelMutation.mutate({ pedidoId: selectedOrder.pedidoId, status: "CANCELADO" });
                     }
                   }}
                   disabled={cancelMutation.isPending}
