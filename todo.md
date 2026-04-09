@@ -168,3 +168,6 @@
 - [x] Configuração de WhatsApp para recibos (campo editável pela Vanessa no PDV)
 - [x] Relatório de comissões por vendedor com filtro de período
 - [x] Testes completos de todas as funcionalidades PDV (40/40 passando)
+
+## Bugs
+- [x] Login PDV: senha correta aceita mas não redireciona para /pdv (corrigido: cookie usava sameSite=lax, agora usa sameSite=none+secure igual ao cookie de sessão)

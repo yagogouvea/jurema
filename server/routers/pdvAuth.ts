@@ -5,6 +5,7 @@ import mysql from "mysql2/promise";
 import crypto from "crypto";
 import { SignJWT, jwtVerify } from "jose";
 import type { Request, Response } from "express";
+import { getSessionCookieOptions } from "../_core/cookies";
 
 const PDV_COOKIE = "pdv_token";
 const PDV_SALT = "pdv_salt_jumera";
@@ -83,12 +84,12 @@ export const pdvAuthRouter = router({
         }
         
         const token = await createPdvToken(seller);
+        const req = ctx.req as Request;
         const res = ctx.res as Response;
+        const cookieOpts = getSessionCookieOptions(req);
         res.cookie(PDV_COOKIE, token, {
-          httpOnly: true,
-          sameSite: "lax",
+          ...cookieOpts,
           maxAge: 8 * 60 * 60 * 1000, // 8 hours
-          path: "/",
         });
         
         return {
@@ -114,8 +115,10 @@ export const pdvAuthRouter = router({
   }),
 
   logout: publicProcedure.mutation(async ({ ctx }) => {
+    const req = ctx.req as Request;
     const res = ctx.res as Response;
-    res.clearCookie(PDV_COOKIE, { path: "/" });
+    const cookieOpts = getSessionCookieOptions(req);
+    res.clearCookie(PDV_COOKIE, { ...cookieOpts, maxAge: -1 });
     return { success: true };
   }),
 });
