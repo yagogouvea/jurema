@@ -256,3 +256,7 @@
 
 ## Melhorias (v33)
 - [x] PDV cancelamento: ao cancelar pedido, estoque devolvido automaticamente; ao reativar pedido cancelado, estoque descontado novamente
+
+## Melhorias (v34)
+- [x] PDV checkout: campos de nome e telefone do cliente adicionados na seção "Dados do Cliente" (após Canal de Venda), opcionais
+- [x] PDV banco: clienteNome e clienteTelefone já existiam na tabela pdv_orders e são salvos corretamente

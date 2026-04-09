@@ -82,8 +82,7 @@ export default function PdvMain() {
   // Resetar para página 1 quando filtros mudam
   useEffect(() => { setPage(1); }, [debouncedSearch, selectedLinha, apenasComEstoque]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [clienteNome, setClienteNome] = useState("");
-  const [clienteTelefone, setClienteTelefone] = useState("");
+
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCart, setShowCart] = useState(false);
   // null = automático (baseado em quantidade), "ATACADO" ou "VAREJO" = forçado manualmente
@@ -235,8 +234,6 @@ export default function PdvMain() {
 
   const clearCart = () => {
     setCart([]);
-    setClienteNome("");
-    setClienteTelefone("");
   };
 
   const handleCheckout = () => {
@@ -262,8 +259,6 @@ export default function PdvMain() {
       <PdvLayout>
         <PdvCheckout
           cart={cartWithPrices}
-          clienteNome={clienteNome}
-          clienteTelefone={clienteTelefone}
           regime={regime}
           totalVarejo={totalVarejo}
           totalAtacado={totalAtacado}

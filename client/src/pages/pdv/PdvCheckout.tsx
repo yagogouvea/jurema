@@ -51,8 +51,6 @@ const SERVICE_TYPES = ["CORREIO", "CARRETO", "CAIXINHA", "OUTRO"];
 
 interface PdvCheckoutProps {
   cart: CartItem[];
-  clienteNome: string;
-  clienteTelefone: string;
   regime: "ATACADO" | "VAREJO";
   totalVarejo: number;
   totalAtacado: number;
@@ -66,12 +64,15 @@ function fmt(v: number) {
 }
 
 export default function PdvCheckout({
-  cart, clienteNome, clienteTelefone, regime,
+  cart, regime,
   totalVarejo, totalAtacado, totalAplicado, onBack, onSuccess
 }: PdvCheckoutProps) {
   const { seller } = usePdvAuth();
   // Canal é selecionado aqui na configuração do pedido
   const [canal, setCanal] = useState<"BALCAO" | "WHATSAPP">("BALCAO");
+  // Dados do cliente preenchidos no checkout
+  const [clienteNome, setClienteNome] = useState("");
+  const [clienteTelefone, setClienteTelefone] = useState("");
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [showAddService, setShowAddService] = useState(false);
@@ -316,8 +317,38 @@ export default function PdvCheckout({
               </button>
             </div>
             {canal === "WHATSAPP" && !clienteTelefone && (
-              <p className="text-yellow-500 text-xs mt-2">⚠️ Sem telefone do cliente — o link do WhatsApp não será gerado automaticamente.</p>
+              <p className="text-yellow-500 text-xs mt-2">⚠️ Preencha o telefone do cliente para gerar o link do WhatsApp automaticamente.</p>
             )}
+          </div>
+
+          {/* Dados do Cliente */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
+            <h3 className="text-white font-semibold flex items-center gap-2">
+              <span>Dados do Cliente</span>
+              <span className="text-xs text-gray-500 font-normal">(opcional)</span>
+            </h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Nome</label>
+                <input
+                  type="text"
+                  value={clienteNome}
+                  onChange={(e) => setClienteNome(e.target.value)}
+                  placeholder="Nome do cliente"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Telefone / WhatsApp</label>
+                <input
+                  type="tel"
+                  value={clienteTelefone}
+                  onChange={(e) => setClienteTelefone(e.target.value)}
+                  placeholder="(00) 00000-0000"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Services */}
