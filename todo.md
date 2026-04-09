@@ -194,3 +194,6 @@
 ## Reimportação Catálogo (v17)
 - [x] Analisar planilha PDVJUREMA5.0.xlsx e mapear colunas
 - [x] Limpar produtos existentes e importar catálogo real completo (1.455 produtos, 99 times, R$19-R$230)
+
+## Melhorias PDV (v18)
+- [x] Filtro PDV: busca por múltiplos termos — "Brasil azul" retorna 23 resultados (time=BRASIL AND descricao LIKE '%azul%')

@@ -43,9 +43,14 @@ export const pdvProductsRouter = router({
         const params: any[] = [];
         
         if (input.search) {
-          query += " AND (LOWER(time) LIKE ? OR LOWER(descricao) LIKE ? OR LOWER(codigo) LIKE ? OR LOWER(modelo) LIKE ?)";
-          const s = `%${input.search.toLowerCase()}%`;
-          params.push(s, s, s, s);
+          // Busca por múltiplos termos: cada palavra deve aparecer em algum campo
+          // Ex: "Brasil azul" = time LIKE '%brasil%' AND (time LIKE '%azul%' OR descricao LIKE '%azul%')
+          const terms = input.search.toLowerCase().trim().split(/\s+/).filter(Boolean);
+          for (const term of terms) {
+            const s = `%${term}%`;
+            query += " AND (LOWER(time) LIKE ? OR LOWER(descricao) LIKE ? OR LOWER(codigo) LIKE ? OR LOWER(modelo) LIKE ?)";
+            params.push(s, s, s, s);
+          }
         }
         if (input.linha) {
           query += " AND linha = ?";
@@ -67,9 +72,12 @@ export const pdvProductsRouter = router({
         let countQuery = "SELECT COUNT(*) as total FROM pdv_products WHERE isActive = 1";
         const countParams: any[] = [];
         if (input.search) {
-          countQuery += " AND (LOWER(time) LIKE ? OR LOWER(descricao) LIKE ? OR LOWER(codigo) LIKE ? OR LOWER(modelo) LIKE ?)";
-          const s = `%${input.search.toLowerCase()}%`;
-          countParams.push(s, s, s, s);
+          const terms = input.search.toLowerCase().trim().split(/\s+/).filter(Boolean);
+          for (const term of terms) {
+            const s = `%${term}%`;
+            countQuery += " AND (LOWER(time) LIKE ? OR LOWER(descricao) LIKE ? OR LOWER(codigo) LIKE ? OR LOWER(modelo) LIKE ?)";
+            countParams.push(s, s, s, s);
+          }
         }
         if (input.linha) {
           countQuery += " AND linha = ?";
