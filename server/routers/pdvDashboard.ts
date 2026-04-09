@@ -76,7 +76,9 @@ export const pdvDashboardRouter = router({
           params
         );
         
-        // Por forma de pagamento
+        // Por forma de pagamento — usa o.createdAt para evitar ambiguidade no JOIN
+        const dateFilterQualified = dateFilter
+          .replace(/DATE\(createdAt\)/g, 'DATE(o.createdAt)');
         const [paymentRows] = await db.execute(
           `SELECT p.formaPagamento, 
             COUNT(DISTINCT p.pedidoId) as pedidos,
@@ -85,7 +87,7 @@ export const pdvDashboardRouter = router({
             COALESCE(SUM(p.valorLiquido), 0) as totalLiquido
            FROM pdv_order_payments p
            INNER JOIN pdv_orders o ON p.pedidoId = o.pedidoId
-           WHERE o.status != 'CANCELADO'${dateFilter}
+           WHERE o.status != 'CANCELADO'${dateFilterQualified}
            GROUP BY p.formaPagamento
            ORDER BY total DESC`,
           params

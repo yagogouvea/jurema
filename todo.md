@@ -187,3 +187,6 @@
 
 ## Bugs (v15)
 - [x] Dashboard PDV não reflete pedidos realizados (corrigido: hooks chamados após guard isAdmin violava regra do React, movido guard para após todos os hooks com enabled:isAdmin)
+
+## Bugs (v16)
+- [x] Dashboard PDV mostra R$ 0,00 (corrigido: query de pagamentos com JOIN tinha coluna createdAt ambígua entre pdv_order_payments e pdv_orders, qualificado como o.createdAt)
