@@ -238,3 +238,6 @@
 
 ## Bugs (v27)
 - [x] PDV /notificacoes: erro "Incorrect arguments to LIMIT" — corrigido: LIMIT/OFFSET interpolados como inteiros seguros em pdvNotifications.ts (mysql2 não aceita LIMIT ? com parâmetros)
+
+## Melhorias (v28)
+- [x] PDV catálogo: campos de nome do cliente e telefone removidos do cabeçalho

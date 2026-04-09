@@ -353,22 +353,6 @@ export default function PdvMain() {
                 </span>
               </div>
 
-              {/* Client info */}
-              <input
-                type="text"
-                value={clienteNome}
-                onChange={(e) => setClienteNome(e.target.value)}
-                placeholder="Nome do cliente (opcional)"
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500"
-              />
-              <input
-                type="text"
-                value={clienteTelefone}
-                onChange={(e) => setClienteTelefone(e.target.value)}
-                placeholder="Telefone"
-                className="w-40 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500"
-              />
-
               {/* Botões admin: Sync + Notificações */}
               {isAdmin && (
                 <div className="flex items-center gap-1.5">
