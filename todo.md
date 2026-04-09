@@ -171,3 +171,6 @@
 
 ## Bugs
 - [x] Login PDV: senha correta aceita mas não redireciona para /pdv (corrigido: cookie usava sameSite=lax, agora usa sameSite=none+secure igual ao cookie de sessão)
+
+## Melhorias PDV (v12)
+- [x] Checkout: ao selecionar crédito/débito, exibir "Valor real" e "Valor maquininha (com taxa)" separadamente, com campo editável
