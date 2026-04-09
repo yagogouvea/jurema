@@ -5,7 +5,7 @@ import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import {
   ShoppingBag, LayoutDashboard, History, Users, LogOut,
-  ChevronRight, Menu, X, BarChart2, Settings, TrendingUp
+  ChevronRight, Menu, X, BarChart2, Settings, TrendingUp, Bell
 } from "lucide-react";
 import { useState } from "react";
 
@@ -43,6 +43,12 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
 
   if (!seller) return null;
 
+  const { data: unreadData } = trpc.pdvNotifications.unreadCount.useQuery(
+    undefined,
+    { enabled: isAdmin, refetchInterval: 30000 }
+  );
+  const unreadCount = unreadData?.count ?? 0;
+
   const navItems = [
     { href: "/pdv", icon: ShoppingBag, label: "PDV", exact: true },
     { href: "/pdv/historico", icon: History, label: "Histórico" },
@@ -50,6 +56,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
       { href: "/pdv/dashboard", icon: BarChart2, label: "Dashboard" },
       { href: "/pdv/vendedores", icon: Users, label: "Vendedores" },
       { href: "/pdv/comissoes", icon: TrendingUp, label: "Comissões" },
+      { href: "/pdv/notificacoes", icon: Bell, label: "Notificações", badge: unreadCount },
       { href: "/pdv/configuracoes", icon: Settings, label: "Configurações" },
     ] : []),
   ];
@@ -76,7 +83,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
 
       {/* Nav */}
       <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => {
+        {navItems.map((item: any) => {
           const active = isActive(item.href, item.exact);
           return (
             <Link
@@ -91,7 +98,12 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
             >
               <item.icon className="w-5 h-5 flex-shrink-0" />
               <span>{item.label}</span>
-              {active && <ChevronRight className="w-4 h-4 ml-auto" />}
+              {item.badge > 0 && (
+                <span className="ml-auto bg-red-600 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  {item.badge > 99 ? "99+" : item.badge}
+                </span>
+              )}
+              {active && !item.badge && <ChevronRight className="w-4 h-4 ml-auto" />}
             </Link>
           );
         })}

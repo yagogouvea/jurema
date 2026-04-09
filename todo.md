@@ -220,3 +220,11 @@
 
 ## Bugs (v23)
 - [x] Configurações PDV: painel de sync não aparecia (corrigido: PdvAuthProvider global causava cache null do pdvAuth.me, movido para dentro de cada rota PDV)
+
+## Notificações Internas PDV (v24)
+- [x] Tabela pdv_notifications no banco para armazenar notificações internas
+- [x] Router pdvNotifications: list, markRead, markAllRead, deleteAll, unreadCount
+- [x] pdvSync: salvar notificações no banco (removido notifyOwner do Manus)
+- [x] PdvMain: botão Sync + ícone de sino no header (admin only), popup com prévia e confirmação
+- [x] Página /pdv/notificacoes com lista, filtros por tipo, paginação, marcar como lida/apagar
+- [x] Sidebar PDV: link para Notificações com badge contador de não lidas (atualiza a cada 30s)

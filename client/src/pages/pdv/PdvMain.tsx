@@ -4,7 +4,8 @@ import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import {
   Search, ShoppingCart, Plus, Minus, Trash2, ChevronRight,
-  Package, Users, ArrowRight, X, Tag, Filter, ChevronLeft, ChevronRight as ChevronRightIcon
+  Package, Users, ArrowRight, X, Tag, Filter, ChevronLeft, ChevronRight as ChevronRightIcon,
+  RefreshCw, Bell
 } from "lucide-react";
 import PdvLayout from "./PdvLayout";
 import PdvCheckout from "./PdvCheckout";
@@ -22,7 +23,49 @@ interface CartItem {
 }
 
 export default function PdvMain() {
-  const { seller } = usePdvAuth();
+  const { seller, isAdmin } = usePdvAuth();
+  const utils = trpc.useUtils();
+
+  // Modal de sincronização
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncPreview, setSyncPreview] = useState<any>(null);
+  const [syncResult, setSyncResult] = useState<any>(null);
+
+  const { data: previewData, isLoading: isLoadingPreview, refetch: refetchPreview } = trpc.pdvSync.preview.useQuery(
+    undefined,
+    { enabled: showSyncModal && isAdmin, staleTime: 0 }
+  );
+
+  const { data: unreadData } = trpc.pdvNotifications.unreadCount.useQuery(
+    undefined,
+    { enabled: isAdmin, refetchInterval: 30000 }
+  );
+
+  const syncMutation = trpc.pdvSync.sync.useMutation({
+    onSuccess: (data) => {
+      setSyncResult(data);
+      utils.pdvProducts.list.invalidate();
+      utils.pdvNotifications.unreadCount.invalidate();
+      toast.success(`Sincronização concluída! ${data.inseridos} novos, ${data.atualizados} atualizados.`);
+    },
+    onError: (err) => {
+      toast.error(`Erro na sincronização: ${err.message}`);
+    },
+  });
+
+  useEffect(() => {
+    if (previewData) setSyncPreview(previewData);
+  }, [previewData]);
+
+  const handleOpenSync = () => {
+    setSyncPreview(null);
+    setSyncResult(null);
+    setShowSyncModal(true);
+  };
+
+  const handleSync = () => {
+    syncMutation.mutate({ confirmar: true });
+  };
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedLinha, setSelectedLinha] = useState("");
@@ -322,6 +365,32 @@ export default function PdvMain() {
                 placeholder="Telefone"
                 className="w-40 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500"
               />
+
+              {/* Botões admin: Sync + Notificações */}
+              {isAdmin && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleOpenSync}
+                    title="Sincronizar catálogo com Google Sheets"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-blue-900/50 border border-gray-700 hover:border-blue-600 rounded-xl text-gray-400 hover:text-blue-300 transition-all text-xs font-medium"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Sync</span>
+                  </button>
+                  <a
+                    href="/pdv/notificacoes"
+                    title="Notificações do PDV"
+                    className="relative flex items-center justify-center w-9 h-9 bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-500 rounded-xl text-gray-400 hover:text-white transition-all"
+                  >
+                    <Bell className="w-4 h-4" />
+                    {(unreadData?.count ?? 0) > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5">
+                        {unreadData!.count > 99 ? "99+" : unreadData!.count}
+                      </span>
+                    )}
+                  </a>
+                </div>
+              )}
             </div>
 
             {/* Search */}
@@ -533,6 +602,135 @@ export default function PdvMain() {
           </div>
         )}
       </div>
+
+      {/* Modal de Sincronização */}
+      {showSyncModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowSyncModal(false)} />
+          <div className="relative bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-800">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-blue-400" />
+                <h2 className="text-white font-semibold">Sincronizar Catálogo</h2>
+              </div>
+              <button onClick={() => setShowSyncModal(false)} className="text-gray-500 hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 space-y-4">
+              {/* Resultado da sync */}
+              {syncResult ? (
+                <div className="bg-green-900/30 border border-green-700/40 rounded-xl p-4 space-y-2">
+                  <p className="text-green-400 font-semibold text-sm">✓ Sincronização concluída em {syncResult.tempoSegundos}s</p>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-gray-800/50 rounded-lg p-2">
+                      <p className="text-lg font-bold text-white">{syncResult.inseridos}</p>
+                      <p className="text-xs text-gray-400">Inseridos</p>
+                    </div>
+                    <div className="bg-gray-800/50 rounded-lg p-2">
+                      <p className="text-lg font-bold text-white">{syncResult.atualizados}</p>
+                      <p className="text-xs text-gray-400">Atualizados</p>
+                    </div>
+                    <div className="bg-gray-800/50 rounded-lg p-2">
+                      <p className="text-lg font-bold text-white">{syncResult.ignorados}</p>
+                      <p className="text-xs text-gray-400">Ignorados</p>
+                    </div>
+                  </div>
+                  {syncResult.alterados > 0 && (
+                    <p className="text-xs text-yellow-400">⚠️ {syncResult.alterados} produto(s) com preço ou estoque alterado</p>
+                  )}
+                  <button
+                    onClick={() => setShowSyncModal(false)}
+                    className="w-full mt-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-sm font-medium transition-colors"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Prévia */}
+                  {isLoadingPreview ? (
+                    <div className="flex items-center justify-center py-8 gap-3 text-gray-400">
+                      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm">Carregando prévia da planilha...</span>
+                    </div>
+                  ) : syncPreview ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                          <p className="text-2xl font-bold text-white">{syncPreview.totalValidos}</p>
+                          <p className="text-xs text-gray-400">Válidos na planilha</p>
+                        </div>
+                        <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                          <p className="text-2xl font-bold text-green-400">{syncPreview.novos}</p>
+                          <p className="text-xs text-gray-400">Novos produtos</p>
+                        </div>
+                        <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                          <p className="text-2xl font-bold text-yellow-400">{syncPreview.alterados}</p>
+                          <p className="text-xs text-gray-400">Com alterações</p>
+                        </div>
+                        <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                          <p className="text-2xl font-bold text-red-400">{syncPreview.totalInvalidos}</p>
+                          <p className="text-xs text-gray-400">Ignorados (incompletos)</p>
+                        </div>
+                      </div>
+
+                      {syncPreview.novosProdutos?.length > 0 && (
+                        <div className="bg-green-900/20 border border-green-800/40 rounded-xl p-3">
+                          <p className="text-xs text-green-400 font-semibold mb-1">Novos produtos (amostra):</p>
+                          {syncPreview.novosProdutos.map((p: string, i: number) => (
+                            <p key={i} className="text-xs text-gray-300">{p}</p>
+                          ))}
+                        </div>
+                      )}
+
+                      {syncPreview.alteradosProdutos?.length > 0 && (
+                        <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-xl p-3">
+                          <p className="text-xs text-yellow-400 font-semibold mb-1">Alterações detectadas (amostra):</p>
+                          {syncPreview.alteradosProdutos.map((p: string, i: number) => (
+                            <p key={i} className="text-xs text-gray-300">{p}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-gray-500 text-sm">
+                      <p>Erro ao carregar prévia.</p>
+                      <button onClick={() => refetchPreview()} className="mt-2 text-blue-400 hover:text-blue-300 text-xs">Tentar novamente</button>
+                    </div>
+                  )}
+
+                  {/* Ações */}
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => refetchPreview()}
+                      disabled={isLoadingPreview}
+                      className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isLoadingPreview ? 'animate-spin' : ''}`} />
+                      Atualizar prévia
+                    </button>
+                    <button
+                      onClick={handleSync}
+                      disabled={syncMutation.isPending || isLoadingPreview || !syncPreview}
+                      className="flex-1 px-4 py-2.5 bg-blue-700 hover:bg-blue-600 text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {syncMutation.isPending ? (
+                        <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Sincronizando...</>
+                      ) : (
+                        <><RefreshCw className="w-4 h-4" /> Sincronizar Agora</>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </PdvLayout>
   );
 }

@@ -320,3 +320,16 @@ export const pdvGoals = mysqlTable("pdv_goals", {
 
 export type PdvGoal = typeof pdvGoals.$inferSelect;
 export type InsertPdvGoal = typeof pdvGoals.$inferInsert;
+
+// Notificações internas do PDV (sincronização, alertas de estoque/preço)
+export const pdvNotifications = mysqlTable("pdv_notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  tipo: varchar("tipo", { length: 50 }).notNull(), // novo_produto | alteracao_produto | sync_concluido | alerta_estoque
+  titulo: varchar("titulo", { length: 255 }).notNull(),
+  mensagem: text("mensagem").notNull(),
+  lida: boolean("lida").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PdvNotification = typeof pdvNotifications.$inferSelect;
+export type InsertPdvNotification = typeof pdvNotifications.$inferInsert;

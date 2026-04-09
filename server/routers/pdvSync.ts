@@ -3,7 +3,7 @@ import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
-import { notifyOwner } from "../_core/notification";
+import { savePdvNotification } from "./pdvNotifications";
 import type { Request } from "express";
 
 async function getDb() {
@@ -270,21 +270,23 @@ export const pdvSyncRouter = router({
       const timestamp = new Date().toISOString();
       console.log(`[PDV Sync] ${timestamp} — ${elapsed}s — Inseridos: ${inseridos}, Atualizados: ${atualizados}, Ignorados: ${invalid.length}, Erros: ${erros}`);
 
-      // Notificação de novos produtos
+      // Notificação interna de sincronização (salva no banco PDV, sem dependência do Manus)
+      const dataHora = new Date().toLocaleString("pt-BR");
+
       if (novosProdutos.length > 0) {
         try {
           const lista = novosProdutos.slice(0, 10)
             .map(p => `• ${p.codigo} — ${p.time} ${p.descricao} (${p.tamanho}) | ATC: R$${p.precoAtacado} / VAR: R$${p.precoVarejo}`)
             .join("\n");
           const sufixo = novosProdutos.length > 10 ? `\n... e mais ${novosProdutos.length - 10} produto(s).` : "";
-          await notifyOwner({
-            title: `🆕 ${novosProdutos.length} novo(s) produto(s) adicionado(s) ao PDV`,
-            content: `Sincronização por: ${seller.name}\nData: ${new Date().toLocaleString("pt-BR")}\n\nNovos produtos:\n${lista}${sufixo}`,
-          });
+          await savePdvNotification(
+            "novo_produto",
+            `${novosProdutos.length} novo(s) produto(s) adicionado(s)`,
+            `Sincronização por: ${seller.name}\nData: ${dataHora}\n\nNovos produtos:\n${lista}${sufixo}`
+          );
         } catch (e) { console.error("[PDV Sync] Erro notificação novos:", e); }
       }
 
-      // Notificação de produtos alterados (preço ou estoque)
       if (alteradosProdutos.length > 0) {
         try {
           const lista = alteradosProdutos.slice(0, 15)
@@ -298,12 +300,22 @@ export const pdvSyncRouter = router({
             })
             .join("\n");
           const sufixo = alteradosProdutos.length > 15 ? `\n... e mais ${alteradosProdutos.length - 15} alteração(ões).` : "";
-          await notifyOwner({
-            title: `✏️ ${alteradosProdutos.length} produto(s) alterado(s) na planilha`,
-            content: `Sincronização por: ${seller.name}\nData: ${new Date().toLocaleString("pt-BR")}\n\nAlterações detectadas:\n${lista}${sufixo}`,
-          });
+          await savePdvNotification(
+            "alteracao_produto",
+            `${alteradosProdutos.length} produto(s) com preço ou estoque alterado`,
+            `Sincronização por: ${seller.name}\nData: ${dataHora}\n\nAlterações detectadas:\n${lista}${sufixo}`
+          );
         } catch (e) { console.error("[PDV Sync] Erro notificação alterados:", e); }
       }
+
+      // Notificação de resumo da sincronização
+      try {
+        await savePdvNotification(
+          "sync_concluido",
+          `Sincronização concluída em ${elapsed}s`,
+          `Realizada por: ${seller.name}\nData: ${dataHora}\n\nResumo:\n• Inseridos: ${inseridos}\n• Atualizados: ${atualizados}\n• Ignorados (incompletos): ${invalid.length}\n• Erros: ${erros}\n• Alterações de preço/estoque: ${alteradosProdutos.length}`
+        );
+      } catch (e) { console.error("[PDV Sync] Erro notificação resumo:", e); }
 
       return {
         sucesso: true,
