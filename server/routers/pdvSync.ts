@@ -24,30 +24,16 @@ async function requirePdvAdmin(ctx: any) {
 }
 
 const SHEET_ID = "1z-Qr08Oy9tc3c7rd1nspR0F20oP0cRskEXmUxPxvo7M";
-// Expandido para M2000 para capturar todas as colunas incluindo FOTO e TEMPORADA
 const SHEET_RANGE = "PRODUTOS VISUAL!A2:M2000";
 
-// Colunas obrigatórias para validação do produto
+// Colunas obrigatórias — FOTO (11) e TEMPORADA (12) são IGNORADAS na validação
 // [0]CODIGO [1]LINHA [2]MODELO [3]TIME [4]DESCRIÇÃO [5]TAM [6]TIPO [7]QTD [8]ATC [9]VAR [10]ATIVO
-// [11]FOTO e [12]TEMPORADA são IGNORADAS na validação
 const REQUIRED_COLS = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10];
 const COL_NAMES: Record<number, string> = {
-  0: "CODIGO",
-  1: "LINHA",
-  2: "MODELO",
-  3: "TIME",
-  4: "DESCRIÇÃO",
-  5: "TAM",
-  6: "TIPO",
-  7: "QTD",
-  8: "ATC",
-  9: "VAR",
-  10: "ATIVO",
-  // 11: FOTO — ignorado na validação
-  // 12: TEMPORADA — ignorado na validação
+  0: "CODIGO", 1: "LINHA", 2: "MODELO", 3: "TIME", 4: "DESCRIÇÃO",
+  5: "TAM", 6: "TIPO", 7: "QTD", 8: "ATC", 9: "VAR", 10: "ATIVO",
 };
 
-// Mapeamento de linha para enum do banco
 function mapLinha(val: string): string {
   const v = val.toUpperCase().trim();
   if (v.includes("TAILANDESA")) return "TAILANDESA";
@@ -57,7 +43,6 @@ function mapLinha(val: string): string {
   return "TAILANDESA";
 }
 
-// Mapeamento de modelo para enum do banco
 function mapModelo(val: string): string {
   const v = val.toUpperCase().trim();
   if (v.includes("JOGADOR")) return "JOGADOR";
@@ -66,14 +51,13 @@ function mapModelo(val: string): string {
   return "TORCEDOR";
 }
 
-// Buscar dados da planilha via Google Sheets API (somente leitura — nunca modifica a planilha)
+// Buscar e validar dados da planilha (somente leitura — nunca modifica a planilha)
 async function fetchSheetData(apiKey: string): Promise<{
   valid: any[];
   invalid: any[];
   total: number;
 }> {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_RANGE)}?key=${apiKey}`;
-
   const response = await fetch(url);
   if (!response.ok) {
     const err = await response.text();
@@ -82,12 +66,11 @@ async function fetchSheetData(apiKey: string): Promise<{
 
   const data = await response.json();
   const rows: string[][] = data.values || [];
-
   const valid: any[] = [];
   const invalid: any[] = [];
 
   for (const row of rows) {
-    // Verificar apenas os campos obrigatórios — FOTO (col 11) e TEMPORADA (col 12) são ignorados
+    // Verificar campos obrigatórios (FOTO e TEMPORADA excluídos)
     const missingCols = REQUIRED_COLS.filter(i => {
       const val = row[i];
       return val === undefined || val === null || val.toString().trim() === "";
@@ -101,6 +84,37 @@ async function fetchSheetData(apiKey: string): Promise<{
       continue;
     }
 
+    // Validação de estoque: QTD deve ser numérico e >= 0
+    const qtdRaw = row[7]?.toString().trim();
+    const qtd = parseInt(qtdRaw);
+    if (isNaN(qtd) || qtd < 0) {
+      invalid.push({
+        codigo: row[0] || "(sem código)",
+        motivo: `QTD inválido: "${qtdRaw}" (deve ser número >= 0)`,
+      });
+      continue;
+    }
+
+    // Validação de preços: ATC e VAR devem ser numéricos e > 0
+    const atcRaw = row[8]?.toString().trim();
+    const varRaw = row[9]?.toString().trim();
+    const atc = parseFloat(atcRaw);
+    const varejo = parseFloat(varRaw);
+    if (isNaN(atc) || atc <= 0) {
+      invalid.push({
+        codigo: row[0] || "(sem código)",
+        motivo: `Preço atacado inválido: "${atcRaw}" (deve ser número > 0)`,
+      });
+      continue;
+    }
+    if (isNaN(varejo) || varejo <= 0) {
+      invalid.push({
+        codigo: row[0] || "(sem código)",
+        motivo: `Preço varejo inválido: "${varRaw}" (deve ser número > 0)`,
+      });
+      continue;
+    }
+
     const ativo = row[10]?.toString().toUpperCase().trim();
     valid.push({
       codigo: row[0].trim(),
@@ -109,11 +123,10 @@ async function fetchSheetData(apiKey: string): Promise<{
       time: row[3].trim().toUpperCase(),
       descricao: row[4].trim(),
       tamanho: row[5].trim().toUpperCase(),
-      estoque: parseInt(row[7]) || 0,
-      precoAtacado: parseFloat(row[8]) || 0,
-      precoVarejo: parseFloat(row[9]) || 0,
+      estoque: qtd,
+      precoAtacado: atc,
+      precoVarejo: varejo,
       isActive: ativo === "SIM" || ativo === "1" || ativo === "TRUE" ? 1 : 0,
-      // FOTO (col 11) e TEMPORADA (col 12) são lidos mas não salvos no banco PDV
     });
   }
 
@@ -129,17 +142,27 @@ export const pdvSyncRouter = router({
 
     const { valid, invalid, total } = await fetchSheetData(apiKey);
 
-    // Verificar quais são novos vs atualizações
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
+
     const [existing] = await db.execute(
-      "SELECT codigo FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ''"
+      "SELECT codigo, estoque, precoAtacado, precoVarejo FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ''"
     );
     await db.end();
 
-    const existingCodes = new Set((existing as any[]).map((r: any) => r.codigo));
-    const novos = valid.filter(p => !existingCodes.has(p.codigo));
-    const atualizacoes = valid.filter(p => existingCodes.has(p.codigo));
+    const existingMap = new Map((existing as any[]).map((r: any) => [r.codigo, r]));
+    const novos = valid.filter(p => !existingMap.has(p.codigo));
+    const atualizacoes = valid.filter(p => existingMap.has(p.codigo));
+
+    // Detectar alterações de preço ou estoque
+    const alterados = atualizacoes.filter(p => {
+      const ex = existingMap.get(p.codigo);
+      return ex && (
+        Number(ex.estoque) !== p.estoque ||
+        parseFloat(ex.precoAtacado) !== p.precoAtacado ||
+        parseFloat(ex.precoVarejo) !== p.precoVarejo
+      );
+    });
 
     return {
       totalPlanilha: total,
@@ -147,107 +170,139 @@ export const pdvSyncRouter = router({
       totalInvalidos: invalid.length,
       novos: novos.length,
       atualizacoes: atualizacoes.length,
+      alterados: alterados.length,
       invalidos: invalid.slice(0, 20),
       amostraValidos: valid.slice(0, 5),
-      // Lista dos novos produtos para exibir na prévia
       novosProdutos: novos.slice(0, 10).map(p => `${p.codigo} — ${p.time} ${p.descricao} (${p.tamanho})`),
+      alteradosProdutos: alterados.slice(0, 10).map(p => {
+        const ex = existingMap.get(p.codigo);
+        const diffs: string[] = [];
+        if (ex && Number(ex.estoque) !== p.estoque) diffs.push(`estoque: ${ex.estoque}→${p.estoque}`);
+        if (ex && parseFloat(ex.precoAtacado) !== p.precoAtacado) diffs.push(`ATC: R$${ex.precoAtacado}→R$${p.precoAtacado}`);
+        if (ex && parseFloat(ex.precoVarejo) !== p.precoVarejo) diffs.push(`VAR: R$${ex.precoVarejo}→R$${p.precoVarejo}`);
+        return `${p.codigo} — ${diffs.join(", ")}`;
+      }),
     };
   }),
 
-  // Sincronização real: upsert dos produtos válidos + notificação de novos produtos
+  // Sincronização em lote: upsert otimizado com INSERT ON DUPLICATE KEY UPDATE
   sync: publicProcedure
     .input(z.object({ confirmar: z.boolean() }))
     .mutation(async ({ input, ctx }) => {
       const seller = await requirePdvAdmin(ctx);
-
-      if (!input.confirmar) {
-        throw new Error("Confirmação necessária para sincronizar");
-      }
+      if (!input.confirmar) throw new Error("Confirmação necessária para sincronizar");
 
       const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
       if (!apiKey) throw new Error("GOOGLE_SHEETS_API_KEY não configurada");
 
+      const startTime = Date.now();
       const { valid, invalid, total } = await fetchSheetData(apiKey);
 
-      if (valid.length === 0) {
-        throw new Error("Nenhum produto válido encontrado na planilha");
-      }
+      if (valid.length === 0) throw new Error("Nenhum produto válido encontrado na planilha");
 
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
 
-      // Identificar produtos novos ANTES de inserir (para notificação)
+      // Buscar estado atual do banco para comparar alterações
       const [existingRows] = await db.execute(
-        "SELECT codigo FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ''"
+        "SELECT codigo, estoque, precoAtacado, precoVarejo FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ''"
       );
-      const existingCodes = new Set((existingRows as any[]).map((r: any) => r.codigo));
-      const novosProdutos = valid.filter(p => !existingCodes.has(p.codigo));
+      const existingMap = new Map((existingRows as any[]).map((r: any) => [r.codigo, r]));
 
+      // Identificar novos e alterados ANTES do upsert
+      const novosProdutos = valid.filter(p => !existingMap.has(p.codigo));
+      const alteradosProdutos = valid.filter(p => {
+        const ex = existingMap.get(p.codigo);
+        return ex && (
+          Number(ex.estoque) !== p.estoque ||
+          parseFloat(ex.precoAtacado) !== p.precoAtacado ||
+          parseFloat(ex.precoVarejo) !== p.precoVarejo
+        );
+      });
+
+      // UPSERT EM LOTE — muito mais rápido que loop de SELECT+UPDATE/INSERT
+      // Processa em chunks de 100 para evitar queries muito grandes
+      const CHUNK_SIZE = 100;
       let inseridos = 0;
       let atualizados = 0;
       let erros = 0;
 
-      for (const produto of valid) {
+      for (let i = 0; i < valid.length; i += CHUNK_SIZE) {
+        const chunk = valid.slice(i, i + CHUNK_SIZE);
         try {
-          const exists = existingCodes.has(produto.codigo);
+          // Construir placeholders para o batch
+          const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())").join(", ");
+          const values: any[] = [];
+          for (const p of chunk) {
+            values.push(
+              p.codigo, p.linha, p.modelo, p.time, p.descricao,
+              p.tamanho, p.estoque, p.precoAtacado, p.precoVarejo, p.isActive
+            );
+          }
 
-          if (exists) {
-            await db.execute(
-              `UPDATE pdv_products SET
-                linha=?, modelo=?, time=?, descricao=?, tamanho=?,
-                estoque=?, precoAtacado=?, precoVarejo=?, isActive=?, updatedAt=NOW()
-               WHERE codigo=?`,
-              [
-                produto.linha, produto.modelo, produto.time, produto.descricao,
-                produto.tamanho, produto.estoque, produto.precoAtacado,
-                produto.precoVarejo, produto.isActive, produto.codigo,
-              ]
-            );
-            atualizados++;
-          } else {
-            await db.execute(
-              `INSERT INTO pdv_products
-                (codigo, linha, modelo, time, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, createdAt, updatedAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-              [
-                produto.codigo, produto.linha, produto.modelo, produto.time,
-                produto.descricao, produto.tamanho, produto.estoque,
-                produto.precoAtacado, produto.precoVarejo, produto.isActive,
-              ]
-            );
-            inseridos++;
+          await db.execute(
+            `INSERT INTO pdv_products
+              (codigo, linha, modelo, time, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, createdAt, updatedAt)
+             VALUES ${placeholders}
+             ON DUPLICATE KEY UPDATE
+               linha=VALUES(linha), modelo=VALUES(modelo), time=VALUES(time),
+               descricao=VALUES(descricao), tamanho=VALUES(tamanho),
+               estoque=VALUES(estoque), precoAtacado=VALUES(precoAtacado),
+               precoVarejo=VALUES(precoVarejo), isActive=VALUES(isActive),
+               updatedAt=NOW()`,
+            values
+          );
+
+          // Contar inseridos vs atualizados pelo mapa existente
+          for (const p of chunk) {
+            if (existingMap.has(p.codigo)) atualizados++;
+            else inseridos++;
           }
         } catch (err) {
-          erros++;
-          console.error(`[PDV Sync] Erro no produto ${produto.codigo}:`, err);
+          erros += chunk.length;
+          console.error(`[PDV Sync] Erro no chunk ${i}-${i + CHUNK_SIZE}:`, err);
         }
       }
 
       await db.end();
 
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       const timestamp = new Date().toISOString();
-      console.log(`[PDV Sync] ${timestamp} — Inseridos: ${inseridos}, Atualizados: ${atualizados}, Ignorados: ${invalid.length}, Erros: ${erros}`);
+      console.log(`[PDV Sync] ${timestamp} — ${elapsed}s — Inseridos: ${inseridos}, Atualizados: ${atualizados}, Ignorados: ${invalid.length}, Erros: ${erros}`);
 
-      // Notificar o dono se houver produtos novos detectados
-      if (inseridos > 0) {
+      // Notificação de novos produtos
+      if (novosProdutos.length > 0) {
         try {
-          const listaResumida = novosProdutos
-            .slice(0, 10)
-            .map(p => `• ${p.codigo} — ${p.time} ${p.descricao} (${p.tamanho}) | Atacado: R$${p.precoAtacado} / Varejo: R$${p.precoVarejo}`)
+          const lista = novosProdutos.slice(0, 10)
+            .map(p => `• ${p.codigo} — ${p.time} ${p.descricao} (${p.tamanho}) | ATC: R$${p.precoAtacado} / VAR: R$${p.precoVarejo}`)
             .join("\n");
-
-          const sufixo = novosProdutos.length > 10
-            ? `\n... e mais ${novosProdutos.length - 10} produto(s).`
-            : "";
-
+          const sufixo = novosProdutos.length > 10 ? `\n... e mais ${novosProdutos.length - 10} produto(s).` : "";
           await notifyOwner({
-            title: `🆕 ${inseridos} novo(s) produto(s) adicionado(s) ao PDV`,
-            content: `Sincronização realizada por: ${seller.name}\nData: ${new Date().toLocaleString("pt-BR")}\n\nNovos produtos:\n${listaResumida}${sufixo}\n\nResumo: ${inseridos} inseridos, ${atualizados} atualizados, ${invalid.length} ignorados (campos incompletos).`,
+            title: `🆕 ${novosProdutos.length} novo(s) produto(s) adicionado(s) ao PDV`,
+            content: `Sincronização por: ${seller.name}\nData: ${new Date().toLocaleString("pt-BR")}\n\nNovos produtos:\n${lista}${sufixo}`,
           });
-        } catch (notifErr) {
-          console.error("[PDV Sync] Erro ao enviar notificação:", notifErr);
-          // Não falha a sincronização por causa da notificação
-        }
+        } catch (e) { console.error("[PDV Sync] Erro notificação novos:", e); }
+      }
+
+      // Notificação de produtos alterados (preço ou estoque)
+      if (alteradosProdutos.length > 0) {
+        try {
+          const lista = alteradosProdutos.slice(0, 15)
+            .map(p => {
+              const ex = existingMap.get(p.codigo);
+              const diffs: string[] = [];
+              if (ex && Number(ex.estoque) !== p.estoque) diffs.push(`estoque: ${ex.estoque}→${p.estoque}`);
+              if (ex && parseFloat(ex.precoAtacado) !== p.precoAtacado) diffs.push(`ATC: R$${ex.precoAtacado}→R$${p.precoAtacado}`);
+              if (ex && parseFloat(ex.precoVarejo) !== p.precoVarejo) diffs.push(`VAR: R$${ex.precoVarejo}→R$${p.precoVarejo}`);
+              return `• ${p.codigo} — ${p.time} ${p.descricao}: ${diffs.join(", ")}`;
+            })
+            .join("\n");
+          const sufixo = alteradosProdutos.length > 15 ? `\n... e mais ${alteradosProdutos.length - 15} alteração(ões).` : "";
+          await notifyOwner({
+            title: `✏️ ${alteradosProdutos.length} produto(s) alterado(s) na planilha`,
+            content: `Sincronização por: ${seller.name}\nData: ${new Date().toLocaleString("pt-BR")}\n\nAlterações detectadas:\n${lista}${sufixo}`,
+          });
+        } catch (e) { console.error("[PDV Sync] Erro notificação alterados:", e); }
       }
 
       return {
@@ -257,6 +312,8 @@ export const pdvSyncRouter = router({
         atualizados,
         ignorados: invalid.length,
         erros,
+        alterados: alteradosProdutos.length,
+        tempoSegundos: parseFloat(elapsed),
         timestamp,
         novosProdutos: novosProdutos.slice(0, 10).map(p => `${p.codigo} — ${p.time} ${p.descricao}`),
       };

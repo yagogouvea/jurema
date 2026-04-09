@@ -4,7 +4,7 @@ import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import {
   Search, ShoppingCart, Plus, Minus, Trash2, ChevronRight,
-  Package, Users, ArrowRight, X, Tag, Filter
+  Package, Users, ArrowRight, X, Tag, Filter, ChevronLeft, ChevronRight as ChevronRightIcon
 } from "lucide-react";
 import PdvLayout from "./PdvLayout";
 import PdvCheckout from "./PdvCheckout";
@@ -27,12 +27,17 @@ export default function PdvMain() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedLinha, setSelectedLinha] = useState("");
   const [apenasComEstoque, setApenasComEstoque] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 60;
 
   // Debounce search input — espera 350ms antes de disparar a query
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 350);
     return () => clearTimeout(timer);
   }, [search]);
+
+  // Resetar para página 1 quando filtros mudam
+  useEffect(() => { setPage(1); }, [debouncedSearch, selectedLinha, apenasComEstoque]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [canal, setCanal] = useState<"BALCAO" | "WHATSAPP">("BALCAO");
   const [clienteNome, setClienteNome] = useState("");
@@ -47,7 +52,8 @@ export default function PdvMain() {
     search: debouncedSearch || undefined,
     linha: selectedLinha || undefined,
     apenasComEstoque: apenasComEstoque || undefined,
-    limit: 200,
+    page,
+    limit: PAGE_SIZE,
   }, {
     // Mantém dados anteriores enquanto carrega novos (evita flash de "nenhum produto")
     placeholderData: (prev) => prev,
@@ -386,7 +392,7 @@ export default function PdvMain() {
           </div>
 
           {/* Products Grid */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col">
             {isLoading ? (
               <div className="flex items-center justify-center h-40">
                 <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
@@ -405,7 +411,7 @@ export default function PdvMain() {
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="flex-1 space-y-4">
                 {Object.entries(groupedProducts).map(([time, timeProducts]) => (
                   <div key={time}>
                     <h3 className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -425,6 +431,54 @@ export default function PdvMain() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Paginação — mantém filtros ativos */}
+            {productsData && productsData.totalPages > 1 && (
+              <div className="sticky bottom-0 bg-gray-900/95 backdrop-blur border-t border-gray-800 py-3 mt-4 flex items-center justify-between gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Anterior
+                </button>
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(7, productsData.totalPages) }, (_, i) => {
+                    // Janela deslizante de páginas ao redor da atual
+                    const total = productsData.totalPages;
+                    let start = Math.max(1, page - 3);
+                    let end = Math.min(total, start + 6);
+                    if (end - start < 6) start = Math.max(1, end - 6);
+                    const p = start + i;
+                    if (p > total) return null;
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setPage(p)}
+                        className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                          p === page
+                            ? "bg-red-600 text-white"
+                            : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => setPage(p => Math.min(productsData.totalPages, p + 1))}
+                  disabled={page >= productsData.totalPages}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                >
+                  Próxima
+                  <ChevronRightIcon className="w-4 h-4" />
+                </button>
               </div>
             )}
           </div>

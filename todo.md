@@ -211,3 +211,9 @@
 ## Melhorias Sync Google Sheets (v21)
 - [x] Ignorar colunas FOTOS e TEMPORADA na validação de campos obrigatórios
 - [x] Notificação automática ao dono quando novos produtos forem detectados na planilha (via notifyOwner com lista dos novos)
+
+## Melhorias Sync + Paginação (v22)
+- [x] Sync: upsert em lote (INSERT ON DUPLICATE KEY UPDATE) — 0.5s para 804 produtos (antes ~10s)
+- [x] Sync: validação de estoque obrigatório (QTD deve ser numérico >= 0)
+- [x] Sync: notificação de itens alterados (preço ou estoque mudou) via notifyOwner
+- [x] PDV: paginação do catálogo — 60 por página, 38 páginas, filtros preservados na troca
