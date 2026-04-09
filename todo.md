@@ -247,3 +247,6 @@
 
 ## Bugs (v30)
 - [x] PDV mobile: paginação movida para fora do container de scroll (elemento fixo abaixo do grid), eliminando sobreposicão com o botão flutuante do carrinho
+
+## Bugs (v31)
+- [x] Busca multi-termo corrigida: PDV já incluía `descricao` (cor está nesse campo); catálogo público corrigido para incluir `description`, `subcategory` e `reference` com suporte a múltiplos termos

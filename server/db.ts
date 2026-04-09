@@ -65,7 +65,21 @@ export async function getProducts(opts: {
   if (category) conditions.push(eq(products.category, category as any));
   if (gender) conditions.push(eq(products.gender, gender as any));
   if (team) conditions.push(like(products.team, `%${team}%`));
-  if (search) conditions.push(or(like(products.name, `%${search}%`), like(products.team, `%${search}%`)) as any);
+  if (search) {
+    // Busca multi-termo: cada palavra deve aparecer em pelo menos um campo
+    // Ex: "corinthians laranja" = (name|team|description|subcategory LIKE '%corinthians%') AND (name|team|description|subcategory LIKE '%laranja%')
+    const terms = search.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    for (const term of terms) {
+      const s = `%${term}%`;
+      conditions.push(or(
+        like(products.name, s),
+        like(products.team, s),
+        like(products.description, s),
+        like(products.subcategory, s),
+        like(products.reference, s),
+      ) as any);
+    }
+  }
   if (isFeatured !== undefined) conditions.push(eq(products.isFeatured, isFeatured));
   if (featuredSection !== undefined) conditions.push(eq(products.featuredSection, featuredSection as any));
   // Se não está buscando por featured section E não é adminMode, excluir produtos em destaque do catálogo
