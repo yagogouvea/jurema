@@ -57,14 +57,14 @@ function Router() {
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminPanel} />
       <Route path="/admin/:rest*" component={AdminPanel} />
-      {/* PDV independente */}
-      <Route path="/pdv/login" component={PdvLogin} />
-      <Route path="/pdv/dashboard" component={PdvDashboard} />
-      <Route path="/pdv/vendedores" component={PdvVendedores} />
-      <Route path="/pdv/historico" component={PdvHistorico} />
-      <Route path="/pdv/configuracoes" component={PdvConfiguracoes} />
-      <Route path="/pdv/comissoes" component={PdvComissoes} />
-      <Route path="/pdv" component={PdvMain} />
+      {/* PDV independente — PdvAuthProvider aqui para isolar o cookie pdv_token das outras páginas */}
+      <Route path="/pdv/login" component={() => <PdvAuthProvider><PdvLogin /></PdvAuthProvider>} />
+      <Route path="/pdv/dashboard" component={() => <PdvAuthProvider><PdvDashboard /></PdvAuthProvider>} />
+      <Route path="/pdv/vendedores" component={() => <PdvAuthProvider><PdvVendedores /></PdvAuthProvider>} />
+      <Route path="/pdv/historico" component={() => <PdvAuthProvider><PdvHistorico /></PdvAuthProvider>} />
+      <Route path="/pdv/configuracoes" component={() => <PdvAuthProvider><PdvConfiguracoes /></PdvAuthProvider>} />
+      <Route path="/pdv/comissoes" component={() => <PdvAuthProvider><PdvComissoes /></PdvAuthProvider>} />
+      <Route path="/pdv" component={() => <PdvAuthProvider><PdvMain /></PdvAuthProvider>} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -76,7 +76,6 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
         <AdminAuthProvider>
-          <PdvAuthProvider>
             <CustomerAuthProvider>
               <CartProvider>
                 <TooltipProvider>
@@ -85,7 +84,6 @@ function App() {
                 </TooltipProvider>
               </CartProvider>
             </CustomerAuthProvider>
-          </PdvAuthProvider>
         </AdminAuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

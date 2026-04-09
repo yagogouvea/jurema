@@ -217,3 +217,6 @@
 - [x] Sync: validação de estoque obrigatório (QTD deve ser numérico >= 0)
 - [x] Sync: notificação de itens alterados (preço ou estoque mudou) via notifyOwner
 - [x] PDV: paginação do catálogo — 60 por página, 38 páginas, filtros preservados na troca
+
+## Bugs (v23)
+- [x] Configurações PDV: painel de sync não aparecia (corrigido: PdvAuthProvider global causava cache null do pdvAuth.me, movido para dentro de cada rota PDV)
