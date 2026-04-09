@@ -146,30 +146,39 @@ export const pdvSyncRouter = router({
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
 
     const [existing] = await db.execute(
-      "SELECT codigo, estoque, precoAtacado, precoVarejo FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ''"
+      "SELECT codigo, linha, modelo, time, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ''"
     );
     await db.end();
 
     const existingMap = new Map((existing as any[]).map((r: any) => [r.codigo, r]));
     const novos = valid.filter(p => !existingMap.has(p.codigo));
-    const atualizacoes = valid.filter(p => existingMap.has(p.codigo));
 
-    // Detectar alterações de preço ou estoque
-    const alterados = atualizacoes.filter(p => {
+    // Detectar alterações em qualquer campo relevante
+    const alterados = valid.filter(p => {
       const ex = existingMap.get(p.codigo);
-      return ex && (
+      if (!ex) return false;
+      return (
         Number(ex.estoque) !== p.estoque ||
         parseFloat(ex.precoAtacado) !== p.precoAtacado ||
-        parseFloat(ex.precoVarejo) !== p.precoVarejo
+        parseFloat(ex.precoVarejo) !== p.precoVarejo ||
+        ex.descricao !== p.descricao ||
+        ex.linha !== p.linha ||
+        ex.modelo !== p.modelo ||
+        ex.time !== p.time ||
+        ex.tamanho !== p.tamanho ||
+        Number(ex.isActive) !== p.isActive
       );
     });
+
+    const semAlteracao = valid.filter(p => existingMap.has(p.codigo) && !alterados.includes(p));
 
     return {
       totalPlanilha: total,
       totalValidos: valid.length,
       totalInvalidos: invalid.length,
       novos: novos.length,
-      atualizacoes: atualizacoes.length,
+      atualizacoes: alterados.length, // apenas os realmente alterados
+      semAlteracao: semAlteracao.length, // já sincronizados e sem mudanças
       alterados: alterados.length,
       invalidos: invalid.slice(0, 20),
       amostraValidos: valid.slice(0, 5),
@@ -180,6 +189,8 @@ export const pdvSyncRouter = router({
         if (ex && Number(ex.estoque) !== p.estoque) diffs.push(`estoque: ${ex.estoque}→${p.estoque}`);
         if (ex && parseFloat(ex.precoAtacado) !== p.precoAtacado) diffs.push(`ATC: R$${ex.precoAtacado}→R$${p.precoAtacado}`);
         if (ex && parseFloat(ex.precoVarejo) !== p.precoVarejo) diffs.push(`VAR: R$${ex.precoVarejo}→R$${p.precoVarejo}`);
+        if (ex && ex.descricao !== p.descricao) diffs.push(`descrição: "${ex.descricao}"→"${p.descricao}"`);
+        if (ex && Number(ex.isActive) !== p.isActive) diffs.push(`ativo: ${ex.isActive}→${p.isActive}`);
         return `${p.codigo} — ${diffs.join(", ")}`;
       }),
     };

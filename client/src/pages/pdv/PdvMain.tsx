@@ -620,11 +620,19 @@ export default function PdvMain() {
                     </div>
                   ) : syncPreview ? (
                     <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-gray-800/60 rounded-xl p-3 text-center">
-                          <p className="text-2xl font-bold text-white">{syncPreview.totalValidos}</p>
-                          <p className="text-xs text-gray-400">Válidos na planilha</p>
+                      {/* Indicador de status geral */}
+                      {syncPreview.novos === 0 && syncPreview.alterados === 0 ? (
+                        <div className="bg-green-900/20 border border-green-800/40 rounded-xl p-3 text-center">
+                          <p className="text-green-400 font-semibold text-sm">✅ Catálogo atualizado</p>
+                          <p className="text-xs text-gray-400 mt-1">Nenhuma alteração detectada desde a última sincronização</p>
                         </div>
+                      ) : (
+                        <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-xl p-3 text-center">
+                          <p className="text-yellow-400 font-semibold text-sm">⚠️ Atualizações pendentes</p>
+                          <p className="text-xs text-gray-400 mt-1">{syncPreview.novos + syncPreview.alterados} produto(s) serão sincronizados</p>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
                         <div className="bg-gray-800/60 rounded-xl p-3 text-center">
                           <p className="text-2xl font-bold text-green-400">{syncPreview.novos}</p>
                           <p className="text-xs text-gray-400">Novos produtos</p>
@@ -632,6 +640,10 @@ export default function PdvMain() {
                         <div className="bg-gray-800/60 rounded-xl p-3 text-center">
                           <p className="text-2xl font-bold text-yellow-400">{syncPreview.alterados}</p>
                           <p className="text-xs text-gray-400">Com alterações</p>
+                        </div>
+                        <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                          <p className="text-2xl font-bold text-gray-400">{syncPreview.semAlteracao ?? 0}</p>
+                          <p className="text-xs text-gray-500">Já atualizados</p>
                         </div>
                         <div className="bg-gray-800/60 rounded-xl p-3 text-center">
                           <p className="text-2xl font-bold text-red-400">{syncPreview.totalInvalidos}</p>

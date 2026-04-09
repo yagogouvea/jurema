@@ -250,3 +250,6 @@
 
 ## Bugs (v31)
 - [x] Busca multi-termo corrigida: PDV já incluía `descricao` (cor está nesse campo); catálogo público corrigido para incluir `description`, `subcategory` e `reference` com suporte a múltiplos termos
+
+## Bugs (v32)
+- [x] Sync PDV: corrigido — causa raiz era ausência de índice UNIQUE no campo `codigo`. Cada sync inseria duplicatas em vez de atualizar. Solução: removidas 2394 duplicatas, adicionado UNIQUE INDEX idx_codigo, preview corrigida para comparar todos os campos e exibir "Já atualizados" quando não há mudanças
