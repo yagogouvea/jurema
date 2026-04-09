@@ -38,14 +38,9 @@ export default function PdvVendedores() {
     META_LOJA: "84000",
   });
 
-  if (!isAdmin) {
-    navigate("/pdv");
-    return null;
-  }
-
   const utils = trpc.useUtils();
 
-  const { data: sellers, isLoading } = trpc.pdvSellers.list.useQuery();
+  const { data: sellers, isLoading } = trpc.pdvSellers.list.useQuery(undefined, { enabled: isAdmin });
   const { data: goalsData } = trpc.pdvDashboard.getGoals.useQuery(undefined, {
     onSuccess: (data: any[]) => {
       const g: any = {};
@@ -138,6 +133,12 @@ export default function PdvVendedores() {
     }));
     updateGoalsMutation.mutate(goalsArray);
   };
+
+  // Guard: redirecionar não-admins (após todos os hooks)
+  if (!isAdmin) {
+    navigate("/pdv");
+    return null;
+  }
 
   return (
     <PdvLayout>

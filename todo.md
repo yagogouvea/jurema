@@ -184,3 +184,6 @@
 
 ## Melhorias PDV (v14)
 - [x] PDV: toggle manual Atacado/Varejo adicionado — modo auto (≥6 peças) ou forçado manualmente com indicador visual
+
+## Bugs (v15)
+- [x] Dashboard PDV não reflete pedidos realizados (corrigido: hooks chamados após guard isAdmin violava regra do React, movido guard para após todos os hooks com enabled:isAdmin)

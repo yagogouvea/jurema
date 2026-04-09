@@ -37,20 +37,20 @@ export default function PdvDashboard() {
   const [cashDesc, setCashDesc] = useState("");
   const [cashValor, setCashValor] = useState("");
 
-  if (!isAdmin) {
-    navigate("/pdv");
-    return null;
-  }
-
   const { data, isLoading, refetch } = trpc.pdvDashboard.summary.useQuery({
     startDate,
     endDate,
+  }, {
+    // Só executa a query se for admin
+    enabled: isAdmin,
   });
 
   const { data: cashData, refetch: refetchCash } = trpc.pdvDashboard.cashFlow.useQuery({
     startDate,
     endDate,
     limit: 10,
+  }, {
+    enabled: isAdmin,
   });
 
   const addCashFlowMutation = trpc.pdvDashboard.addCashFlow.useMutation({
@@ -129,6 +129,12 @@ export default function PdvDashboard() {
     { name: "Atacado", value: faturamentoAtacado },
     { name: "Varejo", value: faturamentoVarejo },
   ].filter(d => d.value > 0);
+
+  // Guard: redirecionar não-admins (após todos os hooks)
+  if (!isAdmin) {
+    navigate("/pdv");
+    return null;
+  }
 
   return (
     <PdvLayout>
