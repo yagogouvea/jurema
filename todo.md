@@ -235,3 +235,6 @@
 
 ## Bugs (v26)
 - [x] PDV catálogo: erro "Incorrect arguments to LIMIT" — corrigido: Math.floor + fallback no backend (pdvProducts.ts) e proteção Number.isFinite no frontend (PdvMain.tsx)
+
+## Bugs (v27)
+- [x] PDV /notificacoes: erro "Incorrect arguments to LIMIT" — corrigido: LIMIT/OFFSET interpolados como inteiros seguros em pdvNotifications.ts (mysql2 não aceita LIMIT ? com parâmetros)

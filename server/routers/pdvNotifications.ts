@@ -49,8 +49,9 @@ export const pdvNotificationsRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const page = input?.page ?? 1;
-      const limit = input?.limit ?? 20;
+      // Garantir inteiros válidos para evitar "Incorrect arguments to LIMIT"
+      const page = Math.max(1, Math.floor(Number(input?.page) || 1));
+      const limit = Math.max(1, Math.floor(Number(input?.limit) || 20));
       const offset = (page - 1) * limit;
 
       const conditions: string[] = [];
@@ -68,8 +69,8 @@ export const pdvNotificationsRouter = router({
 
       try {
         const [rows] = await db.execute(
-          `SELECT id, type, title, content, isRead, createdAt FROM pdv_notifications ${where} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-          [...params, limit, offset]
+          `SELECT id, type, title, content, isRead, createdAt FROM pdv_notifications ${where} ORDER BY createdAt DESC LIMIT ${limit} OFFSET ${offset}`,
+          params
         ) as any[];
 
         const [countRows] = await db.execute(
