@@ -27,6 +27,8 @@ import PdvMain from "./pages/pdv/PdvMain";
 import PdvDashboard from "./pages/pdv/PdvDashboard";
 import PdvVendedores from "./pages/pdv/PdvVendedores";
 import PdvHistorico from "./pages/pdv/PdvHistorico";
+import PdvConfiguracoes from "./pages/pdv/PdvConfiguracoes";
+import PdvComissoes from "./pages/pdv/PdvComissoes";
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -60,6 +62,8 @@ function Router() {
       <Route path="/pdv/dashboard" component={PdvDashboard} />
       <Route path="/pdv/vendedores" component={PdvVendedores} />
       <Route path="/pdv/historico" component={PdvHistorico} />
+      <Route path="/pdv/configuracoes" component={PdvConfiguracoes} />
+      <Route path="/pdv/comissoes" component={PdvComissoes} />
       <Route path="/pdv" component={PdvMain} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

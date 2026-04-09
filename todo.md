@@ -162,3 +162,9 @@
 - [x] Tabela de pedidos com filtros (período, vendedor, canal, status)
 - [x] Modal de detalhes do pedido (itens, pagamentos, serviços)
 - [x] Busca por ID do pedido ou nome do cliente
+
+## Melhorias PDV (v11)
+- [x] Importar catálogo de produtos PDV (linhas: Tailandesa, Nacional, Torcedor, Peça; times, tamanhos, preços atacado/varejo)
+- [x] Configuração de WhatsApp para recibos (campo editável pela Vanessa no PDV)
+- [x] Relatório de comissões por vendedor com filtro de período
+- [x] Testes completos de todas as funcionalidades PDV (40/40 passando)

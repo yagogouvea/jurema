@@ -14,6 +14,8 @@ import { pdvProductsRouter } from "./routers/pdvProducts";
 import { pdvOrdersRouter } from "./routers/pdvOrders";
 import { pdvDashboardRouter } from "./routers/pdvDashboard";
 import { pdvSellersRouter } from "./routers/pdvSellers";
+import { pdvConfigRouter } from "./routers/pdvConfig";
+import { pdvComissoesRouter } from "./routers/pdvComissoes";
 import {
   getProducts, getProductBySlug, getProductById, createProduct, updateProduct, deleteProduct,
   createOrder, getOrders, getOrderById, updateOrderStatus, getDashboardStats,
@@ -54,6 +56,8 @@ export const appRouter = router({
   pdvOrders: pdvOrdersRouter,
   pdvDashboard: pdvDashboardRouter,
   pdvSellers: pdvSellersRouter,
+  pdvConfig: pdvConfigRouter,
+  pdvComissoes: pdvComissoesRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),

@@ -5,7 +5,7 @@ import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import {
   ShoppingBag, LayoutDashboard, History, Users, LogOut,
-  ChevronRight, Menu, X, BarChart2
+  ChevronRight, Menu, X, BarChart2, Settings, TrendingUp
 } from "lucide-react";
 import { useState } from "react";
 
@@ -49,6 +49,8 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
     ...(isAdmin ? [
       { href: "/pdv/dashboard", icon: BarChart2, label: "Dashboard" },
       { href: "/pdv/vendedores", icon: Users, label: "Vendedores" },
+      { href: "/pdv/comissoes", icon: TrendingUp, label: "Comissões" },
+      { href: "/pdv/configuracoes", icon: Settings, label: "Configurações" },
     ] : []),
   ];
 
