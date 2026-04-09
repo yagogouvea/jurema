@@ -241,3 +241,6 @@
 
 ## Melhorias (v28)
 - [x] PDV catálogo: campos de nome do cliente e telefone removidos do cabeçalho
+
+## Melhorias (v29)
+- [x] PDV: seletor de canal (Balcão/WhatsApp) movido do header do catálogo para a tela de checkout (seção "Canal de Venda" antes dos Serviços Extras)

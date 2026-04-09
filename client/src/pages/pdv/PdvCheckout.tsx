@@ -51,7 +51,6 @@ const SERVICE_TYPES = ["CORREIO", "CARRETO", "CAIXINHA", "OUTRO"];
 
 interface PdvCheckoutProps {
   cart: CartItem[];
-  canal: "BALCAO" | "WHATSAPP";
   clienteNome: string;
   clienteTelefone: string;
   regime: "ATACADO" | "VAREJO";
@@ -67,10 +66,12 @@ function fmt(v: number) {
 }
 
 export default function PdvCheckout({
-  cart, canal, clienteNome, clienteTelefone, regime,
+  cart, clienteNome, clienteTelefone, regime,
   totalVarejo, totalAtacado, totalAplicado, onBack, onSuccess
 }: PdvCheckoutProps) {
   const { seller } = usePdvAuth();
+  // Canal é selecionado aqui na configuração do pedido
+  const [canal, setCanal] = useState<"BALCAO" | "WHATSAPP">("BALCAO");
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [showAddService, setShowAddService] = useState(false);
@@ -286,6 +287,36 @@ export default function PdvCheckout({
                   <span className="text-white">R$ {fmt(totalAplicado)}</span>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Canal do Pedido */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+            <h3 className="text-white font-semibold mb-3">Canal de Venda</h3>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setCanal("BALCAO")}
+                className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all border-2 ${
+                  canal === "BALCAO"
+                    ? "bg-red-600 border-red-600 text-white shadow-lg shadow-red-600/20"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500"
+                }`}
+              >
+                Balcão
+              </button>
+              <button
+                onClick={() => setCanal("WHATSAPP")}
+                className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all border-2 ${
+                  canal === "WHATSAPP"
+                    ? "bg-green-600 border-green-600 text-white shadow-lg shadow-green-600/20"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500"
+                }`}
+              >
+                WhatsApp
+              </button>
+            </div>
+            {canal === "WHATSAPP" && !clienteTelefone && (
+              <p className="text-yellow-500 text-xs mt-2">⚠️ Sem telefone do cliente — o link do WhatsApp não será gerado automaticamente.</p>
             )}
           </div>
 

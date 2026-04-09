@@ -82,7 +82,6 @@ export default function PdvMain() {
   // Resetar para página 1 quando filtros mudam
   useEffect(() => { setPage(1); }, [debouncedSearch, selectedLinha, apenasComEstoque]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [canal, setCanal] = useState<"BALCAO" | "WHATSAPP">("BALCAO");
   const [clienteNome, setClienteNome] = useState("");
   const [clienteTelefone, setClienteTelefone] = useState("");
   const [showCheckout, setShowCheckout] = useState(false);
@@ -263,7 +262,6 @@ export default function PdvMain() {
       <PdvLayout>
         <PdvCheckout
           cart={cartWithPrices}
-          canal={canal}
           clienteNome={clienteNome}
           clienteTelefone={clienteTelefone}
           regime={regime}
@@ -289,30 +287,6 @@ export default function PdvMain() {
           {/* Header */}
           <div className="bg-gray-900 border-b border-gray-800 p-4">
             <div className="flex items-center gap-3 mb-3">
-              {/* Canal selector */}
-              <div className="flex bg-gray-800 rounded-xl p-1 gap-1">
-                <button
-                  onClick={() => setCanal("BALCAO")}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    canal === "BALCAO"
-                      ? "bg-red-600 text-white shadow-lg"
-                      : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  Balcao
-                </button>
-                <button
-                  onClick={() => setCanal("WHATSAPP")}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    canal === "WHATSAPP"
-                      ? "bg-green-600 text-white shadow-lg"
-                      : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  WhatsApp
-                </button>
-              </div>
-
               {/* Regime toggle: Atacado / Varejo */}
               <div className="flex flex-col gap-0.5">
                 <div className="flex bg-gray-800 rounded-xl p-1 gap-1">
