@@ -91,12 +91,15 @@ export default function PdvMain() {
   const [regimeManual, setRegimeManual] = useState<"ATACADO" | "VAREJO" | null>(null);
 
   // Fetch products — usa debouncedSearch para evitar queries a cada tecla
+  // safePage/safeLimit garantem inteiros válidos mesmo em renders intermediários
+  const safePage = Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1;
+  const safeLimit = Number.isFinite(PAGE_SIZE) && PAGE_SIZE >= 1 ? Math.floor(PAGE_SIZE) : 60;
   const { data: productsData, isLoading } = trpc.pdvProducts.list.useQuery({
     search: debouncedSearch || undefined,
     linha: selectedLinha || undefined,
     apenasComEstoque: apenasComEstoque || undefined,
-    page,
-    limit: PAGE_SIZE,
+    page: safePage,
+    limit: safeLimit,
   }, {
     // Mantém dados anteriores enquanto carrega novos (evita flash de "nenhum produto")
     placeholderData: (prev) => prev,

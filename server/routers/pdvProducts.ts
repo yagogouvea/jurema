@@ -31,8 +31,8 @@ export const pdvProductsRouter = router({
       linha: z.string().optional(),
       time: z.string().optional(),
       apenasComEstoque: z.boolean().optional(),
-      page: z.number().default(1),
-      limit: z.number().default(50),
+      page: z.number().int().min(1).default(1),
+      limit: z.number().int().min(1).max(200).default(50),
     }))
     .query(async ({ input, ctx }) => {
       await requirePdvAuth(ctx);
@@ -67,8 +67,11 @@ export const pdvProductsRouter = router({
         
         query += " ORDER BY time ASC, tamanho ASC";
         
-        const offset = (input.page - 1) * input.limit;
-        query += ` LIMIT ${input.limit} OFFSET ${offset}`;
+        // Garantir inteiros válidos para evitar "Incorrect arguments to LIMIT"
+        const safeLimit = Math.max(1, Math.floor(Number(input.limit) || 50));
+        const safePage = Math.max(1, Math.floor(Number(input.page) || 1));
+        const offset = (safePage - 1) * safeLimit;
+        query += ` LIMIT ${safeLimit} OFFSET ${offset}`;
         
         const [rows] = await db.execute(query, params);
         
@@ -102,8 +105,8 @@ export const pdvProductsRouter = router({
         return {
           products: rows as any[],
           total,
-          page: input.page,
-          totalPages: Math.ceil(total / input.limit),
+          page: safePage,
+          totalPages: Math.ceil(total / safeLimit),
         };
       } catch (err) {
         if (err instanceof TRPCError) throw err;

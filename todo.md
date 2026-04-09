@@ -232,3 +232,6 @@
 ## Bugs (v25)
 - [x] Login PDV: primeiro login não redireciona — corrigido: await refetch() antes do navigate() no PdvLogin
 - [x] React error #310: hooks condicionais no PdvLayout — corrigido: trpc.pdvNotifications.unreadCount movido para antes dos returns condicionais
+
+## Bugs (v26)
+- [x] PDV catálogo: erro "Incorrect arguments to LIMIT" — corrigido: Math.floor + fallback no backend (pdvProducts.ts) e proteção Number.isFinite no frontend (PdvMain.tsx)
