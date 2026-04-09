@@ -201,3 +201,9 @@
 ## Melhorias PDV (v19)
 - [x] PDV: validação de estoque no carrinho — bloqueia ao atingir o limite do estoque com toast de aviso
 - [x] PDV: botão "Com estoque" nos filtros do catálogo — exibe apenas os 890 produtos com estoque > 0
+
+## Integração Google Sheets (v20)
+- [x] Analisar estrutura da planilha via API e mapear colunas (806 linhas, 804 válidas, 2 ignoradas)
+- [x] Backend: router pdvSync com validação de campos completos (somente leitura, nunca modifica a planilha)
+- [x] Frontend: painel de sincronização nas Configurações PDV com prévia e confirmação
+- [x] Testar sincronização completa (inseridos=5, atualizados=799, ignorados=2, erros=0)
