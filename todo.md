@@ -181,3 +181,6 @@
 ## Importação de Catálogo Real
 - [x] Analisar planilha CópiadePDVJUREMA5.0.xlsx e mapear colunas
 - [x] Limpar produtos de demonstração e importar 2.218 produtos reais (aba ESTOQUE ESTATICO)
+
+## Melhorias PDV (v14)
+- [x] PDV: toggle manual Atacado/Varejo adicionado — modo auto (≥6 peças) ou forçado manualmente com indicador visual

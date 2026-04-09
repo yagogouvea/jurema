@@ -38,6 +38,8 @@ export default function PdvMain() {
   const [clienteTelefone, setClienteTelefone] = useState("");
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCart, setShowCart] = useState(false);
+  // null = automático (baseado em quantidade), "ATACADO" ou "VAREJO" = forçado manualmente
+  const [regimeManual, setRegimeManual] = useState<"ATACADO" | "VAREJO" | null>(null);
 
   // Fetch products — usa debouncedSearch para evitar queries a cada tecla
   const { data: productsData, isLoading } = trpc.pdvProducts.list.useQuery({
@@ -55,7 +57,10 @@ export default function PdvMain() {
 
   // Cart calculations
   const totalPecas = useMemo(() => cart.reduce((sum, item) => sum + item.quantidade, 0), [cart]);
-  const regime = useMemo(() => totalPecas >= 6 ? "ATACADO" : "VAREJO", [totalPecas]);
+  const regimeAuto = useMemo(() => totalPecas >= 6 ? "ATACADO" : "VAREJO", [totalPecas]);
+  // Regime efetivo: manual tem prioridade, senão usa automático
+  const regime = regimeManual ?? regimeAuto;
+  const isRegimeManual = regimeManual !== null;
   
   const totalCart = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.totalItem, 0);
@@ -237,6 +242,46 @@ export default function PdvMain() {
                 >
                   WhatsApp
                 </button>
+              </div>
+
+              {/* Regime toggle: Atacado / Varejo */}
+              <div className="flex flex-col gap-0.5">
+                <div className="flex bg-gray-800 rounded-xl p-1 gap-1">
+                  <button
+                    onClick={() => setRegimeManual("ATACADO")}
+                    title="Forçar Atacado (independente da quantidade)"
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      regime === "ATACADO"
+                        ? "bg-blue-600 text-white shadow-lg"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Atacado
+                  </button>
+                  <button
+                    onClick={() => setRegimeManual("VAREJO")}
+                    title="Forçar Varejo (independente da quantidade)"
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      regime === "VAREJO"
+                        ? "bg-orange-600 text-white shadow-lg"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Varejo
+                  </button>
+                  {isRegimeManual && (
+                    <button
+                      onClick={() => setRegimeManual(null)}
+                      title="Voltar para modo automático (≥6 peças = Atacado)"
+                      className="px-2 py-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-700 transition-all text-xs"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <span className="text-center text-gray-600" style={{fontSize: '10px'}}>
+                  {isRegimeManual ? "⚠️ manual" : "⚙️ auto"}
+                </span>
               </div>
 
               {/* Client info */}
