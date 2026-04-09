@@ -177,3 +177,7 @@
 
 ## Bugs (v13)
 - [x] PDV: filtros de pesquisa corrigidos — busca case-insensitive, debounce 350ms, filtros de linha como botões, contador de resultados, busca por modelo incluída
+
+## Importação de Catálogo Real
+- [x] Analisar planilha CópiadePDVJUREMA5.0.xlsx e mapear colunas
+- [x] Limpar produtos de demonstração e importar 2.218 produtos reais (aba ESTOQUE ESTATICO)
