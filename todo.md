@@ -228,3 +228,7 @@
 - [x] PdvMain: botão Sync + ícone de sino no header (admin only), popup com prévia e confirmação
 - [x] Página /pdv/notificacoes com lista, filtros por tipo, paginação, marcar como lida/apagar
 - [x] Sidebar PDV: link para Notificações com badge contador de não lidas (atualiza a cada 30s)
+
+## Bugs (v25)
+- [x] Login PDV: primeiro login não redireciona — corrigido: await refetch() antes do navigate() no PdvLogin
+- [x] React error #310: hooks condicionais no PdvLayout — corrigido: trpc.pdvNotifications.unreadCount movido para antes dos returns condicionais

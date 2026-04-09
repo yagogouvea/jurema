@@ -1,13 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import {
-  ShoppingBag, LayoutDashboard, History, Users, LogOut,
+  ShoppingBag, History, Users, LogOut,
   ChevronRight, Menu, X, BarChart2, Settings, TrendingUp, Bell
 } from "lucide-react";
-import { useState } from "react";
 
 interface PdvLayoutProps {
   children: React.ReactNode;
@@ -27,12 +26,20 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
     },
   });
 
+  // ⚠️ TODOS os hooks DEVEM ficar antes de qualquer return condicional (regra dos hooks do React)
+  const { data: unreadData } = trpc.pdvNotifications.unreadCount.useQuery(
+    undefined,
+    { enabled: isAdmin && !!seller, refetchInterval: 30000 }
+  );
+  const unreadCount = unreadData?.count ?? 0;
+
   useEffect(() => {
     if (!isLoading && !seller) {
       navigate("/pdv/login");
     }
   }, [seller, isLoading, navigate]);
 
+  // Returns condicionais APENAS após todos os hooks
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -42,12 +49,6 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
   }
 
   if (!seller) return null;
-
-  const { data: unreadData } = trpc.pdvNotifications.unreadCount.useQuery(
-    undefined,
-    { enabled: isAdmin, refetchInterval: 30000 }
-  );
-  const unreadCount = unreadData?.count ?? 0;
 
   const navItems = [
     { href: "/pdv", icon: ShoppingBag, label: "PDV", exact: true },

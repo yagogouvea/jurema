@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext } from "react";
 import { trpc } from "@/lib/trpc";
 
 interface PdvSeller {
@@ -12,14 +12,14 @@ interface PdvAuthContextType {
   seller: PdvSeller | null;
   isLoading: boolean;
   isAdmin: boolean;
-  refetch: () => void;
+  refetch: () => Promise<any>;
 }
 
 const PdvAuthContext = createContext<PdvAuthContextType>({
   seller: null,
   isLoading: true,
   isAdmin: false,
-  refetch: () => {},
+  refetch: () => Promise.resolve(),
 });
 
 export function PdvAuthProvider({ children }: { children: React.ReactNode }) {
