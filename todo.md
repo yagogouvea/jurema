@@ -207,3 +207,7 @@
 - [x] Backend: router pdvSync com validação de campos completos (somente leitura, nunca modifica a planilha)
 - [x] Frontend: painel de sincronização nas Configurações PDV com prévia e confirmação
 - [x] Testar sincronização completa (inseridos=5, atualizados=799, ignorados=2, erros=0)
+
+## Melhorias Sync Google Sheets (v21)
+- [x] Ignorar colunas FOTOS e TEMPORADA na validação de campos obrigatórios
+- [x] Notificação automática ao dono quando novos produtos forem detectados na planilha (via notifyOwner com lista dos novos)
