@@ -190,3 +190,7 @@
 
 ## Bugs (v16)
 - [x] Dashboard PDV mostra R$ 0,00 (corrigido: query de pagamentos com JOIN tinha coluna createdAt ambígua entre pdv_order_payments e pdv_orders, qualificado como o.createdAt)
+
+## Reimportação Catálogo (v17)
+- [x] Analisar planilha PDVJUREMA5.0.xlsx e mapear colunas
+- [x] Limpar produtos existentes e importar catálogo real completo (1.455 produtos, 99 times, R$19-R$230)
