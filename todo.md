@@ -266,3 +266,7 @@
 
 ## Correções (v36)
 - [x] Nome da loja corrigido de "Jumera" para "Jurema" em todo o sistema: site, admin, PDV, mensagens WhatsApp, title, meta tags (17 arquivos atualizados)
+
+## Melhorias (v37)
+- [x] PDV: senha da Vanessa alterada para vanessa@adm (hash SHA-256 + salt correto)
+- [x] PDV: login case-insensitive — username normalizado com trim().toLowerCase() + LOWER() na query SQL; novos usuários já salvos em lowercase

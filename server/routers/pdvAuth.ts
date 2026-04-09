@@ -62,9 +62,11 @@ export const pdvAuthRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       
       try {
+        // Normaliza o username para lowercase antes de comparar (case-insensitive)
+        const normalizedUsername = input.username.trim().toLowerCase();
         const [rows] = await db.execute(
-          "SELECT id, name, username, passwordHash, role, isActive FROM pdv_sellers WHERE username = ?",
-          [input.username.toLowerCase()]
+          "SELECT id, name, username, passwordHash, role, isActive FROM pdv_sellers WHERE LOWER(username) = ?",
+          [normalizedUsername]
         );
         await db.end();
         
