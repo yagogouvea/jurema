@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
@@ -24,7 +24,14 @@ interface CartItem {
 export default function PdvMain() {
   const { seller } = usePdvAuth();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedLinha, setSelectedLinha] = useState("");
+
+  // Debounce search input — espera 350ms antes de disparar a query
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [canal, setCanal] = useState<"BALCAO" | "WHATSAPP">("BALCAO");
   const [clienteNome, setClienteNome] = useState("");
@@ -32,11 +39,14 @@ export default function PdvMain() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCart, setShowCart] = useState(false);
 
-  // Fetch products
+  // Fetch products — usa debouncedSearch para evitar queries a cada tecla
   const { data: productsData, isLoading } = trpc.pdvProducts.list.useQuery({
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     linha: selectedLinha || undefined,
-    limit: 100,
+    limit: 200,
+  }, {
+    // Mantém dados anteriores enquanto carrega novos (evita flash de "nenhum produto")
+    placeholderData: (prev) => prev,
   });
 
   const { data: linhas } = trpc.pdvProducts.getLinhas.useQuery();
@@ -246,28 +256,57 @@ export default function PdvMain() {
               />
             </div>
 
-            {/* Search + Filter */}
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por time, modelo..."
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500"
-                />
-              </div>
-              <select
-                value={selectedLinha}
-                onChange={(e) => setSelectedLinha(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-red-500"
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por time, modelo, código..."
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-10 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Linha filter — botões clicáveis */}
+            <div className="flex gap-1.5 flex-wrap">
+              <button
+                onClick={() => setSelectedLinha("")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  selectedLinha === ""
+                    ? "bg-red-600 text-white"
+                    : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white border border-gray-700"
+                }`}
               >
-                <option value="">Todas as linhas</option>
-                {linhas?.map(l => (
-                  <option key={l} value={l}>{l}</option>
-                ))}
-              </select>
+                Todas
+              </button>
+              {linhas?.map(l => (
+                <button
+                  key={l}
+                  onClick={() => setSelectedLinha(selectedLinha === l ? "" : l)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    selectedLinha === l
+                      ? "bg-red-600 text-white"
+                      : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white border border-gray-700"
+                  }`}
+                >
+                  {l}
+                </button>
+              ))}
+              {/* Indicador de busca ativa */}
+              {(search || selectedLinha) && (
+                <span className="ml-auto text-xs text-gray-500 self-center">
+                  {productsData?.total ?? 0} resultado{(productsData?.total ?? 0) !== 1 ? "s" : ""}
+                </span>
+              )}
             </div>
           </div>
 

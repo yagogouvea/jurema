@@ -174,3 +174,6 @@
 
 ## Melhorias PDV (v12)
 - [x] Checkout: ao selecionar crédito/débito, exibir "Valor real" e "Valor maquininha (com taxa)" separadamente, com campo editável
+
+## Bugs (v13)
+- [x] PDV: filtros de pesquisa corrigidos — busca case-insensitive, debounce 350ms, filtros de linha como botões, contador de resultados, busca por modelo incluída

@@ -43,9 +43,9 @@ export const pdvProductsRouter = router({
         const params: any[] = [];
         
         if (input.search) {
-          query += " AND (time LIKE ? OR descricao LIKE ? OR codigo LIKE ?)";
-          const s = `%${input.search}%`;
-          params.push(s, s, s);
+          query += " AND (LOWER(time) LIKE ? OR LOWER(descricao) LIKE ? OR LOWER(codigo) LIKE ? OR LOWER(modelo) LIKE ?)";
+          const s = `%${input.search.toLowerCase()}%`;
+          params.push(s, s, s, s);
         }
         if (input.linha) {
           query += " AND linha = ?";
@@ -67,9 +67,9 @@ export const pdvProductsRouter = router({
         let countQuery = "SELECT COUNT(*) as total FROM pdv_products WHERE isActive = 1";
         const countParams: any[] = [];
         if (input.search) {
-          countQuery += " AND (time LIKE ? OR descricao LIKE ? OR codigo LIKE ?)";
-          const s = `%${input.search}%`;
-          countParams.push(s, s, s);
+          countQuery += " AND (LOWER(time) LIKE ? OR LOWER(descricao) LIKE ? OR LOWER(codigo) LIKE ? OR LOWER(modelo) LIKE ?)";
+          const s = `%${input.search.toLowerCase()}%`;
+          countParams.push(s, s, s, s);
         }
         if (input.linha) {
           countQuery += " AND linha = ?";
