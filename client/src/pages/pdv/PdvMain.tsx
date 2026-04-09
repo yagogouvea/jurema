@@ -421,7 +421,7 @@ export default function PdvMain() {
             </div>
           </div>
 
-          {/* Products Grid */}
+          {/* Products Grid — pb no mobile garante espaço para o botão flutuante do carrinho */}
           <div className="flex-1 overflow-y-auto p-4 flex flex-col">
             {isLoading ? (
               <div className="flex items-center justify-center h-40">
@@ -464,54 +464,54 @@ export default function PdvMain() {
               </div>
             )}
 
-            {/* Paginação — mantém filtros ativos */}
-            {productsData && productsData.totalPages > 1 && (
-              <div className="sticky bottom-0 bg-gray-900/95 backdrop-blur border-t border-gray-800 py-3 mt-4 flex items-center justify-between gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  Anterior
-                </button>
-
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(7, productsData.totalPages) }, (_, i) => {
-                    // Janela deslizante de páginas ao redor da atual
-                    const total = productsData.totalPages;
-                    let start = Math.max(1, page - 3);
-                    let end = Math.min(total, start + 6);
-                    if (end - start < 6) start = Math.max(1, end - 6);
-                    const p = start + i;
-                    if (p > total) return null;
-                    return (
-                      <button
-                        key={p}
-                        onClick={() => setPage(p)}
-                        className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
-                          p === page
-                            ? "bg-red-600 text-white"
-                            : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <button
-                  onClick={() => setPage(p => Math.min(productsData.totalPages, p + 1))}
-                  disabled={page >= productsData.totalPages}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
-                >
-                  Próxima
-                  <ChevronRightIcon className="w-4 h-4" />
-                </button>
-              </div>
-            )}
           </div>
+
+          {/* Paginação — fora do scroll para não ser sobreposta pelo botão flutuante do carrinho */}
+          {productsData && productsData.totalPages > 1 && (
+            <div className="bg-gray-900/95 backdrop-blur border-t border-gray-800 py-3 px-4 flex items-center justify-between gap-2 shrink-0">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Anterior
+              </button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(7, productsData.totalPages) }, (_, i) => {
+                  const total = productsData.totalPages;
+                  let start = Math.max(1, page - 3);
+                  let end = Math.min(total, start + 6);
+                  if (end - start < 6) start = Math.max(1, end - 6);
+                  const p = start + i;
+                  if (p > total) return null;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                        p === page
+                          ? "bg-red-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setPage(p => Math.min(productsData.totalPages, p + 1))}
+                disabled={page >= productsData.totalPages}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+              >
+                Próxima
+                <ChevronRightIcon className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Cart Panel - Desktop */}

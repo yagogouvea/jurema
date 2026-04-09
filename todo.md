@@ -244,3 +244,6 @@
 
 ## Melhorias (v29)
 - [x] PDV: seletor de canal (Balcão/WhatsApp) movido do header do catálogo para a tela de checkout (seção "Canal de Venda" antes dos Serviços Extras)
+
+## Bugs (v30)
+- [x] PDV mobile: paginação movida para fora do container de scroll (elemento fixo abaixo do grid), eliminando sobreposicão com o botão flutuante do carrinho
