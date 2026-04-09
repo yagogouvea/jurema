@@ -273,12 +273,57 @@ export const pdvOrdersRouter = router({
       await requirePdvAdmin(ctx);
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      
-      await db.execute(
-        "UPDATE pdv_orders SET status = ? WHERE pedidoId = ?",
-        [input.status, input.pedidoId]
-      );
-      await db.end();
-      return { success: true };
+
+      try {
+        // Buscar status atual do pedido
+        const [orderRows] = await db.execute(
+          "SELECT status FROM pdv_orders WHERE pedidoId = ?",
+          [input.pedidoId]
+        );
+        const orders = orderRows as any[];
+        if (orders.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido não encontrado" });
+        const statusAtual = orders[0].status;
+
+        // Buscar itens do pedido (apenas os que têm productId para controle de estoque)
+        const [itemRows] = await db.execute(
+          "SELECT productId, quantidade FROM pdv_order_items WHERE pedidoId = ? AND productId IS NOT NULL",
+          [input.pedidoId]
+        );
+        const items = itemRows as any[];
+
+        // Atualizar status
+        await db.execute(
+          "UPDATE pdv_orders SET status = ? WHERE pedidoId = ?",
+          [input.status, input.pedidoId]
+        );
+
+        // Ajustar estoque conforme a transição de status
+        if (statusAtual !== "CANCELADO" && input.status === "CANCELADO") {
+          // Pedido sendo cancelado: DEVOLVER estoque
+          for (const item of items) {
+            await db.execute(
+              "UPDATE pdv_products SET estoque = estoque + ? WHERE id = ?",
+              [item.quantidade, item.productId]
+            );
+          }
+          console.log(`[PDV Orders] Pedido ${input.pedidoId} cancelado — estoque devolvido para ${items.length} produto(s)`);
+        } else if (statusAtual === "CANCELADO" && input.status !== "CANCELADO") {
+          // Pedido sendo reativado (cancelado -> pago/pendente): DESCONTAR estoque novamente
+          for (const item of items) {
+            await db.execute(
+              "UPDATE pdv_products SET estoque = GREATEST(0, estoque - ?) WHERE id = ?",
+              [item.quantidade, item.productId]
+            );
+          }
+          console.log(`[PDV Orders] Pedido ${input.pedidoId} reativado (${statusAtual} -> ${input.status}) — estoque descontado para ${items.length} produto(s)`);
+        }
+
+        await db.end();
+        return { success: true };
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+        console.error("[PDV Orders] Erro ao atualizar status:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao atualizar status do pedido" });
+      }
     }),
 });

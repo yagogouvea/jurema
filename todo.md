@@ -253,3 +253,6 @@
 
 ## Bugs (v32)
 - [x] Sync PDV: corrigido — causa raiz era ausência de índice UNIQUE no campo `codigo`. Cada sync inseria duplicatas em vez de atualizar. Solução: removidas 2394 duplicatas, adicionado UNIQUE INDEX idx_codigo, preview corrigida para comparar todos os campos e exibir "Já atualizados" quando não há mudanças
+
+## Melhorias (v33)
+- [x] PDV cancelamento: ao cancelar pedido, estoque devolvido automaticamente; ao reativar pedido cancelado, estoque descontado novamente
