@@ -91,7 +91,7 @@ export default function PdvConfiguracoes() {
       label: "Nome da Loja",
       icon: Store,
       type: "text",
-      placeholder: "Jumera Sport",
+      placeholder: "Jurema Sport",
     },
     taxa_debito: {
       label: "Taxa Débito (%)",

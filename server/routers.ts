@@ -312,7 +312,7 @@ export const appRouter = router({
         subtitle: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        const prompt = `Create a professional sports e-commerce banner for a football jersey store called "Jumera Sport". 
+        const prompt = `Create a professional sports e-commerce banner for a football jersey store called "Jurema Sport". 
 Style: Dark background (#0D0D0D), red accents (#C8102E), modern sports aesthetic.
 Content: ${input.description}
 The banner should be visually striking with dynamic composition, suitable for a hero carousel.

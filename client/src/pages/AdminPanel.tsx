@@ -674,7 +674,7 @@ function SettingsTab() {
         <div>
           <Label className="text-gray-400 text-xs mb-1 block">Facebook</Label>
           <div className="flex gap-2">
-            <Input value={facebook} onChange={e => setFacebook(e.target.value)} placeholder="Jumera Sport" className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]" />
+            <Input value={facebook} onChange={e => setFacebook(e.target.value)} placeholder="Jurema Sport" className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]" />
             <Button onClick={() => save("facebook_url", facebook)} className="bg-[#C8102E] hover:bg-red-700 text-white shrink-0">Salvar</Button>
           </div>
         </div>
@@ -730,9 +730,9 @@ export default function AdminPanel() {
       {/* Top Bar */}
       <header className="sticky top-0 z-40 bg-[#0D0D0D] border-b border-[#1E1E1E] px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img src={LOGO_URL} alt="Jumera" className="w-8 h-8 object-contain" />
+          <img src={LOGO_URL} alt="Jurema" className="w-8 h-8 object-contain" />
           <div>
-            <h1 className="font-['Bebas_Neue'] text-lg text-white tracking-widest leading-none">JUMERA SPORT</h1>
+            <h1 className="font-['Bebas_Neue'] text-lg text-white tracking-widest leading-none">JUREMA SPORT</h1>
             <p className="text-gray-600 text-[10px] leading-none">Painel Admin</p>
           </div>
         </div>

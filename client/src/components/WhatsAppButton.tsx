@@ -6,7 +6,7 @@ export default function WhatsAppButton() {
   const [showTooltip, setShowTooltip] = useState(false);
   const { data: settings } = trpc.settings.getAll.useQuery();
   const whatsappNumber = settings?.whatsapp_number || "5500000000000";
-  const whatsappMessage = settings?.whatsapp_message || "Olá! Tenho interesse em uma camisa da Jumera Sport.";
+  const whatsappMessage = settings?.whatsapp_message || "Olá! Tenho interesse em uma camisa da Jurema Sport.";
 
   const whatsappUrl = `https://wa.me/${whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(whatsappMessage)}`;
 
@@ -28,7 +28,7 @@ export default function WhatsAppButton() {
         </div>
       )}
 
-      {/* Main button — identidade Jumera Sport */}
+      {/* Main button — identidade Jurema Sport */}
       <a
         href={whatsappUrl}
         target="_blank"

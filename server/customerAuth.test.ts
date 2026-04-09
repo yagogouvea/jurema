@@ -95,7 +95,7 @@ describe("WhatsApp message builder", () => {
     subtotal: number
   ): string {
     const lines: string[] = [];
-    lines.push("🛒 *NOVO PEDIDO — JUMERA SPORT*");
+    lines.push("🛒 *NOVO PEDIDO — JUREMA SPORT*");
     lines.push(`👤 *Nome:* ${customer.name}`);
     lines.push(`🪪 *CPF:* ${customer.cpf}`);
     lines.push(`📱 *Telefone:* ${customer.phone}`);

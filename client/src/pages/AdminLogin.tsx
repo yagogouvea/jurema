@@ -49,8 +49,8 @@ export default function AdminLogin() {
       <div className="relative w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <img src={LOGO_URL} alt="Jumera Sport" className="w-24 h-24 object-contain mb-3" />
-          <h1 className="font-['Bebas_Neue'] text-3xl text-white tracking-widest">JUMERA SPORT</h1>
+          <img src={LOGO_URL} alt="Jurema Sport" className="w-24 h-24 object-contain mb-3" />
+          <h1 className="font-['Bebas_Neue'] text-3xl text-white tracking-widest">JUREMA SPORT</h1>
           <div className="flex items-center gap-2 mt-1">
             <ShieldCheck size={14} className="text-[#C8102E]" />
             <span className="text-[#C8102E] text-xs font-semibold tracking-widest uppercase">Área Administrativa</span>
@@ -110,7 +110,7 @@ export default function AdminLogin() {
         </div>
 
         <p className="text-center text-gray-700 text-xs mt-6">
-          © 2026 Jumera Sport — Todos os direitos reservados
+          © 2026 Jurema Sport — Todos os direitos reservados
         </p>
       </div>
     </div>

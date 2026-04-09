@@ -15,7 +15,7 @@ export default function OrderConfirmation() {
     <div className="min-h-screen bg-[#0D0D0D] pt-20 flex items-center justify-center">
       <div className="container max-w-lg py-12 text-center">
         <div className="bg-[#111111] rounded-2xl p-8 border border-[#1E1E1E]">
-          <img src={LOGO_URL} alt="Jumera Sport" className="h-16 w-16 mx-auto mb-4 rounded-full" />
+          <img src={LOGO_URL} alt="Jurema Sport" className="h-16 w-16 mx-auto mb-4 rounded-full" />
           <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
             <CheckCircle size={32} className="text-green-400" />
           </div>

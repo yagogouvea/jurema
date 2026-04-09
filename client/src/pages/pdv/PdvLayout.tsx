@@ -76,7 +76,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
             <ShoppingBag className="w-5 h-5 text-white" />
           </div>
           <div>
-            <div className="text-white font-bold text-sm leading-tight">JUMERA</div>
+            <div className="text-white font-bold text-sm leading-tight">JUREMA</div>
             <div className="text-red-500 font-bold text-sm leading-tight">PDV</div>
           </div>
         </div>
@@ -170,7 +170,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
             <div className="w-7 h-7 bg-red-600 rounded-lg flex items-center justify-center">
               <ShoppingBag className="w-4 h-4 text-white" />
             </div>
-            <span className="text-white font-bold text-sm">JUMERA PDV</span>
+            <span className="text-white font-bold text-sm">JUREMA PDV</span>
           </div>
           <div className="ml-auto text-gray-400 text-sm">{seller.name}</div>
         </header>

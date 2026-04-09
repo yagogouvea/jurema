@@ -103,13 +103,13 @@ export default function Header() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-[#0D0D0D] border-b border-[#C8102E]/30">
       {/* Top bar — desktop only */}
       <div className="hidden md:flex items-center justify-between px-6 py-1 bg-[#C8102E] text-white text-xs">
-        <span className="font-medium tracking-wider">JUMERA SPORT — CAMISAS OFICIAIS DE TIMES E SELEÇÕES</span>
+        <span className="font-medium tracking-wider">JUREMA SPORT — CAMISAS OFICIAIS DE TIMES E SELEÇÕES</span>
         <div className="flex items-center gap-3">
           <a href="https://instagram.com/jumerasport" target="_blank" rel="noopener noreferrer" className="hover:opacity-70 transition-opacity flex items-center gap-1">
             <Instagram size={13} /> @jumerasport
           </a>
           <a href="https://facebook.com/jumerasport" target="_blank" rel="noopener noreferrer" className="hover:opacity-70 transition-opacity flex items-center gap-1">
-            <Facebook size={13} /> Jumera Sport
+            <Facebook size={13} /> Jurema Sport
           </a>
           <a href="https://tiktok.com/@jumerasport" target="_blank" rel="noopener noreferrer" className="hover:opacity-70 transition-opacity flex items-center gap-1">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.76a4.85 4.85 0 01-1.01-.07z"/></svg>
@@ -122,9 +122,9 @@ export default function Header() {
       <div className="flex items-center justify-between px-3 md:px-6 py-2.5">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 flex-shrink-0" onClick={() => setMobileOpen(false)}>
-          <img src={LOGO_URL} alt="Jumera Sport" className="h-10 w-10 md:h-12 md:w-12 object-contain rounded-full" />
+          <img src={LOGO_URL} alt="Jurema Sport" className="h-10 w-10 md:h-12 md:w-12 object-contain rounded-full" />
           <span className="font-['Bebas_Neue'] text-xl md:text-2xl text-white tracking-widest">
-            JUMERA <span className="text-[#C8102E]">SPORT</span>
+            JUREMA <span className="text-[#C8102E]">SPORT</span>
           </span>
         </Link>
 

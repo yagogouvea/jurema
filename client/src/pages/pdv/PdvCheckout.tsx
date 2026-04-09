@@ -119,7 +119,7 @@ export default function PdvCheckout({
 
   const buildWhatsAppMessage = (pedidoId: string): string => {
     const lines = [
-      `*JUMERA SPORT - PEDIDO ${pedidoId}*`,
+      `*JUREMA SPORT - PEDIDO ${pedidoId}*`,
       ``,
       `*Vendedor:* ${seller?.name}`,
       `*Canal:* ${canal}`,

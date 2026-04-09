@@ -43,7 +43,7 @@ export default function Register() {
 
   const register = trpc.customerAuth.register.useMutation({
     onSuccess: () => {
-      toast.success("Cadastro realizado com sucesso! Bem-vindo à Jumera Sport!");
+      toast.success("Cadastro realizado com sucesso! Bem-vindo à Jurema Sport!");
       refetch();
       navigate("/");
     },
@@ -92,7 +92,7 @@ export default function Register() {
           <Link href="/">
             <img
               src="https://d2xsxph8kpxj0f.cloudfront.net/310519663427629051/9BCf3HWTZf6aELg8wntRub/jumera-sport-logo-Xd8RgKFqGxqJNKQzVwNpWf.webp"
-              alt="Jumera Sport"
+              alt="Jurema Sport"
               className="h-16 mx-auto mb-4 object-contain"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";

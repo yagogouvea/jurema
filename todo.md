@@ -263,3 +263,6 @@
 
 ## Bugs (v35)
 - [x] PDV histórico: corrigido — cancelMutation agora usa pdvOrders.updateStatus com status "CANCELADO" (procedure cancel não existe)
+
+## Correções (v36)
+- [x] Nome da loja corrigido de "Jumera" para "Jurema" em todo o sistema: site, admin, PDV, mensagens WhatsApp, title, meta tags (17 arquivos atualizados)

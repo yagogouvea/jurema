@@ -30,7 +30,7 @@ function buildWhatsAppMessage(
 ): string {
   const lines: string[] = [];
 
-  lines.push("NOVO PEDIDO - JUMERA SPORT");
+  lines.push("NOVO PEDIDO - JUREMA SPORT");
   lines.push("=============================\n");
   lines.push("DADOS DO CLIENTE:");
   lines.push(`Nome: ${customer.name}`);
@@ -53,7 +53,7 @@ function buildWhatsAppMessage(
   lines.push("=============================");
   lines.push(`TOTAL: R$ ${subtotal.toFixed(2).replace(".", ",")}`);
   lines.push("=============================");
-  lines.push("Pedido realizado via Jumera Sport");
+  lines.push("Pedido realizado via Jurema Sport");
 
   return lines.join("\n");
 }

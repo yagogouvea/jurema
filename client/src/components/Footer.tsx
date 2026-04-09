@@ -47,9 +47,9 @@ export default function Footer() {
           {/* Brand */}
           <div className="md:col-span-1">
             <div className="flex items-center gap-2 mb-4">
-              <img src={LOGO_URL} alt="Jumera Sport" className="h-12 w-12 object-contain rounded-full" />
+              <img src={LOGO_URL} alt="Jurema Sport" className="h-12 w-12 object-contain rounded-full" />
               <span className="font-['Bebas_Neue'] text-xl text-white tracking-widest">
-                JUMERA <span className="text-[#C8102E]">SPORT</span>
+                JUREMA <span className="text-[#C8102E]">SPORT</span>
               </span>
             </div>
             <p className="text-gray-500 text-sm leading-relaxed mb-4">
@@ -145,7 +145,7 @@ export default function Footer() {
       <div className="border-t border-[#1A1A1A] py-4">
         <div className="container flex flex-col sm:flex-row items-center justify-between gap-2">
           <p className="text-gray-600 text-xs text-center sm:text-left">
-            © {new Date().getFullYear()} Jumera Sport. Todos os direitos reservados.
+            © {new Date().getFullYear()} Jurema Sport. Todos os direitos reservados.
           </p>
           <p className="text-gray-700 text-xs">
             Desenvolvido com paixão pelo futebol

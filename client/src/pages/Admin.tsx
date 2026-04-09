@@ -735,7 +735,7 @@ function SettingsTab() {
       facebook_url: settings.facebook_url || '',
       tiktok_url: settings.tiktok_url || '',
       mp_access_token: settings.mp_access_token || '',
-      store_name: settings.store_name || 'Jumera Sport',
+      store_name: settings.store_name || 'Jurema Sport',
     });
     setLoaded(true);
   }
@@ -820,7 +820,7 @@ export default function Admin() {
     return (
       <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center">
         <div className="text-center bg-[#111111] rounded-2xl p-8 border border-[#1E1E1E] max-w-sm w-full mx-4">
-          <img src={LOGO_URL} alt="Jumera Sport" className="h-16 w-16 mx-auto mb-4 rounded-full" />
+          <img src={LOGO_URL} alt="Jurema Sport" className="h-16 w-16 mx-auto mb-4 rounded-full" />
           <h1 className="font-['Bebas_Neue'] text-3xl text-white tracking-wider mb-2">PAINEL ADMIN</h1>
           <p className="text-gray-500 text-sm mb-6">Faça login para acessar o painel administrativo</p>
           <a href={getLoginUrl()}>
@@ -858,9 +858,9 @@ export default function Admin() {
       <aside className={`fixed inset-y-0 left-0 z-50 w-56 bg-[#0A0A0A] border-r border-[#1E1E1E] flex flex-col transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:z-auto`}>
         <div className="p-4 border-b border-[#1E1E1E]">
           <div className="flex items-center gap-2">
-            <img src={LOGO_URL} alt="Jumera Sport" className="h-8 w-8 rounded-full" />
+            <img src={LOGO_URL} alt="Jurema Sport" className="h-8 w-8 rounded-full" />
             <div>
-              <p className="font-['Bebas_Neue'] text-sm text-white tracking-wider">JUMERA SPORT</p>
+              <p className="font-['Bebas_Neue'] text-sm text-white tracking-wider">JUREMA SPORT</p>
               <p className="text-gray-600 text-xs">Admin Panel</p>
             </div>
           </div>

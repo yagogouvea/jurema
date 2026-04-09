@@ -45,7 +45,7 @@ export default function PdvLogin() {
             <ShoppingBag className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
-            JUMERA <span className="text-red-500">PDV</span>
+            JUREMA <span className="text-red-500">PDV</span>
           </h1>
           <p className="text-gray-400 text-sm mt-1">Sistema de Ponto de Venda</p>
         </div>
@@ -111,7 +111,7 @@ export default function PdvLogin() {
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-6">
-          Jumera Sport &copy; {new Date().getFullYear()} — Sistema PDV v1.0
+          Jurema Sport &copy; {new Date().getFullYear()} — Sistema PDV v1.0
         </p>
       </div>
     </div>

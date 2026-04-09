@@ -13,7 +13,7 @@ const defaultBanners = [
     id: 1,
     title: "NOVA COLEÇÃO 2026",
     subtitle: "As melhores camisas dos times e seleções do mundo",
-    imageUrl: `https://placehold.co/1400x500/0D0D0D/C8102E?text=JUMERA+SPORT`,
+    imageUrl: `https://placehold.co/1400x500/0D0D0D/C8102E?text=JUREMA+SPORT`,
     buttonText: "Ver Coleção",
     linkUrl: "/produtos",
   },
@@ -77,7 +77,7 @@ function HeroBanner() {
           <div className="py-20 sm:py-24 md:py-32 max-w-xl">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-0.5 bg-[#C8102E]" />
-              <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Jumera Sport</span>
+              <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Jurema Sport</span>
             </div>
             <h1 className="font-['Bebas_Neue'] text-4xl sm:text-5xl md:text-7xl text-white leading-none tracking-wider mb-3">
               {banner.title}
@@ -653,7 +653,7 @@ export default function Home() {
               <div className="absolute bottom-0 right-0 w-60 h-60 rounded-full bg-white translate-x-1/2 translate-y-1/2" />
             </div>
             <div className="relative">
-              <img src={LOGO_URL} alt="Jumera Sport" className="h-16 w-16 mx-auto mb-4 rounded-full" />
+              <img src={LOGO_URL} alt="Jurema Sport" className="h-16 w-16 mx-auto mb-4 rounded-full" />
               <h2 className="font-['Bebas_Neue'] text-4xl md:text-5xl text-white tracking-wider mb-2">
                 FRETE GRÁTIS
               </h2>
