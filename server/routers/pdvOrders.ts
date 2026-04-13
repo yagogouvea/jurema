@@ -69,6 +69,7 @@ export const pdvOrdersRouter = router({
       totalPago: z.number().default(0),
       totalPendente: z.number().default(0),
       justificativa: z.string().optional(),
+      isSofia: z.boolean().default(false),
       status: z.enum(["PAGO", "PENDENTE", "CANCELADO"]).default("PAGO"),
       items: z.array(OrderItemSchema),
       payments: z.array(OrderPaymentSchema),
@@ -86,13 +87,14 @@ export const pdvOrdersRouter = router({
         await db.execute(
           `INSERT INTO pdv_orders 
            (pedidoId, sellerId, sellerName, canal, clienteNome, clienteTelefone, regime, 
-            totalVarejo, totalAtacado, totalAplicado, totalPago, totalPendente, justificativa, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            totalVarejo, totalAtacado, totalAplicado, totalPago, totalPendente, justificativa, isSofia, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             pedidoId, seller.sellerId, seller.name, input.canal,
             input.clienteNome || null, input.clienteTelefone || null,
             input.regime, input.totalVarejo, input.totalAtacado, input.totalAplicado,
-            input.totalPago, input.totalPendente, input.justificativa || null, input.status
+            input.totalPago, input.totalPendente, input.justificativa || null,
+            input.isSofia ? 1 : 0, input.status
           ]
         );
         
@@ -140,6 +142,17 @@ export const pdvOrdersRouter = router({
           );
         }
         
+        // Se algum pagamento for DESCONTO_FOLHA, registrar automaticamente na tabela de desconto em folha
+        const descontoFolhaPayments = input.payments.filter(p => p.formaPagamento === 'DESCONTO_FOLHA');
+        for (const df of descontoFolhaPayments) {
+          const descricao = `Pedido ${pedidoId} - Desconto em folha`;
+          await db.execute(
+            `INSERT INTO pdv_desconto_folha (sellerId, sellerName, pedidoId, descricao, valor)
+             VALUES (?, ?, ?, ?, ?)`,
+            [seller.sellerId, seller.name, pedidoId, descricao, df.valor]
+          );
+        }
+
         await db.end();
         return { success: true, pedidoId };
       } catch (err) {

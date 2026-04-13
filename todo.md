@@ -289,3 +289,26 @@
 
 ## Bugs (v43)
 - [x] Sync PDV: loop infinito de "itens desatualizados" corrigido — causa raiz: 151 códigos duplicados na planilha (806 linhas → 655 únicos). A deduplicação já estava implementada no código (soma estoques, mantém maior preço, isActive=1 se qualquer duplicata ativa), mas o banco ainda tinha dados da sync anterior (sem deduplicação). Após executar nova sync, a preview mostra 0 novos e 0 alterados. Testes vitest adicionados (14/14 passando).
+
+## Melhorias PDV (v44) — Demandas da Vanessa
+
+### 1. Comissão por Peça + Privacidade
+- [x] Relatório de comissões: contar por quantidade de PEÇAS vendidas (não por pedido)
+- [x] Vendedor comum só vê suas próprias vendas/comissões (tela "Minhas Comissões")
+
+### 2. Produto "Sofia" (Terceirizado)
+- [x] Toggle "Venda Sofia" no checkout PDV (marca pedido como isSofia=1)
+- [x] Produto Sofia NÃO entra na comissão dos vendedores (excluído nas queries)
+- [x] Dashboard separado /pdv/sofia: vendas diárias, por vendedor, com cálculo de reembolso
+- [x] Reembolso: valor da venda menos comissão da loja (configurável, padrão R$10/peça)
+- [x] Configuração da comissão da loja por peça Sofia (tabela pdv_sofia_config)
+
+### 3. Desconto em Folha
+- [x] Tabela pdv_desconto_folha: registrar mercadorias retiradas por funcionários
+- [x] Página /pdv/desconto-folha: saldo pendente por funcionário, lista detalhada
+- [x] Botão "Quitar Tudo" por funcionário (para o sábado)
+- [x] Forma de pagamento DESCONTO_FOLHA no checkout cria registro automático
+- [x] Admin pode registrar descontos manualmente + quitar individualmente
+
+### Testes v44
+- [x] 12 testes vitest para schema, CRUD e lógica de comissão por peça (94/94 total)

@@ -242,6 +242,7 @@ export const pdvOrders = mysqlTable("pdv_orders", {
   totalPago: decimal("totalPago", { precision: 10, scale: 2 }).default("0").notNull(),
   totalPendente: decimal("totalPendente", { precision: 10, scale: 2 }).default("0").notNull(),
   justificativa: text("justificativa"),
+  isSofia: boolean("isSofia").default(false).notNull(),
   status: mysqlEnum("status", ["PAGO", "PENDENTE", "CANCELADO"]).default("PAGO").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -320,6 +321,33 @@ export const pdvGoals = mysqlTable("pdv_goals", {
 
 export type PdvGoal = typeof pdvGoals.$inferSelect;
 export type InsertPdvGoal = typeof pdvGoals.$inferInsert;
+
+// Desconto em Folha — funcionários pegam mercadoria e pagam depois
+export const pdvDescontoFolha = mysqlTable("pdv_desconto_folha", {
+  id: int("id").autoincrement().primaryKey(),
+  sellerId: int("sellerId").notNull(),
+  sellerName: varchar("sellerName", { length: 255 }).notNull(),
+  pedidoId: varchar("pedidoId", { length: 50 }),
+  descricao: varchar("descricao", { length: 500 }).notNull(),
+  valor: decimal("valor", { precision: 10, scale: 2 }).notNull(),
+  quitado: boolean("quitado").default(false).notNull(),
+  quitadoEm: timestamp("quitadoEm"),
+  quitadoPor: varchar("quitadoPor", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PdvDescontoFolha = typeof pdvDescontoFolha.$inferSelect;
+export type InsertPdvDescontoFolha = typeof pdvDescontoFolha.$inferInsert;
+
+// Configuração do produto Sofia (terceirizado)
+export const pdvSofiaConfig = mysqlTable("pdv_sofia_config", {
+  id: int("id").autoincrement().primaryKey(),
+  comissaoLoja: decimal("comissaoLoja", { precision: 10, scale: 2 }).default("10.00").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PdvSofiaConfig = typeof pdvSofiaConfig.$inferSelect;
 
 // Notificações internas do PDV (sincronização, alertas de estoque/preço)
 export const pdvNotifications = mysqlTable("pdv_notifications", {

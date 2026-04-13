@@ -88,6 +88,7 @@ export default function PdvCheckout({
   const [editingMaquininhaVal, setEditingMaquininhaVal] = useState("");
   const [justificativa, setJustificativa] = useState("");
   const [showItems, setShowItems] = useState(false);
+  const [isSofia, setIsSofia] = useState(false);
 
   const totalServicos = useMemo(() => services.reduce((sum, s) => sum + s.valor, 0), [services]);
   const totalGeral = totalAplicado + totalServicos;
@@ -217,6 +218,7 @@ export default function PdvCheckout({
       totalPago,
       totalPendente,
       justificativa: justificativa || undefined,
+      isSofia,
       status: totalPendente > 0 ? "PENDENTE" : "PAGO",
       items: cart.map(item => ({
         productId: item.productId,
@@ -287,6 +289,31 @@ export default function PdvCheckout({
                   <span className="text-gray-300">Subtotal</span>
                   <span className="text-white">R$ {fmt(totalAplicado)}</span>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Venda Sofia (terceirizado) */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-semibold">Venda Sofia</h3>
+                <p className="text-gray-500 text-xs mt-0.5">Produto terceirizado (não entra na comissão)</p>
+              </div>
+              <button
+                onClick={() => setIsSofia(!isSofia)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${
+                  isSofia ? "bg-purple-600" : "bg-gray-700"
+                }`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  isSofia ? "translate-x-6" : "translate-x-0.5"
+                }`} />
+              </button>
+            </div>
+            {isSofia && (
+              <div className="mt-3 bg-purple-950/30 border border-purple-900/50 rounded-xl p-3">
+                <p className="text-purple-300 text-xs">Este pedido será marcado como venda Sofia. O reembolso será calculado automaticamente no Dashboard Sofia.</p>
               </div>
             )}
           </div>

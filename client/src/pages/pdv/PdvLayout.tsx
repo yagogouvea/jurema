@@ -5,7 +5,8 @@ import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import {
   ShoppingBag, History, Users, LogOut,
-  ChevronRight, Menu, X, BarChart2, Settings, TrendingUp, Bell
+  ChevronRight, Menu, X, BarChart2, Settings, TrendingUp, Bell,
+  Package, Wallet
 } from "lucide-react";
 
 interface PdvLayoutProps {
@@ -53,10 +54,12 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
   const navItems = [
     { href: "/pdv", icon: ShoppingBag, label: "PDV", exact: true },
     { href: "/pdv/historico", icon: History, label: "Histórico" },
+    { href: "/pdv/comissoes", icon: TrendingUp, label: "Comissões" },
     ...(isAdmin ? [
       { href: "/pdv/dashboard", icon: BarChart2, label: "Dashboard" },
       { href: "/pdv/vendedores", icon: Users, label: "Vendedores" },
-      { href: "/pdv/comissoes", icon: TrendingUp, label: "Comissões" },
+      { href: "/pdv/sofia", icon: Package, label: "Sofia" },
+      { href: "/pdv/desconto-folha", icon: Wallet, label: "Desc. Folha" },
       { href: "/pdv/notificacoes", icon: Bell, label: "Notificações", badge: unreadCount },
       { href: "/pdv/configuracoes", icon: Settings, label: "Configurações" },
     ] : []),
