@@ -312,3 +312,19 @@
 
 ### Testes v44
 - [x] 12 testes vitest para schema, CRUD e lógica de comissão por peça (94/94 total)
+
+## Melhorias PDV (v45)
+
+### 1. Relatório PDF Exportável
+- [x] Endpoint backend pdvRelatorio.getData com dados de comissões, Sofia e descontos em folha
+- [x] Período configurável (data início/fim)
+- [x] Seções configuráveis: incluir/excluir Comissões, Sofia, Descontos
+- [x] Página /pdv/relatorio na sidebar (admin only) com botão "Imprimir / PDF"
+- [x] Layout do PDF profissional com tabelas, totais e cores por seção
+- [x] Taxa de comissão configurável (R$/peça) no formulário
+
+### 2. Histórico de Quitações
+- [x] Registrar data (quitadoEm), valor e quem quitou (quitadoPor) cada desconto em folha
+- [x] Aba "Histórico de Quitações" na página de Desconto em Folha com paginação
+- [x] Histórico também incluído no relatório PDF (seção Descontos)
+- [x] 8 testes vitest para relatório e histórico (102/102 total)

@@ -32,6 +32,7 @@ import PdvComissoes from "./pages/pdv/PdvComissoes";
 import PdvNotificacoes from "./pages/pdv/PdvNotificacoes";
 import PdvSofia from "./pages/pdv/PdvSofia";
 import PdvDescontoFolha from "./pages/pdv/PdvDescontoFolha";
+import PdvRelatorio from "./pages/pdv/PdvRelatorio";
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -69,6 +70,7 @@ function Router() {
       <Route path="/pdv/comissoes" component={() => <PdvAuthProvider><PdvComissoes /></PdvAuthProvider>} />
       <Route path="/pdv/sofia" component={() => <PdvAuthProvider><PdvSofia /></PdvAuthProvider>} />
       <Route path="/pdv/desconto-folha" component={() => <PdvAuthProvider><PdvDescontoFolha /></PdvAuthProvider>} />
+      <Route path="/pdv/relatorio" component={() => <PdvAuthProvider><PdvRelatorio /></PdvAuthProvider>} />
       <Route path="/pdv/notificacoes" component={() => <PdvNotificacoes />} />
       <Route path="/pdv" component={() => <PdvAuthProvider><PdvMain /></PdvAuthProvider>} />
       <Route path="/404" component={NotFound} />

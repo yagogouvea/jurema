@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import PdvLayout from "./PdvLayout";
-import { Wallet, Calendar, CheckCircle2, Plus, Trash2, DollarSign, User, AlertTriangle } from "lucide-react";
+import { Wallet, Calendar, CheckCircle2, Plus, Trash2, DollarSign, User, AlertTriangle, History, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 function formatCurrency(value: number): string {
@@ -99,6 +99,14 @@ export default function PdvDescontoFolha() {
       valor: parseFloat(formValor),
     });
   }
+
+  // Histórico de quitações
+  const [activeTab, setActiveTab] = useState<"pendentes" | "historico">("pendentes");
+  const [histPage, setHistPage] = useState(1);
+  const { data: historico, isLoading: loadingHistorico } = trpc.pdvRelatorio.historicoQuitacoes.useQuery(
+    { startDate, endDate, page: histPage, limit: 20 },
+    { enabled: isAdmin && activeTab === "historico" }
+  );
 
   const items = lista?.items || [];
   const porVendedor = resumo?.porVendedor || [];
@@ -269,7 +277,110 @@ export default function PdvDescontoFolha() {
               </div>
             )}
 
-            {/* Lista detalhada */}
+            {/* Tabs (admin) */}
+            {isAdmin && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setActiveTab("pendentes")}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                    activeTab === "pendentes" ? "bg-green-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Wallet className="w-4 h-4" />
+                  Registros
+                </button>
+                <button
+                  onClick={() => setActiveTab("historico")}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                    activeTab === "historico" ? "bg-green-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <History className="w-4 h-4" />
+                  Histórico de Quitações
+                </button>
+              </div>
+            )}
+
+            {/* Histórico de Quitações */}
+            {isAdmin && activeTab === "historico" && (
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
+                  <h3 className="text-white font-semibold">Histórico de Quitações</h3>
+                  {historico && (
+                    <span className="text-gray-400 text-xs">
+                      {historico.total} registro(s) — Total: {formatCurrency(historico.totalValor)}
+                    </span>
+                  )}
+                </div>
+                {loadingHistorico ? (
+                  <div className="flex items-center justify-center h-32">
+                    <div className="w-6 h-6 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : !historico || historico.items.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-32 text-gray-500">
+                    <History className="w-8 h-8 mb-2 opacity-30" />
+                    <p className="text-sm">Nenhuma quitação no período</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-gray-800">
+                            <th className="text-left text-gray-400 text-xs font-semibold px-4 py-3">Funcionário</th>
+                            <th className="text-left text-gray-400 text-xs font-semibold px-4 py-3">Descrição</th>
+                            <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Valor</th>
+                            <th className="text-left text-gray-400 text-xs font-semibold px-4 py-3">Quitado Em</th>
+                            <th className="text-left text-gray-400 text-xs font-semibold px-4 py-3">Quitado Por</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {historico.items.map((item: any) => (
+                            <tr key={item.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                              <td className="px-4 py-3 text-white text-sm font-medium">{item.sellerName}</td>
+                              <td className="px-4 py-3 text-gray-300 text-sm">
+                                {item.descricao}
+                                {item.pedidoId && <span className="text-gray-600 text-xs ml-2">({item.pedidoId})</span>}
+                              </td>
+                              <td className="px-4 py-3 text-right text-green-400 font-semibold text-sm">{formatCurrency(item.valor)}</td>
+                              <td className="px-4 py-3 text-gray-300 text-sm">
+                                {item.quitadoEm ? new Date(item.quitadoEm).toLocaleString("pt-BR") : "—"}
+                              </td>
+                              <td className="px-4 py-3 text-gray-300 text-sm">{item.quitadoPor || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Paginação */}
+                    {historico.totalPages > 1 && (
+                      <div className="flex items-center justify-center gap-3 py-3 border-t border-gray-800">
+                        <button
+                          onClick={() => setHistPage(p => Math.max(1, p - 1))}
+                          disabled={histPage <= 1}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-white disabled:opacity-30 transition-colors"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="text-gray-400 text-xs">
+                          Página {histPage} de {historico.totalPages}
+                        </span>
+                        <button
+                          onClick={() => setHistPage(p => Math.min(historico.totalPages, p + 1))}
+                          disabled={histPage >= historico.totalPages}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-white disabled:opacity-30 transition-colors"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Lista detalhada (tab registros) */}
+            {(activeTab === "pendentes" || !isAdmin) && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-800">
                 <h3 className="text-white font-semibold">
@@ -358,6 +469,7 @@ export default function PdvDescontoFolha() {
                 </div>
               )}
             </div>
+            )}
           </>
         )}
       </div>
