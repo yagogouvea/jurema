@@ -51,11 +51,25 @@ function mapModelo(val: string): string {
   return "TORCEDOR";
 }
 
-// Buscar e validar dados da planilha (somente leitura — nunca modifica a planilha)
+interface SheetProduct {
+  codigo: string;
+  linha: string;
+  modelo: string;
+  time: string;
+  descricao: string;
+  tamanho: string;
+  estoque: number;
+  precoAtacado: number;
+  precoVarejo: number;
+  isActive: number;
+}
+
+// Buscar, validar e DEDUPLICAR dados da planilha
 async function fetchSheetData(apiKey: string): Promise<{
-  valid: any[];
+  valid: SheetProduct[];
   invalid: any[];
   total: number;
+  duplicatesCount: number;
 }> {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_RANGE)}?key=${apiKey}`;
   const response = await fetch(url);
@@ -66,7 +80,7 @@ async function fetchSheetData(apiKey: string): Promise<{
 
   const data = await response.json();
   const rows: string[][] = data.values || [];
-  const valid: any[] = [];
+  const validRaw: SheetProduct[] = [];
   const invalid: any[] = [];
 
   for (const row of rows) {
@@ -116,7 +130,7 @@ async function fetchSheetData(apiKey: string): Promise<{
     }
 
     const ativo = row[10]?.toString().toUpperCase().trim();
-    valid.push({
+    validRaw.push({
       codigo: row[0].trim(),
       linha: mapLinha(row[1]),
       modelo: mapModelo(row[2]),
@@ -130,7 +144,76 @@ async function fetchSheetData(apiKey: string): Promise<{
     });
   }
 
-  return { valid, invalid, total: rows.length };
+  // ===== DEDUPLICAÇÃO =====
+  // A planilha pode ter códigos duplicados (mesma camisa com variações de descrição).
+  // Estratégia: para cada código, SOMAR o estoque e manter os dados da ÚLTIMA ocorrência.
+  // Isso garante que o banco terá exatamente o mesmo resultado que o ON DUPLICATE KEY UPDATE produz.
+  const deduped = new Map<string, SheetProduct>();
+  let duplicatesCount = 0;
+
+  for (const p of validRaw) {
+    const existing = deduped.get(p.codigo);
+    if (existing) {
+      duplicatesCount++;
+      // Somar estoque e manter dados da última ocorrência
+      deduped.set(p.codigo, {
+        ...p,
+        estoque: existing.estoque + p.estoque,
+        // Manter o maior preço entre as duplicatas (mais seguro)
+        precoAtacado: Math.max(existing.precoAtacado, p.precoAtacado),
+        precoVarejo: Math.max(existing.precoVarejo, p.precoVarejo),
+        // Se qualquer uma estiver ativa, manter ativo
+        isActive: existing.isActive || p.isActive ? 1 : 0,
+      });
+    } else {
+      deduped.set(p.codigo, { ...p });
+    }
+  }
+
+  return {
+    valid: Array.from(deduped.values()),
+    invalid,
+    total: rows.length,
+    duplicatesCount,
+  };
+}
+
+// Normalizar valores para comparação consistente
+function normalizeForCompare(dbRow: any): SheetProduct {
+  return {
+    codigo: (dbRow.codigo || "").trim(),
+    linha: (dbRow.linha || "").trim(),
+    modelo: (dbRow.modelo || "").trim(),
+    time: (dbRow.time || "").trim(),
+    descricao: (dbRow.descricao || "").trim(),
+    tamanho: (dbRow.tamanho || "").trim(),
+    estoque: Number(dbRow.estoque) || 0,
+    precoAtacado: Math.round(parseFloat(dbRow.precoAtacado) * 100) / 100,
+    precoVarejo: Math.round(parseFloat(dbRow.precoVarejo) * 100) / 100,
+    isActive: Number(dbRow.isActive) || 0,
+  };
+}
+
+function normalizeSheetProduct(p: SheetProduct): SheetProduct {
+  return {
+    ...p,
+    precoAtacado: Math.round(p.precoAtacado * 100) / 100,
+    precoVarejo: Math.round(p.precoVarejo * 100) / 100,
+  };
+}
+
+function hasChanges(sheet: SheetProduct, db: SheetProduct): string[] {
+  const diffs: string[] = [];
+  if (db.estoque !== sheet.estoque) diffs.push(`estoque: ${db.estoque}→${sheet.estoque}`);
+  if (db.precoAtacado !== sheet.precoAtacado) diffs.push(`ATC: R$${db.precoAtacado}→R$${sheet.precoAtacado}`);
+  if (db.precoVarejo !== sheet.precoVarejo) diffs.push(`VAR: R$${db.precoVarejo}→R$${sheet.precoVarejo}`);
+  if (db.descricao !== sheet.descricao) diffs.push(`descrição alterada`);
+  if (db.linha !== sheet.linha) diffs.push(`linha: ${db.linha}→${sheet.linha}`);
+  if (db.modelo !== sheet.modelo) diffs.push(`modelo: ${db.modelo}→${sheet.modelo}`);
+  if (db.time !== sheet.time) diffs.push(`time: ${db.time}→${sheet.time}`);
+  if (db.tamanho !== sheet.tamanho) diffs.push(`tamanho: ${db.tamanho}→${sheet.tamanho}`);
+  if (db.isActive !== sheet.isActive) diffs.push(`ativo: ${db.isActive}→${sheet.isActive}`);
+  return diffs;
 }
 
 export const pdvSyncRouter = router({
@@ -140,59 +223,56 @@ export const pdvSyncRouter = router({
     const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
     if (!apiKey) throw new Error("GOOGLE_SHEETS_API_KEY não configurada");
 
-    const { valid, invalid, total } = await fetchSheetData(apiKey);
+    const { valid, invalid, total, duplicatesCount } = await fetchSheetData(apiKey);
 
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
 
     const [existing] = await db.execute(
-      "SELECT codigo, linha, modelo, time, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ''"
+      "SELECT codigo, linha, modelo, `time`, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ''"
     );
     await db.end();
 
-    const existingMap = new Map((existing as any[]).map((r: any) => [r.codigo, r]));
-    const novos = valid.filter(p => !existingMap.has(p.codigo));
+    const existingMap = new Map<string, SheetProduct>();
+    for (const row of existing as any[]) {
+      existingMap.set(row.codigo, normalizeForCompare(row));
+    }
 
-    // Detectar alterações em qualquer campo relevante
-    const alterados = valid.filter(p => {
-      const ex = existingMap.get(p.codigo);
-      if (!ex) return false;
-      return (
-        Number(ex.estoque) !== p.estoque ||
-        parseFloat(ex.precoAtacado) !== p.precoAtacado ||
-        parseFloat(ex.precoVarejo) !== p.precoVarejo ||
-        ex.descricao !== p.descricao ||
-        ex.linha !== p.linha ||
-        ex.modelo !== p.modelo ||
-        ex.time !== p.time ||
-        ex.tamanho !== p.tamanho ||
-        Number(ex.isActive) !== p.isActive
-      );
-    });
+    const novos: SheetProduct[] = [];
+    const alterados: { product: SheetProduct; diffs: string[] }[] = [];
+    let semAlteracao = 0;
 
-    const semAlteracao = valid.filter(p => existingMap.has(p.codigo) && !alterados.includes(p));
+    for (const p of valid) {
+      const normalized = normalizeSheetProduct(p);
+      const dbProduct = existingMap.get(p.codigo);
+
+      if (!dbProduct) {
+        novos.push(p);
+      } else {
+        const diffs = hasChanges(normalized, dbProduct);
+        if (diffs.length > 0) {
+          alterados.push({ product: p, diffs });
+        } else {
+          semAlteracao++;
+        }
+      }
+    }
 
     return {
       totalPlanilha: total,
       totalValidos: valid.length,
       totalInvalidos: invalid.length,
+      duplicatasAgrupadas: duplicatesCount,
       novos: novos.length,
-      atualizacoes: alterados.length, // apenas os realmente alterados
-      semAlteracao: semAlteracao.length, // já sincronizados e sem mudanças
+      atualizacoes: alterados.length,
+      semAlteracao,
       alterados: alterados.length,
       invalidos: invalid.slice(0, 20),
       amostraValidos: valid.slice(0, 5),
       novosProdutos: novos.slice(0, 10).map(p => `${p.codigo} — ${p.time} ${p.descricao} (${p.tamanho})`),
-      alteradosProdutos: alterados.slice(0, 10).map(p => {
-        const ex = existingMap.get(p.codigo);
-        const diffs: string[] = [];
-        if (ex && Number(ex.estoque) !== p.estoque) diffs.push(`estoque: ${ex.estoque}→${p.estoque}`);
-        if (ex && parseFloat(ex.precoAtacado) !== p.precoAtacado) diffs.push(`ATC: R$${ex.precoAtacado}→R$${p.precoAtacado}`);
-        if (ex && parseFloat(ex.precoVarejo) !== p.precoVarejo) diffs.push(`VAR: R$${ex.precoVarejo}→R$${p.precoVarejo}`);
-        if (ex && ex.descricao !== p.descricao) diffs.push(`descrição: "${ex.descricao}"→"${p.descricao}"`);
-        if (ex && Number(ex.isActive) !== p.isActive) diffs.push(`ativo: ${ex.isActive}→${p.isActive}`);
-        return `${p.codigo} — ${diffs.join(", ")}`;
-      }),
+      alteradosProdutos: alterados.slice(0, 10).map(a =>
+        `${a.product.codigo} — ${a.diffs.join(", ")}`
+      ),
     };
   }),
 
@@ -207,7 +287,7 @@ export const pdvSyncRouter = router({
       if (!apiKey) throw new Error("GOOGLE_SHEETS_API_KEY não configurada");
 
       const startTime = Date.now();
-      const { valid, invalid, total } = await fetchSheetData(apiKey);
+      const { valid, invalid, total, duplicatesCount } = await fetchSheetData(apiKey);
 
       if (valid.length === 0) throw new Error("Nenhum produto válido encontrado na planilha");
 
@@ -216,23 +296,31 @@ export const pdvSyncRouter = router({
 
       // Buscar estado atual do banco para comparar alterações
       const [existingRows] = await db.execute(
-        "SELECT codigo, estoque, precoAtacado, precoVarejo FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ''"
+        "SELECT codigo, linha, modelo, `time`, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ''"
       );
-      const existingMap = new Map((existingRows as any[]).map((r: any) => [r.codigo, r]));
+      const existingMap = new Map<string, SheetProduct>();
+      for (const row of existingRows as any[]) {
+        existingMap.set(row.codigo, normalizeForCompare(row));
+      }
 
       // Identificar novos e alterados ANTES do upsert
-      const novosProdutos = valid.filter(p => !existingMap.has(p.codigo));
-      const alteradosProdutos = valid.filter(p => {
-        const ex = existingMap.get(p.codigo);
-        return ex && (
-          Number(ex.estoque) !== p.estoque ||
-          parseFloat(ex.precoAtacado) !== p.precoAtacado ||
-          parseFloat(ex.precoVarejo) !== p.precoVarejo
-        );
-      });
+      const novosProdutos: SheetProduct[] = [];
+      const alteradosProdutos: { product: SheetProduct; diffs: string[] }[] = [];
 
-      // UPSERT EM LOTE — muito mais rápido que loop de SELECT+UPDATE/INSERT
-      // Processa em chunks de 100 para evitar queries muito grandes
+      for (const p of valid) {
+        const normalized = normalizeSheetProduct(p);
+        const dbProduct = existingMap.get(p.codigo);
+        if (!dbProduct) {
+          novosProdutos.push(p);
+        } else {
+          const diffs = hasChanges(normalized, dbProduct);
+          if (diffs.length > 0) {
+            alteradosProdutos.push({ product: p, diffs });
+          }
+        }
+      }
+
+      // UPSERT EM LOTE — processa em chunks de 100
       const CHUNK_SIZE = 100;
       let inseridos = 0;
       let atualizados = 0;
@@ -241,7 +329,6 @@ export const pdvSyncRouter = router({
       for (let i = 0; i < valid.length; i += CHUNK_SIZE) {
         const chunk = valid.slice(i, i + CHUNK_SIZE);
         try {
-          // Construir placeholders para o batch
           const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())").join(", ");
           const values: any[] = [];
           for (const p of chunk) {
@@ -253,10 +340,10 @@ export const pdvSyncRouter = router({
 
           await db.execute(
             `INSERT INTO pdv_products
-              (codigo, linha, modelo, time, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, createdAt, updatedAt)
+              (codigo, linha, modelo, \`time\`, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, createdAt, updatedAt)
              VALUES ${placeholders}
              ON DUPLICATE KEY UPDATE
-               linha=VALUES(linha), modelo=VALUES(modelo), time=VALUES(time),
+               linha=VALUES(linha), modelo=VALUES(modelo), \`time\`=VALUES(\`time\`),
                descricao=VALUES(descricao), tamanho=VALUES(tamanho),
                estoque=VALUES(estoque), precoAtacado=VALUES(precoAtacado),
                precoVarejo=VALUES(precoVarejo), isActive=VALUES(isActive),
@@ -264,7 +351,6 @@ export const pdvSyncRouter = router({
             values
           );
 
-          // Contar inseridos vs atualizados pelo mapa existente
           for (const p of chunk) {
             if (existingMap.has(p.codigo)) atualizados++;
             else inseridos++;
@@ -279,10 +365,10 @@ export const pdvSyncRouter = router({
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       const timestamp = new Date().toISOString();
-      console.log(`[PDV Sync] ${timestamp} — ${elapsed}s — Inseridos: ${inseridos}, Atualizados: ${atualizados}, Ignorados: ${invalid.length}, Erros: ${erros}`);
+      console.log(`[PDV Sync] ${timestamp} — ${elapsed}s — Inseridos: ${inseridos}, Atualizados: ${atualizados}, Ignorados: ${invalid.length}, Erros: ${erros}, Duplicatas agrupadas: ${duplicatesCount}`);
 
-      // Notificação interna de sincronização (salva no banco PDV, sem dependência do Manus)
-      const dataHora = new Date().toLocaleString("pt-BR");
+      // Notificações internas
+      const dataHora = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
       if (novosProdutos.length > 0) {
         try {
@@ -301,30 +387,23 @@ export const pdvSyncRouter = router({
       if (alteradosProdutos.length > 0) {
         try {
           const lista = alteradosProdutos.slice(0, 15)
-            .map(p => {
-              const ex = existingMap.get(p.codigo);
-              const diffs: string[] = [];
-              if (ex && Number(ex.estoque) !== p.estoque) diffs.push(`estoque: ${ex.estoque}→${p.estoque}`);
-              if (ex && parseFloat(ex.precoAtacado) !== p.precoAtacado) diffs.push(`ATC: R$${ex.precoAtacado}→R$${p.precoAtacado}`);
-              if (ex && parseFloat(ex.precoVarejo) !== p.precoVarejo) diffs.push(`VAR: R$${ex.precoVarejo}→R$${p.precoVarejo}`);
-              return `• ${p.codigo} — ${p.time} ${p.descricao}: ${diffs.join(", ")}`;
-            })
+            .map(a => `• ${a.product.codigo} — ${a.diffs.join(", ")}`)
             .join("\n");
           const sufixo = alteradosProdutos.length > 15 ? `\n... e mais ${alteradosProdutos.length - 15} alteração(ões).` : "";
           await savePdvNotification(
             "alteracao_produto",
-            `${alteradosProdutos.length} produto(s) com preço ou estoque alterado`,
+            `${alteradosProdutos.length} produto(s) com alterações`,
             `Sincronização por: ${seller.name}\nData: ${dataHora}\n\nAlterações detectadas:\n${lista}${sufixo}`
           );
         } catch (e) { console.error("[PDV Sync] Erro notificação alterados:", e); }
       }
 
-      // Notificação de resumo da sincronização
+      // Resumo da sincronização
       try {
         await savePdvNotification(
           "sync_concluido",
           `Sincronização concluída em ${elapsed}s`,
-          `Realizada por: ${seller.name}\nData: ${dataHora}\n\nResumo:\n• Inseridos: ${inseridos}\n• Atualizados: ${atualizados}\n• Ignorados (incompletos): ${invalid.length}\n• Erros: ${erros}\n• Alterações de preço/estoque: ${alteradosProdutos.length}`
+          `Realizada por: ${seller.name}\nData: ${dataHora}\n\nResumo:\n• Inseridos: ${inseridos}\n• Atualizados: ${atualizados}\n• Ignorados (incompletos): ${invalid.length}\n• Erros: ${erros}\n• Duplicatas agrupadas: ${duplicatesCount}\n• Alterações detectadas: ${alteradosProdutos.length}`
         );
       } catch (e) { console.error("[PDV Sync] Erro notificação resumo:", e); }
 
@@ -336,6 +415,7 @@ export const pdvSyncRouter = router({
         ignorados: invalid.length,
         erros,
         alterados: alteradosProdutos.length,
+        duplicatasAgrupadas: duplicatesCount,
         tempoSegundos: parseFloat(elapsed),
         timestamp,
         novosProdutos: novosProdutos.slice(0, 10).map(p => `${p.codigo} — ${p.time} ${p.descricao}`),
@@ -348,22 +428,15 @@ export const pdvSyncRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
     const [rows] = await db.execute(
-      `SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN isActive=1 THEN 1 ELSE 0 END) as ativos,
-        SUM(CASE WHEN estoque > 0 THEN 1 ELSE 0 END) as comEstoque,
-        MAX(updatedAt) as ultimaAtualizacao
-       FROM pdv_products`
+      "SELECT COUNT(*) as total, SUM(CASE WHEN isActive = 1 THEN 1 ELSE 0 END) as ativos, SUM(estoque) as estoqueTotal, MAX(updatedAt) as ultimaAtualizacao FROM pdv_products"
     );
     await db.end();
     const r = (rows as any[])[0];
     return {
       totalProdutos: Number(r.total) || 0,
       produtosAtivos: Number(r.ativos) || 0,
-      comEstoque: Number(r.comEstoque) || 0,
-      ultimaAtualizacao: r.ultimaAtualizacao || null,
-      sheetId: SHEET_ID,
-      sheetUrl: `https://docs.google.com/spreadsheets/d/${SHEET_ID}`,
+      estoqueTotal: Number(r.estoqueTotal) || 0,
+      ultimaAtualizacao: r.ultimaAtualizacao,
     };
   }),
 });

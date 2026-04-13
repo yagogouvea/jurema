@@ -1,6 +1,13 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, beforeAll } from "vitest";
+import { SignJWT } from "jose";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+
+const ADMIN_JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || "jumera-admin-secret-2026"
+);
+const ADMIN_COOKIE_NAME = "jumera_admin_token";
+let adminToken: string;
 
 // ─── Mock helpers ─────────────────────────────────────────────────────────────
 vi.mock("./db", () => ({
@@ -52,8 +59,14 @@ function makeAdminCtx(): TrpcContext {
       loginMethod: "manus", role: "admin",
       createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
     },
-    req: { protocol: "https", headers: {} } as any,
-    res: { clearCookie: vi.fn() } as any,
+    req: {
+      protocol: "https",
+      headers: {
+        cookie: `${ADMIN_COOKIE_NAME}=${adminToken}`,
+        authorization: `Bearer ${adminToken}`,
+      },
+    } as any,
+    res: { clearCookie: vi.fn(), cookie: vi.fn() } as any,
   };
 }
 
@@ -68,6 +81,14 @@ function makeUserCtx(): TrpcContext {
     res: { clearCookie: vi.fn() } as any,
   };
 }
+
+// ─── Setup ────────────────────────────────────────────────────────────────────
+beforeAll(async () => {
+  adminToken = await new SignJWT({ id: 1, username: "jurema@adm", name: "Admin" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("1h")
+    .sign(ADMIN_JWT_SECRET);
+});
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 describe("auth.me", () => {
@@ -131,7 +152,7 @@ describe("products.create (admin only)", () => {
     const caller = appRouter.createCaller(makeAdminCtx());
     const result = await caller.products.create({
       name: "Camisa Flamengo 2025", slug: "camisa-flamengo-2025",
-      price: "149.90", category: "times", gender: "masculino",
+      price: "149.90", category: "tailandesa", gender: "masculino",
       images: ["https://example.com/img.jpg"], isActive: true, isFeatured: true,
     });
     expect(result).toHaveProperty("success", true);

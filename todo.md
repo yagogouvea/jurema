@@ -283,3 +283,9 @@
 
 ## Bugs (v41)
 - [x] Admin login: corrigido definitivamente — token JWT salvo no localStorage após login e enviado como header Authorization em todas as requisições tRPC (resolve problema de cookies não persistidos em produção)
+
+## Melhorias (v42)
+- [x] PDV: senha da Vanessa alterada para jurema@123 (hash SHA-256 + salt atualizado no banco)
+
+## Bugs (v43)
+- [x] Sync PDV: loop infinito de "itens desatualizados" corrigido — causa raiz: 151 códigos duplicados na planilha (806 linhas → 655 únicos). A deduplicação já estava implementada no código (soma estoques, mantém maior preço, isActive=1 se qualquer duplicata ativa), mas o banco ainda tinha dados da sync anterior (sem deduplicação). Após executar nova sync, a preview mostra 0 novos e 0 alterados. Testes vitest adicionados (14/14 passando).

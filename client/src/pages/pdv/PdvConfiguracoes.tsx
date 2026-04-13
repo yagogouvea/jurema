@@ -212,7 +212,7 @@ export default function PdvConfiguracoes() {
               </div>
             </div>
             <a
-              href={`https://docs.google.com/spreadsheets/d/${syncStatus?.sheetId}`}
+              href={`https://docs.google.com/spreadsheets/d/1z-Qr08Oy9tc3c7rd1nspR0F20oP0cRskEXmUxPxvo7M`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
@@ -230,8 +230,8 @@ export default function PdvConfiguracoes() {
                 <p className="text-gray-400 text-xs">Total no banco</p>
               </div>
               <div className="bg-gray-800 rounded-xl p-3 text-center">
-                <p className="text-green-400 font-bold text-lg">{syncStatus.comEstoque}</p>
-                <p className="text-gray-400 text-xs">Com estoque</p>
+                <p className="text-green-400 font-bold text-lg">{syncStatus.produtosAtivos}</p>
+                <p className="text-gray-400 text-xs">Ativos</p>
               </div>
               <div className="bg-gray-800 rounded-xl p-3 text-center">
                 <p className="text-gray-300 font-bold text-xs">
