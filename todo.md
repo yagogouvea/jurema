@@ -331,3 +331,25 @@
 
 ## Bugs (v46)
 - [x] Cards de vendedores excluídos/inativos removidos do dashboard da área vendedores (filtro isActive no frontend)
+
+## Melhorias PDV (v47)
+
+### 1. Sofia por Item (não por pedido)
+- [x] Coluna isSofia adicionada na tabela pdv_order_items
+- [x] Botão "Sofia" individual por item no resumo do checkout (tag roxa)
+- [x] Toggle geral de Sofia removido do pedido
+- [x] Queries de comissões refatoradas para excluir itens Sofia (não pedidos inteiros)
+- [x] Dashboard Sofia refatorado para contar por itens Sofia
+- [x] Relatório PDF atualizado para nova lógica por item
+
+### 2. Desconto em Folha Automático
+- [x] Quando forma de pagamento = DESCONTO_FOLHA, registro automático criado na tabela pdv_desconto_folha
+- [x] Lógica funciona automaticamente no pdvOrders.create
+
+### 3. Configurações Centralizadas
+- [x] Aba "Comissões" em /pdv/configuracoes para editar R$/peça
+- [x] Aba "Metas" para editar Bronze, Prata, Ouro, Meta Loja
+- [x] Aba "Sofia" para editar comissão da loja por peça
+- [x] Aba "Geral" com nome da loja, WhatsApp, taxas, mínimo atacado
+- [x] Aba "Sincronização" para sync Google Sheets
+- [x] 9 testes vitest v47 + 111/111 total passando

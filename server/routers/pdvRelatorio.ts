@@ -19,7 +19,7 @@ async function requirePdvAdmin(ctx: any) {
   return seller;
 }
 
-// Gera dados consolidados para o relatório
+// Gera dados consolidados para o relatório — agora usa isSofia por ITEM
 async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDate: string, sections: { comissoes: boolean; sofia: boolean; descontos: boolean }, taxaComissao: number) {
   const result: any = { periodo: { startDate, endDate }, geradoEm: new Date().toISOString() };
 
@@ -29,13 +29,13 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
       `SELECT 
         s.name as sellerName,
         COUNT(DISTINCT o.id) as totalPedidos,
-        COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND o.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
-        COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND o.isSofia = 0 THEN o.totalAplicado ELSE 0 END), 0) as faturamento,
-        COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND o.isSofia = 0 AND o.regime = 'ATACADO' THEN o.totalAplicado ELSE 0 END), 0) as faturamentoAtacado,
-        COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND o.isSofia = 0 AND o.regime = 'VAREJO' THEN o.totalAplicado ELSE 0 END), 0) as faturamentoVarejo
+        COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
+        COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+        COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 AND o.regime = 'ATACADO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoAtacado,
+        COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 AND o.regime = 'VAREJO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoVarejo
       FROM pdv_sellers s
       LEFT JOIN pdv_orders o ON o.sellerId = s.id AND DATE(o.createdAt) >= ? AND DATE(o.createdAt) <= ?
-      LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND o.status != 'CANCELADO' AND o.isSofia = 0
+      LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND o.status != 'CANCELADO'
       WHERE s.isActive = 1
       GROUP BY s.id, s.name
       ORDER BY totalPecas DESC`,
@@ -70,28 +70,27 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
     const [configRows] = await db.execute("SELECT comissaoLoja FROM pdv_sofia_config LIMIT 1");
     const comissaoLoja = (configRows as any[])[0]?.comissaoLoja ? parseFloat((configRows as any[])[0].comissaoLoja) : 10;
 
+    // Agora conta por ITEM Sofia, não por pedido
     const [summaryRows] = await db.execute(
       `SELECT 
-        COUNT(*) as totalPedidos,
-        COALESCE(SUM(o.totalAplicado), 0) as faturamento,
-        COALESCE(SUM(
-          (SELECT SUM(oi.quantidade) FROM pdv_order_items oi WHERE oi.pedidoId = o.pedidoId)
-        ), 0) as totalPecas
-      FROM pdv_orders o
-      WHERE o.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(o.createdAt) >= ? AND DATE(o.createdAt) <= ?`,
+        COUNT(DISTINCT o.id) as totalPedidos,
+        COALESCE(SUM(oi.totalItem), 0) as faturamento,
+        COALESCE(SUM(oi.quantidade), 0) as totalPecas
+      FROM pdv_order_items oi
+      JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+      WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(o.createdAt) >= ? AND DATE(o.createdAt) <= ?`,
       [startDate, endDate]
     );
 
     const [sellerRows] = await db.execute(
       `SELECT 
         o.sellerName,
-        COUNT(*) as pedidos,
-        COALESCE(SUM(o.totalAplicado), 0) as faturamento,
-        COALESCE(SUM(
-          (SELECT SUM(oi.quantidade) FROM pdv_order_items oi WHERE oi.pedidoId = o.pedidoId)
-        ), 0) as pecas
-      FROM pdv_orders o
-      WHERE o.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(o.createdAt) >= ? AND DATE(o.createdAt) <= ?
+        COUNT(DISTINCT o.id) as pedidos,
+        COALESCE(SUM(oi.totalItem), 0) as faturamento,
+        COALESCE(SUM(oi.quantidade), 0) as pecas
+      FROM pdv_order_items oi
+      JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+      WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(o.createdAt) >= ? AND DATE(o.createdAt) <= ?
       GROUP BY o.sellerId, o.sellerName
       ORDER BY faturamento DESC`,
       [startDate, endDate]

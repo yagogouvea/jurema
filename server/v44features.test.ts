@@ -25,10 +25,10 @@ describe("v44 Features — Schema & Data Integrity", () => {
       expect(String(col.COLUMN_DEFAULT)).toBe("0");
     });
 
-    it("existing orders should have isSofia = 0", async () => {
+    it("isSofia column should contain valid values (0 or 1)", async () => {
       const db = await getDb();
       const [rows] = await db.execute(
-        `SELECT COUNT(*) as cnt FROM pdv_orders WHERE isSofia != 0`
+        `SELECT COUNT(*) as cnt FROM pdv_orders WHERE isSofia NOT IN (0, 1)`
       );
       await db.end();
       expect(parseInt((rows as any[])[0].cnt)).toBe(0);

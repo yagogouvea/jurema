@@ -25,7 +25,7 @@ async function requirePdvAdmin(ctx: any) {
 }
 
 export const pdvSofiaRouter = router({
-  // Dashboard Sofia: vendas diárias de produtos Sofia
+  // Dashboard Sofia: vendas de itens Sofia (agora por item, não por pedido)
   dashboard: publicProcedure
     .input(z.object({
       startDate: z.string().optional(),
@@ -42,16 +42,15 @@ export const pdvSofiaRouter = router({
         if (input.startDate) { dateFilter += " AND DATE(o.createdAt) >= ?"; params.push(input.startDate); }
         if (input.endDate) { dateFilter += " AND DATE(o.createdAt) <= ?"; params.push(input.endDate); }
 
-        // Resumo geral de vendas Sofia
+        // Resumo geral de itens Sofia (por item, não por pedido)
         const [summaryRows] = await db.execute(
           `SELECT 
-            COUNT(*) as totalPedidos,
-            COALESCE(SUM(o.totalAplicado), 0) as faturamento,
-            COALESCE(SUM(
-              (SELECT SUM(oi.quantidade) FROM pdv_order_items oi WHERE oi.pedidoId = o.pedidoId)
-            ), 0) as totalPecas
-          FROM pdv_orders o
-          WHERE o.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}`,
+            COUNT(DISTINCT o.id) as totalPedidos,
+            COALESCE(SUM(oi.totalItem), 0) as faturamento,
+            COALESCE(SUM(oi.quantidade), 0) as totalPecas
+          FROM pdv_order_items oi
+          JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+          WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}`,
           params
         );
 
@@ -60,13 +59,12 @@ export const pdvSofiaRouter = router({
           `SELECT 
             o.sellerId,
             o.sellerName,
-            COUNT(*) as pedidos,
-            COALESCE(SUM(o.totalAplicado), 0) as faturamento,
-            COALESCE(SUM(
-              (SELECT SUM(oi.quantidade) FROM pdv_order_items oi WHERE oi.pedidoId = o.pedidoId)
-            ), 0) as pecas
-          FROM pdv_orders o
-          WHERE o.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}
+            COUNT(DISTINCT o.id) as pedidos,
+            COALESCE(SUM(oi.totalItem), 0) as faturamento,
+            COALESCE(SUM(oi.quantidade), 0) as pecas
+          FROM pdv_order_items oi
+          JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+          WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}
           GROUP BY o.sellerId, o.sellerName
           ORDER BY faturamento DESC`,
           params
@@ -76,13 +74,12 @@ export const pdvSofiaRouter = router({
         const [dailyRows] = await db.execute(
           `SELECT 
             DATE(o.createdAt) as dia,
-            COUNT(*) as pedidos,
-            COALESCE(SUM(o.totalAplicado), 0) as faturamento,
-            COALESCE(SUM(
-              (SELECT SUM(oi.quantidade) FROM pdv_order_items oi WHERE oi.pedidoId = o.pedidoId)
-            ), 0) as pecas
-          FROM pdv_orders o
-          WHERE o.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}
+            COUNT(DISTINCT o.id) as pedidos,
+            COALESCE(SUM(oi.totalItem), 0) as faturamento,
+            COALESCE(SUM(oi.quantidade), 0) as pecas
+          FROM pdv_order_items oi
+          JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+          WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}
           GROUP BY DATE(o.createdAt)
           ORDER BY dia DESC`,
           params
@@ -134,7 +131,7 @@ export const pdvSofiaRouter = router({
       }
     }),
 
-  // Listar pedidos Sofia
+  // Listar pedidos que contêm itens Sofia
   pedidos: publicProcedure
     .input(z.object({
       startDate: z.string().optional(),
@@ -149,18 +146,21 @@ export const pdvSofiaRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
       try {
-        let query = "SELECT * FROM pdv_orders WHERE isSofia = 1";
+        // Pedidos que contêm pelo menos um item Sofia
+        let query = `SELECT DISTINCT o.* FROM pdv_orders o
+          JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 1
+          WHERE 1=1`;
         const params: any[] = [];
 
-        if (input.sellerId) { query += " AND sellerId = ?"; params.push(input.sellerId); }
-        if (input.startDate) { query += " AND DATE(createdAt) >= ?"; params.push(input.startDate); }
-        if (input.endDate) { query += " AND DATE(createdAt) <= ?"; params.push(input.endDate); }
+        if (input.sellerId) { query += " AND o.sellerId = ?"; params.push(input.sellerId); }
+        if (input.startDate) { query += " AND DATE(o.createdAt) >= ?"; params.push(input.startDate); }
+        if (input.endDate) { query += " AND DATE(o.createdAt) <= ?"; params.push(input.endDate); }
 
-        const countQuery = query.replace("SELECT *", "SELECT COUNT(*) as total");
+        const countQuery = query.replace("SELECT DISTINCT o.*", "SELECT COUNT(DISTINCT o.id) as total");
         const [countRows] = await db.execute(countQuery, params);
         const total = (countRows as any[])[0].total;
 
-        query += " ORDER BY createdAt DESC";
+        query += " ORDER BY o.createdAt DESC";
         const offset = (input.page - 1) * input.limit;
         query += ` LIMIT ${Math.floor(input.limit)} OFFSET ${Math.floor(offset)}`;
 

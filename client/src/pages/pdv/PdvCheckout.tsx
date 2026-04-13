@@ -18,6 +18,7 @@ interface CartItem {
   quantidade: number;
   precoUnitario: number;
   totalItem: number;
+  isSofia?: boolean;
 }
 
 interface ServiceItem {
@@ -88,7 +89,13 @@ export default function PdvCheckout({
   const [editingMaquininhaVal, setEditingMaquininhaVal] = useState("");
   const [justificativa, setJustificativa] = useState("");
   const [showItems, setShowItems] = useState(false);
-  const [isSofia, setIsSofia] = useState(false);
+  // Sofia por item: mapa de índice do carrinho -> boolean
+  const [sofiaItems, setSofiaItems] = useState<Record<number, boolean>>({});
+  const toggleSofiaItem = (idx: number) => {
+    setSofiaItems(prev => ({ ...prev, [idx]: !prev[idx] }));
+  };
+  const hasSofiaItems = Object.values(sofiaItems).some(v => v);
+  const sofiaCount = Object.values(sofiaItems).filter(v => v).length;
 
   const totalServicos = useMemo(() => services.reduce((sum, s) => sum + s.valor, 0), [services]);
   const totalGeral = totalAplicado + totalServicos;
@@ -218,9 +225,8 @@ export default function PdvCheckout({
       totalPago,
       totalPendente,
       justificativa: justificativa || undefined,
-      isSofia,
       status: totalPendente > 0 ? "PENDENTE" : "PAGO",
-      items: cart.map(item => ({
+      items: cart.map((item, idx) => ({
         productId: item.productId,
         linha: item.linha,
         modelo: item.modelo,
@@ -230,6 +236,7 @@ export default function PdvCheckout({
         quantidade: item.quantidade,
         precoUnitario: item.precoUnitario,
         totalItem: item.totalItem,
+        isSofia: !!sofiaItems[idx],
       })),
       payments,
       services,
@@ -280,40 +287,37 @@ export default function PdvCheckout({
             {showItems && (
               <div className="border-t border-gray-800 p-4 space-y-2">
                 {cart.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-300">{item.quantidade}x {item.time} ({item.tamanho})</span>
-                    <span className="text-white font-medium">R$ {fmt(item.totalItem)}</span>
+                  <div key={i} className="flex items-center justify-between text-sm gap-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-gray-300 truncate">{item.quantidade}x {item.time} ({item.tamanho})</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => toggleSofiaItem(i)}
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold transition-all border ${
+                          sofiaItems[i]
+                            ? "bg-purple-600 border-purple-500 text-white"
+                            : "bg-gray-800 border-gray-700 text-gray-500 hover:border-purple-700 hover:text-purple-400"
+                        }`}
+                        title="Marcar como produto Sofia (terceirizado)"
+                      >
+                        Sofia
+                      </button>
+                      <span className="text-white font-medium">R$ {fmt(item.totalItem)}</span>
+                    </div>
                   </div>
                 ))}
                 <div className="border-t border-gray-700 pt-2 flex justify-between font-semibold">
                   <span className="text-gray-300">Subtotal</span>
                   <span className="text-white">R$ {fmt(totalAplicado)}</span>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Venda Sofia (terceirizado) */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-white font-semibold">Venda Sofia</h3>
-                <p className="text-gray-500 text-xs mt-0.5">Produto terceirizado (não entra na comissão)</p>
-              </div>
-              <button
-                onClick={() => setIsSofia(!isSofia)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  isSofia ? "bg-purple-600" : "bg-gray-700"
-                }`}
-              >
-                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                  isSofia ? "translate-x-6" : "translate-x-0.5"
-                }`} />
-              </button>
-            </div>
-            {isSofia && (
-              <div className="mt-3 bg-purple-950/30 border border-purple-900/50 rounded-xl p-3">
-                <p className="text-purple-300 text-xs">Este pedido será marcado como venda Sofia. O reembolso será calculado automaticamente no Dashboard Sofia.</p>
+                {hasSofiaItems && (
+                  <div className="bg-purple-950/30 border border-purple-900/50 rounded-xl p-2 mt-2">
+                    <p className="text-purple-300 text-xs">
+                      {sofiaCount} {sofiaCount === 1 ? 'item marcado' : 'itens marcados'} como Sofia (terceirizado). Esses itens não entram na comissão.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>

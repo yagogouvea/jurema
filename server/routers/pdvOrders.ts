@@ -40,6 +40,7 @@ const OrderItemSchema = z.object({
   quantidade: z.number().min(1),
   precoUnitario: z.number().min(0),
   totalItem: z.number().min(0),
+  isSofia: z.boolean().default(false),
 });
 
 const OrderPaymentSchema = z.object({
@@ -69,7 +70,6 @@ export const pdvOrdersRouter = router({
       totalPago: z.number().default(0),
       totalPendente: z.number().default(0),
       justificativa: z.string().optional(),
-      isSofia: z.boolean().default(false),
       status: z.enum(["PAGO", "PENDENTE", "CANCELADO"]).default("PAGO"),
       items: z.array(OrderItemSchema),
       payments: z.array(OrderPaymentSchema),
@@ -83,7 +83,12 @@ export const pdvOrdersRouter = router({
       try {
         const pedidoId = generatePedidoId();
         
-        // Insert order
+        // Determinar isSofia do pedido: se QUALQUER item for Sofia, o pedido tem Sofia
+        // Mas agora o controle é por item, então isSofia no pedido = true se TODOS os itens forem Sofia
+        const hasSofiaItems = input.items.some(item => item.isSofia);
+        const allSofia = input.items.every(item => item.isSofia);
+        
+        // Insert order — isSofia no pedido = true apenas se TODOS os itens forem Sofia
         await db.execute(
           `INSERT INTO pdv_orders 
            (pedidoId, sellerId, sellerName, canal, clienteNome, clienteTelefone, regime, 
@@ -94,20 +99,20 @@ export const pdvOrdersRouter = router({
             input.clienteNome || null, input.clienteTelefone || null,
             input.regime, input.totalVarejo, input.totalAtacado, input.totalAplicado,
             input.totalPago, input.totalPendente, input.justificativa || null,
-            input.isSofia ? 1 : 0, input.status
+            allSofia ? 1 : 0, input.status
           ]
         );
         
-        // Insert items
+        // Insert items (com isSofia por item)
         for (const item of input.items) {
           await db.execute(
             `INSERT INTO pdv_order_items 
-             (pedidoId, productId, linha, modelo, time, descricao, tamanho, quantidade, precoUnitario, totalItem)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (pedidoId, productId, linha, modelo, time, descricao, tamanho, quantidade, precoUnitario, totalItem, isSofia)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               pedidoId, item.productId || null, item.linha || null, item.modelo || null,
               item.time, item.descricao || null, item.tamanho, item.quantidade,
-              item.precoUnitario, item.totalItem
+              item.precoUnitario, item.totalItem, item.isSofia ? 1 : 0
             ]
           );
           
