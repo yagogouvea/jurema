@@ -328,3 +328,6 @@
 - [x] Aba "Histórico de Quitações" na página de Desconto em Folha com paginação
 - [x] Histórico também incluído no relatório PDF (seção Descontos)
 - [x] 8 testes vitest para relatório e histórico (102/102 total)
+
+## Bugs (v46)
+- [x] Cards de vendedores excluídos/inativos removidos do dashboard da área vendedores (filtro isActive no frontend)

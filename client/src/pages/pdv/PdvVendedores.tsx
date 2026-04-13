@@ -180,7 +180,7 @@ export default function PdvVendedores() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sellers?.map((seller: any) => (
+            {sellers?.filter((s: any) => s.isActive).map((seller: any) => (
               <div key={seller.id} className={`bg-gray-900 border rounded-2xl p-5 transition-all ${
                 seller.isActive ? "border-gray-800" : "border-gray-800 opacity-50"
               }`}>
