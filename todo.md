@@ -277,3 +277,6 @@
 ## Bugs (v39)
 - [x] Admin login: senha redefinida para jurema@adm (hash bcrypt correto atualizado no banco)
 - [x] AdminPanel: setState durante render corrigido — navigate() substituído por <Redirect to="/admin/login" /> (wouter)
+
+## Bugs (v40)
+- [x] Admin login: redirecionamento corrigido — utils.adminAuth.me.fetch() aguardado antes do navigate("/admin") para garantir que o estado de auth esteja atualizado

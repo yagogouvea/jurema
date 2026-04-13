@@ -18,11 +18,11 @@ export default function AdminLogin() {
   const utils = trpc.useUtils();
 
   const loginMutation = trpc.adminAuth.login.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       toast.success(`Bem-vindo, ${data.name}!`);
-      // Refetch admin auth state após login bem-sucedido
-      utils.adminAuth.me.invalidate();
-      setTimeout(() => navigate("/admin"), 500);
+      // Refetch explícito para garantir que o estado de auth seja atualizado antes de navegar
+      await utils.adminAuth.me.fetch();
+      navigate("/admin");
     },
     onError: (e) => {
       toast.error(e.message || "Credenciais inválidas");
