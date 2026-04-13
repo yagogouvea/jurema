@@ -43,7 +43,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -72,12 +72,12 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
       {/* Logo */}
       <div className="p-6 border-b border-gray-800">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center shadow-lg shadow-red-600/20">
+          <div className="w-10 h-10 bg-green-700 rounded-xl flex items-center justify-center shadow-lg shadow-green-700/20">
             <ShoppingBag className="w-5 h-5 text-white" />
           </div>
           <div>
             <div className="text-white font-bold text-sm leading-tight">JUREMA</div>
-            <div className="text-red-500 font-bold text-sm leading-tight">PDV</div>
+            <div className="text-green-600 font-bold text-sm leading-tight">PDV</div>
           </div>
         </div>
       </div>
@@ -93,14 +93,14 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
               onClick={() => setSidebarOpen(false)}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 active
-                  ? "bg-red-600 text-white shadow-lg shadow-red-600/20"
+                  ? "bg-green-700 text-white shadow-lg shadow-green-700/20"
                   : "text-gray-400 hover:text-white hover:bg-gray-800"
               }`}
             >
               <item.icon className="w-5 h-5 flex-shrink-0" />
               <span>{item.label}</span>
               {item.badge > 0 && (
-                <span className="ml-auto bg-red-600 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                <span className="ml-auto bg-green-700 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                   {item.badge > 99 ? "99+" : item.badge}
                 </span>
               )}
@@ -121,7 +121,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
         </div>
         <button
           onClick={() => logoutMutation.mutate()}
-          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-red-400 hover:bg-red-950/30 transition-all"
+          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-green-500 hover:bg-green-950/30 transition-all"
         >
           <LogOut className="w-4 h-4" />
           Sair
@@ -167,7 +167,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
             <Menu className="w-6 h-6" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-red-600 rounded-lg flex items-center justify-center">
+            <div className="w-7 h-7 bg-green-700 rounded-lg flex items-center justify-center">
               <ShoppingBag className="w-4 h-4 text-white" />
             </div>
             <span className="text-white font-bold text-sm">JUREMA PDV</span>

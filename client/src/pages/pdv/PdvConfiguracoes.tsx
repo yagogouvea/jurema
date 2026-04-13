@@ -122,8 +122,8 @@ export default function PdvConfiguracoes() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-950/50 border border-red-900/50 rounded-xl flex items-center justify-center">
-              <Settings className="w-5 h-5 text-red-400" />
+            <div className="w-10 h-10 bg-green-950/50 border border-green-900/50 rounded-xl flex items-center justify-center">
+              <Settings className="w-5 h-5 text-green-500" />
             </div>
             <div>
               <h1 className="text-white text-2xl font-bold">Configurações PDV</h1>
@@ -135,7 +135,7 @@ export default function PdvConfiguracoes() {
             disabled={!dirty || saveMutation.isPending}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
               dirty
-                ? "bg-red-600 hover:bg-red-700 text-white"
+                ? "bg-green-700 hover:bg-green-800 text-white"
                 : "bg-gray-800 text-gray-500 cursor-not-allowed"
             }`}
           >
@@ -146,7 +146,7 @@ export default function PdvConfiguracoes() {
 
         {isLoading ? (
           <div className="flex items-center justify-center h-40">
-            <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
           <div className="space-y-4">
@@ -163,7 +163,7 @@ export default function PdvConfiguracoes() {
                     value={configs[key] ?? ""}
                     onChange={(e) => handleChange(key, e.target.value)}
                     placeholder={field.placeholder}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-600 transition-colors"
                   />
                   {field.hint && (
                     <p className="text-gray-500 text-xs mt-2">{field.hint}</p>

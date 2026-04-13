@@ -340,7 +340,7 @@ export default function PdvMain() {
                   >
                     <Bell className="w-4 h-4" />
                     {(unreadData?.count ?? 0) > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5">
+                      <span className="absolute -top-1 -right-1 bg-green-700 text-white text-xs font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5">
                         {unreadData!.count > 99 ? "99+" : unreadData!.count}
                       </span>
                     )}
@@ -357,7 +357,7 @@ export default function PdvMain() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por time, modelo, código..."
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-10 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-10 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-600"
               />
               {search && (
                 <button
@@ -375,7 +375,7 @@ export default function PdvMain() {
                 onClick={() => setSelectedLinha("")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   selectedLinha === ""
-                    ? "bg-red-600 text-white"
+                    ? "bg-green-700 text-white"
                     : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white border border-gray-700"
                 }`}
               >
@@ -387,7 +387,7 @@ export default function PdvMain() {
                   onClick={() => setSelectedLinha(selectedLinha === l ? "" : l)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     selectedLinha === l
-                      ? "bg-red-600 text-white"
+                      ? "bg-green-700 text-white"
                       : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white border border-gray-700"
                   }`}
                 >
@@ -420,7 +420,7 @@ export default function PdvMain() {
           <div className="flex-1 overflow-y-auto p-4 flex flex-col">
             {isLoading ? (
               <div className="flex items-center justify-center h-40">
-                <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                <div className="w-8 h-8 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : products.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-40 text-gray-500">
@@ -429,7 +429,7 @@ export default function PdvMain() {
                 {search && (
                   <button
                     onClick={() => setSearch("")}
-                    className="mt-2 text-red-400 text-sm hover:text-red-300"
+                    className="mt-2 text-green-500 text-sm hover:text-green-400"
                   >
                     Limpar busca
                   </button>
@@ -440,7 +440,7 @@ export default function PdvMain() {
                 {Object.entries(groupedProducts).map(([time, timeProducts]) => (
                   <div key={time}>
                     <h3 className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-2">
-                      <span className="w-2 h-2 bg-red-500 rounded-full" />
+                      <span className="w-2 h-2 bg-green-600 rounded-full" />
                       {time}
                       <span className="text-gray-600">({timeProducts.length})</span>
                     </h3>
@@ -487,7 +487,7 @@ export default function PdvMain() {
                       onClick={() => setPage(p)}
                       className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
                         p === page
-                          ? "bg-red-600 text-white"
+                          ? "bg-green-700 text-white"
                           : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
                       }`}
                     >
@@ -526,7 +526,7 @@ export default function PdvMain() {
         {/* Mobile Cart Button */}
         <button
           onClick={() => setShowCart(true)}
-          className="lg:hidden fixed bottom-4 right-4 bg-red-600 text-white rounded-2xl px-5 py-3 flex items-center gap-3 shadow-2xl shadow-red-600/30 z-40"
+          className="lg:hidden fixed bottom-4 right-4 bg-green-700 text-white rounded-2xl px-5 py-3 flex items-center gap-3 shadow-2xl shadow-green-700/30 z-40"
         >
           <ShoppingCart className="w-5 h-5" />
           <span className="font-semibold">{totalPecas} peças</span>
@@ -641,7 +641,7 @@ export default function PdvMain() {
                           <p className="text-xs text-gray-500">Já atualizados</p>
                         </div>
                         <div className="bg-gray-800/60 rounded-xl p-3 text-center">
-                          <p className="text-2xl font-bold text-red-400">{syncPreview.totalInvalidos}</p>
+                          <p className="text-2xl font-bold text-green-500">{syncPreview.totalInvalidos}</p>
                           <p className="text-xs text-gray-400">Ignorados (incompletos)</p>
                         </div>
                       </div>
@@ -743,7 +743,7 @@ function ProductCard({ product, regime, onAdd }: {
       <div className="flex items-center justify-between">
         <div className={`text-xs px-2 py-0.5 rounded-full ${
           semEstoque
-            ? "bg-red-950/50 text-red-400"
+            ? "bg-green-950/50 text-green-500"
             : product.estoque <= 5
             ? "bg-yellow-950/50 text-yellow-400"
             : "bg-green-950/50 text-green-400"
@@ -753,7 +753,7 @@ function ProductCard({ product, regime, onAdd }: {
         <button
           onClick={() => onAdd(product, product.tamanho)}
           disabled={semEstoque}
-          className="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-3 py-1.5 text-xs font-semibold flex items-center gap-1 transition-colors"
+          className="bg-green-700 hover:bg-green-800 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-3 py-1.5 text-xs font-semibold flex items-center gap-1 transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />
           Adicionar
@@ -783,7 +783,7 @@ function CartPanel({ cart, regime, totalPecas, totalAplicado, onUpdateQuantity, 
             <ShoppingCart className="w-5 h-5 text-gray-400" />
             <span className="text-white font-semibold">Carrinho</span>
             {cart.length > 0 && (
-              <span className="bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              <span className="bg-green-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                 {cart.length}
               </span>
             )}
@@ -820,7 +820,7 @@ function CartPanel({ cart, regime, totalPecas, totalAplicado, onUpdateQuantity, 
                 </div>
                 <button
                   onClick={() => onRemove(index)}
-                  className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0"
+                  className="text-gray-600 hover:text-green-500 transition-colors flex-shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -862,14 +862,14 @@ function CartPanel({ cart, regime, totalPecas, totalAplicado, onUpdateQuantity, 
             </div>
             <button
               onClick={onCheckout}
-              className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
+              className="w-full bg-green-700 hover:bg-green-800 text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
             >
               Finalizar Venda
               <ArrowRight className="w-4 h-4" />
             </button>
             <button
               onClick={onClear}
-              className="w-full text-gray-500 hover:text-red-400 text-sm py-1 transition-colors"
+              className="w-full text-gray-500 hover:text-green-500 text-sm py-1 transition-colors"
             >
               Limpar carrinho
             </button>

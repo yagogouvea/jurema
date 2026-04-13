@@ -159,7 +159,7 @@ export default function PdvVendedores() {
             </button>
             <button
               onClick={() => { setShowForm(true); setEditingId(null); setForm(DEFAULT_FORM); }}
-              className="bg-red-600 hover:bg-red-700 text-white text-sm px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
+              className="bg-green-700 hover:bg-green-800 text-white text-sm px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
             >
               <Plus className="w-4 h-4" />
               Novo Vendedor
@@ -208,7 +208,7 @@ export default function PdvVendedores() {
                             deleteMutation.mutate({ id: seller.id });
                           }
                         }}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-950/30 transition-colors"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-green-500 hover:bg-green-950/30 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -233,7 +233,7 @@ export default function PdvVendedores() {
                       Ativo
                     </span>
                   ) : (
-                    <span className="text-xs flex items-center gap-1 text-red-400">
+                    <span className="text-xs flex items-center gap-1 text-green-500">
                       <XCircle className="w-3 h-3" />
                       Inativo
                     </span>
@@ -266,7 +266,7 @@ export default function PdvVendedores() {
                   value={form.name}
                   onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Nome completo"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-red-500"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-green-600"
                 />
               </div>
               <div>
@@ -276,7 +276,7 @@ export default function PdvVendedores() {
                   value={form.username}
                   onChange={(e) => setForm(prev => ({ ...prev, username: e.target.value.toLowerCase() }))}
                   placeholder="nome_usuario"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-red-500"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-green-600"
                 />
               </div>
               <div>
@@ -289,7 +289,7 @@ export default function PdvVendedores() {
                     value={form.password}
                     onChange={(e) => setForm(prev => ({ ...prev, password: e.target.value }))}
                     placeholder={editingId ? "Nova senha (opcional)" : "Senha"}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 pr-12 text-white placeholder-gray-500 focus:outline-none focus:border-red-500"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 pr-12 text-white placeholder-gray-500 focus:outline-none focus:border-green-600"
                   />
                   <button
                     type="button"
@@ -332,7 +332,7 @@ export default function PdvVendedores() {
                 <button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}
-                  className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 bg-green-700 hover:bg-green-800 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
                 >
                   <Save className="w-4 h-4" />
                   {editingId ? "Salvar" : "Criar"}
@@ -369,7 +369,7 @@ export default function PdvVendedores() {
                 { key: "BRONZE", label: "Bronze", color: "text-orange-400" },
                 { key: "PRATA", label: "Prata", color: "text-gray-300" },
                 { key: "OURO", label: "Ouro", color: "text-yellow-400" },
-                { key: "META_LOJA", label: "Meta Loja", color: "text-red-400" },
+                { key: "META_LOJA", label: "Meta Loja", color: "text-green-500" },
               ].map(goal => (
                 <div key={goal.key} className="flex items-center gap-3">
                   <label className={`w-24 text-sm font-semibold ${goal.color}`}>{goal.label}</label>
@@ -379,7 +379,7 @@ export default function PdvVendedores() {
                       type="text"
                       value={goals[goal.key as keyof typeof goals]}
                       onChange={(e) => setGoals(prev => ({ ...prev, [goal.key]: e.target.value }))}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-8 pr-4 py-2.5 text-white text-sm focus:outline-none focus:border-red-500"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-8 pr-4 py-2.5 text-white text-sm focus:outline-none focus:border-green-600"
                     />
                   </div>
                 </div>
@@ -390,7 +390,7 @@ export default function PdvVendedores() {
               <button
                 onClick={handleSaveGoals}
                 disabled={updateGoalsMutation.isPending}
-                className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+                className="flex-1 bg-green-700 hover:bg-green-800 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
               >
                 <Save className="w-4 h-4" />
                 Salvar Metas

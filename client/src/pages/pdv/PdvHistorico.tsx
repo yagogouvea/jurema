@@ -11,7 +11,7 @@ import {
 const STATUS_COLORS: Record<string, string> = {
   PAGO: "bg-green-950/50 text-green-400 border-green-900/50",
   PENDENTE: "bg-yellow-950/50 text-yellow-400 border-yellow-900/50",
-  CANCELADO: "bg-red-950/50 text-red-400 border-red-900/50",
+  CANCELADO: "bg-green-950/50 text-green-500 border-green-900/50",
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -95,13 +95,13 @@ export default function PdvHistorico() {
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 placeholder="Buscar por cliente, pedido..."
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-600"
               />
             </div>
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value as any); setPage(1); }}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-red-500"
+              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-green-600"
             >
               <option value="">Todos os status</option>
               <option value="PAGO">Pago</option>
@@ -111,7 +111,7 @@ export default function PdvHistorico() {
             <select
               value={canalFilter}
               onChange={(e) => { setCanalFilter(e.target.value as any); setPage(1); }}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-red-500"
+              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-green-600"
             >
               <option value="">Todos os canais</option>
               <option value="BALCAO">Balcao</option>
@@ -124,14 +124,14 @@ export default function PdvHistorico() {
               type="date"
               value={startDate}
               onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
             />
             <span className="text-gray-600">até</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
             />
           </div>
         </div>
@@ -140,7 +140,7 @@ export default function PdvHistorico() {
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center h-40">
-              <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : orders.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 text-gray-500">
@@ -382,7 +382,7 @@ export default function PdvHistorico() {
                     }
                   }}
                   disabled={cancelMutation.isPending}
-                  className="w-full border border-red-900/50 text-red-400 hover:bg-red-950/30 font-medium py-2.5 rounded-xl text-sm transition-colors"
+                  className="w-full border border-green-900/50 text-green-500 hover:bg-green-950/30 font-medium py-2.5 rounded-xl text-sm transition-colors"
                 >
                   Cancelar Pedido
                 </button>

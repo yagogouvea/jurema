@@ -53,7 +53,7 @@ function PdvNotificacoesContent() {
         <div className="text-center text-gray-400">
           <p className="text-lg font-medium">Acesso restrito</p>
           <p className="text-sm mt-1">Apenas administradores podem ver as notificações.</p>
-          <Link href="/pdv" className="mt-4 inline-block text-red-400 hover:text-red-300 text-sm">
+          <Link href="/pdv" className="mt-4 inline-block text-green-500 hover:text-green-400 text-sm">
             ← Voltar ao PDV
           </Link>
         </div>
@@ -84,7 +84,7 @@ function PdvNotificacoesContent() {
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && (
-            <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+            <span className="bg-green-700 text-white text-xs font-bold px-2 py-0.5 rounded-full">
               {unreadCount} não lida{unreadCount !== 1 ? "s" : ""}
             </span>
           )}
@@ -102,7 +102,7 @@ function PdvNotificacoesContent() {
               }
             }}
             disabled={deleteAll.isPending}
-            className="text-xs text-red-400 hover:text-red-300 disabled:opacity-40 transition-colors px-2 py-1 rounded border border-red-900/50 hover:border-red-700/50"
+            className="text-xs text-green-500 hover:text-green-400 disabled:opacity-40 transition-colors px-2 py-1 rounded border border-green-900/50 hover:border-green-700/50"
           >
             Apagar tudo
           </button>
@@ -118,7 +118,7 @@ function PdvNotificacoesContent() {
               onClick={() => { setTipoFiltro(t.value); setPage(1); }}
               className={`text-xs px-3 py-1 rounded-full border transition-colors ${
                 tipoFiltro === t.value
-                  ? "bg-red-700 border-red-600 text-white"
+                  ? "bg-green-800 border-green-700 text-white"
                   : "border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200"
               }`}
             >
@@ -131,7 +131,7 @@ function PdvNotificacoesContent() {
             type="checkbox"
             checked={apenasNaoLidas}
             onChange={e => { setApenasNaoLidas(e.target.checked); setPage(1); }}
-            className="accent-red-600"
+            className="accent-green-700"
           />
           Apenas não lidas
         </label>
@@ -174,7 +174,7 @@ function PdvNotificacoesContent() {
                   }}
                 >
                   {/* Indicador não lida */}
-                  <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${isUnread ? "bg-red-500" : "bg-transparent"}`} />
+                  <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${isUnread ? "bg-green-600" : "bg-transparent"}`} />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -183,7 +183,7 @@ function PdvNotificacoesContent() {
                       </span>
                       <span className="text-xs text-gray-500">{formatDate(n.createdAt)}</span>
                       {isUnread && (
-                        <span className="text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded">Nova</span>
+                        <span className="text-xs bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded">Nova</span>
                       )}
                     </div>
                     <p className="text-sm text-gray-200 font-medium mt-0.5 truncate">{n.title}</p>

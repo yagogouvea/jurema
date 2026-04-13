@@ -270,3 +270,6 @@
 ## Melhorias (v37)
 - [x] PDV: senha da Vanessa alterada para vanessa@adm (hash SHA-256 + salt correto)
 - [x] PDV: login case-insensitive — username normalizado com trim().toLowerCase() + LOWER() na query SQL; novos usuários já salvos em lowercase
+
+## Melhorias (v38)
+- [x] PDV redesign: identidade visual trocada de vermelho para verde gramado (#16a34a / green-700) em todos os 10 componentes PDV (PdvLayout, PdvLogin, PdvMain, PdvCheckout, PdvDashboard, PdvHistorico, PdvConfig, PdvComissoes, PdvNotificacoes, PdvVendedores, PdvConfiguracoes)

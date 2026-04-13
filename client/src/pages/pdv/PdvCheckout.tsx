@@ -299,7 +299,7 @@ export default function PdvCheckout({
                 onClick={() => setCanal("BALCAO")}
                 className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all border-2 ${
                   canal === "BALCAO"
-                    ? "bg-red-600 border-red-600 text-white shadow-lg shadow-red-600/20"
+                    ? "bg-green-700 border-green-700 text-white shadow-lg shadow-green-700/20"
                     : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500"
                 }`}
               >
@@ -335,7 +335,7 @@ export default function PdvCheckout({
                   value={clienteNome}
                   onChange={(e) => setClienteNome(e.target.value)}
                   placeholder="Nome do cliente"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-600 transition-colors"
                 />
               </div>
               <div>
@@ -345,7 +345,7 @@ export default function PdvCheckout({
                   value={clienteTelefone}
                   onChange={(e) => setClienteTelefone(e.target.value)}
                   placeholder="(00) 00000-0000"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-600 transition-colors"
                 />
               </div>
             </div>
@@ -357,7 +357,7 @@ export default function PdvCheckout({
               <h3 className="text-white font-semibold">Serviços Extras</h3>
               <button
                 onClick={() => setShowAddService(!showAddService)}
-                className="text-red-400 hover:text-red-300 text-sm flex items-center gap-1 transition-colors"
+                className="text-green-500 hover:text-green-400 text-sm flex items-center gap-1 transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 Adicionar
@@ -370,7 +370,7 @@ export default function PdvCheckout({
                   <select
                     value={newServiceTipo}
                     onChange={(e) => setNewServiceTipo(e.target.value)}
-                    className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+                    className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
                   >
                     {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -379,7 +379,7 @@ export default function PdvCheckout({
                     value={newServiceValor}
                     onChange={(e) => setNewServiceValor(e.target.value)}
                     placeholder="Valor"
-                    className="w-28 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+                    className="w-28 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
                   />
                 </div>
                 <input
@@ -387,10 +387,10 @@ export default function PdvCheckout({
                   value={newServiceDescricao}
                   onChange={(e) => setNewServiceDescricao(e.target.value)}
                   placeholder="Descrição (opcional)"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
                 />
                 <div className="flex gap-2">
-                  <button onClick={addService} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm py-2 rounded-lg font-medium transition-colors">Adicionar</button>
+                  <button onClick={addService} className="flex-1 bg-green-700 hover:bg-green-800 text-white text-sm py-2 rounded-lg font-medium transition-colors">Adicionar</button>
                   <button onClick={() => setShowAddService(false)} className="px-4 text-gray-400 hover:text-white text-sm py-2 rounded-lg transition-colors">Cancelar</button>
                 </div>
               </div>
@@ -408,7 +408,7 @@ export default function PdvCheckout({
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-white text-sm font-semibold">R$ {fmt(service.valor)}</span>
-                      <button onClick={() => setServices(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-600 hover:text-red-400 transition-colors">
+                      <button onClick={() => setServices(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-600 hover:text-green-500 transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -424,7 +424,7 @@ export default function PdvCheckout({
               <h3 className="text-white font-semibold">Formas de Pagamento</h3>
               <button
                 onClick={() => setShowAddPayment(!showAddPayment)}
-                className="text-red-400 hover:text-red-300 text-sm flex items-center gap-1 transition-colors"
+                className="text-green-500 hover:text-green-400 text-sm flex items-center gap-1 transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 Adicionar
@@ -441,7 +441,7 @@ export default function PdvCheckout({
                       onClick={() => setNewPaymentMethod(method.key)}
                       className={`py-2 px-2 rounded-lg text-xs font-medium transition-all ${
                         newPaymentMethod === method.key
-                          ? "bg-red-600 text-white"
+                          ? "bg-green-700 text-white"
                           : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                       }`}
                     >
@@ -461,7 +461,7 @@ export default function PdvCheckout({
                     value={newPaymentValor}
                     onChange={(e) => setNewPaymentValor(e.target.value)}
                     placeholder="0,00"
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
                   />
                 </div>
 
@@ -472,7 +472,7 @@ export default function PdvCheckout({
                     value={newPaymentNomePix}
                     onChange={(e) => setNewPaymentNomePix(e.target.value)}
                     placeholder="Nome do PIX (opcional)"
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
                   />
                 )}
 
@@ -485,7 +485,7 @@ export default function PdvCheckout({
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-500">Taxa {previewMethod.label} ({previewMethod.taxa}%)</span>
-                      <span className="text-red-400">+ R$ {fmt(previewTaxa)}</span>
+                      <span className="text-green-500">+ R$ {fmt(previewTaxa)}</span>
                     </div>
                     <div className="border-t border-gray-700 pt-1.5 flex justify-between text-sm font-bold">
                       <span className="text-yellow-400">Valor maquininha</span>
@@ -498,7 +498,7 @@ export default function PdvCheckout({
                 )}
 
                 <div className="flex gap-2">
-                  <button onClick={addPayment} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm py-2 rounded-lg font-medium transition-colors">Adicionar</button>
+                  <button onClick={addPayment} className="flex-1 bg-green-700 hover:bg-green-800 text-white text-sm py-2 rounded-lg font-medium transition-colors">Adicionar</button>
                   <button onClick={() => setShowAddPayment(false)} className="px-4 text-gray-400 hover:text-white text-sm py-2 rounded-lg transition-colors">Cancelar</button>
                 </div>
               </div>
@@ -522,7 +522,7 @@ export default function PdvCheckout({
                           <span className="text-white text-sm font-semibold">R$ {fmt(payment.valor)}</span>
                           <button
                             onClick={() => setPayments(prev => prev.filter((_, idx) => idx !== i))}
-                            className="text-gray-600 hover:text-red-400 transition-colors"
+                            className="text-gray-600 hover:text-green-500 transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -595,7 +595,7 @@ export default function PdvCheckout({
               onChange={(e) => setJustificativa(e.target.value)}
               placeholder="Observações do pedido (opcional)"
               rows={2}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-600 resize-none"
             />
           </div>
 
@@ -647,7 +647,7 @@ export default function PdvCheckout({
         <button
           onClick={handleFinalize}
           disabled={createOrderMutation.isPending}
-          className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 transition-colors text-lg shadow-lg shadow-red-600/20"
+          className="w-full bg-green-700 hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 transition-colors text-lg shadow-lg shadow-green-700/20"
         >
           {createOrderMutation.isPending ? (
             <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-const COLORS = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
+const COLORS = ["#16a34a", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -88,7 +88,7 @@ export default function PdvDashboard() {
     if (value >= ouro) return { label: "OURO", color: "text-yellow-400", bg: "bg-yellow-400" };
     if (value >= prata) return { label: "PRATA", color: "text-gray-300", bg: "bg-gray-300" };
     if (value >= bronze) return { label: "BRONZE", color: "text-orange-400", bg: "bg-orange-400" };
-    return { label: "ABAIXO", color: "text-red-400", bg: "bg-red-400" };
+    return { label: "ABAIXO", color: "text-green-500", bg: "bg-green-500" };
   };
 
   const handleCashFlow = () => {
@@ -219,8 +219,8 @@ export default function PdvDashboard() {
               <AreaChart data={chartDayData}>
                 <defs>
                   <linearGradient id="colorFat" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#16a34a" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -231,7 +231,7 @@ export default function PdvDashboard() {
                   labelStyle={{ color: "#fff" }}
                   formatter={(v: number) => [formatCurrency(v), "Faturamento"]}
                 />
-                <Area type="monotone" dataKey="faturamento" stroke="#ef4444" fill="url(#colorFat)" strokeWidth={2} />
+                <Area type="monotone" dataKey="faturamento" stroke="#16a34a" fill="url(#colorFat)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           )}
@@ -254,7 +254,7 @@ export default function PdvDashboard() {
                       contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: "8px" }}
                       formatter={(v: number) => [formatCurrency(v), "Faturamento"]}
                     />
-                    <Bar dataKey="faturamento" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="faturamento" fill="#16a34a" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
                 {/* Metas por vendedor */}
@@ -381,14 +381,14 @@ export default function PdvDashboard() {
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-white font-semibold flex items-center gap-2">
-              <Target className="w-5 h-5 text-red-400" />
+              <Target className="w-5 h-5 text-green-500" />
               Meta da Loja
             </h3>
             <span className="text-gray-400 text-sm">{formatCurrency(faturamento)} / {formatCurrency(metaLoja)}</span>
           </div>
           <div className="h-4 bg-gray-800 rounded-full overflow-hidden mb-3">
             <div
-              className="h-full bg-gradient-to-r from-red-600 to-red-400 rounded-full transition-all"
+              className="h-full bg-gradient-to-r from-green-700 to-green-500 rounded-full transition-all"
               style={{ width: `${Math.min(100, (faturamento / metaLoja) * 100)}%` }}
             />
           </div>
@@ -397,7 +397,7 @@ export default function PdvDashboard() {
               { key: "BRONZE", label: "Bronze", value: bronze, color: "text-orange-400", bg: "bg-orange-950/30 border-orange-900/50" },
               { key: "PRATA", label: "Prata", value: prata, color: "text-gray-300", bg: "bg-gray-800/50 border-gray-700" },
               { key: "OURO", label: "Ouro", value: ouro, color: "text-yellow-400", bg: "bg-yellow-950/30 border-yellow-900/50" },
-              { key: "META_LOJA", label: "Meta Loja", value: metaLoja, color: "text-red-400", bg: "bg-red-950/30 border-red-900/50" },
+              { key: "META_LOJA", label: "Meta Loja", value: metaLoja, color: "text-green-500", bg: "bg-green-950/30 border-green-900/50" },
             ].map(goal => {
               const reached = faturamento >= goal.value;
               return (
@@ -422,7 +422,7 @@ export default function PdvDashboard() {
             <h3 className="text-white font-semibold">Fluxo de Caixa</h3>
             <div className="flex items-center gap-2">
               <span className="text-gray-400 text-sm">
-                Saldo: <span className={`font-bold ${parseFloat(cashData?.saldo || "0") >= 0 ? "text-green-400" : "text-red-400"}`}>
+                Saldo: <span className={`font-bold ${parseFloat(cashData?.saldo || "0") >= 0 ? "text-green-400" : "text-green-500"}`}>
                   {formatCurrency(parseFloat(cashData?.saldo || "0"))}
                 </span>
               </span>
@@ -435,7 +435,7 @@ export default function PdvDashboard() {
               </button>
               <button
                 onClick={() => setShowCashModal("SANGRIA")}
-                className="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+                className="bg-green-700 hover:bg-green-800 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
               >
                 <Minus className="w-3.5 h-3.5" />
                 Sangria
@@ -450,13 +450,13 @@ export default function PdvDashboard() {
               {cashData?.entries?.slice(0, 5).map((entry: any) => (
                 <div key={entry.id} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-2">
                   <div>
-                    <span className={`text-xs font-semibold ${entry.tipo === "SUPRIMENTO" ? "text-green-400" : "text-red-400"}`}>
+                    <span className={`text-xs font-semibold ${entry.tipo === "SUPRIMENTO" ? "text-green-400" : "text-green-500"}`}>
                       {entry.tipo}
                     </span>
                     <span className="text-gray-300 text-sm ml-2">{entry.descricao}</span>
                     {entry.usuario && <span className="text-gray-500 text-xs ml-2">por {entry.usuario}</span>}
                   </div>
-                  <span className={`font-bold text-sm ${entry.tipo === "SUPRIMENTO" ? "text-green-400" : "text-red-400"}`}>
+                  <span className={`font-bold text-sm ${entry.tipo === "SUPRIMENTO" ? "text-green-400" : "text-green-500"}`}>
                     {entry.tipo === "SUPRIMENTO" ? "+" : "-"}{formatCurrency(parseFloat(entry.valor))}
                   </span>
                 </div>
@@ -479,14 +479,14 @@ export default function PdvDashboard() {
                 value={cashDesc}
                 onChange={(e) => setCashDesc(e.target.value)}
                 placeholder="Descrição"
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-red-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-green-600"
               />
               <input
                 type="text"
                 value={cashValor}
                 onChange={(e) => setCashValor(e.target.value)}
                 placeholder="Valor (R$)"
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-red-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-green-600"
               />
             </div>
             <div className="flex gap-3 mt-4">
@@ -494,7 +494,7 @@ export default function PdvDashboard() {
                 onClick={handleCashFlow}
                 disabled={addCashFlowMutation.isPending}
                 className={`flex-1 text-white font-semibold py-3 rounded-xl transition-colors ${
-                  showCashModal === "SUPRIMENTO" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"
+                  showCashModal === "SUPRIMENTO" ? "bg-green-600 hover:bg-green-700" : "bg-green-700 hover:bg-green-800"
                 }`}
               >
                 Confirmar

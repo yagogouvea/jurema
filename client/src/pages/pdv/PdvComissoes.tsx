@@ -18,7 +18,7 @@ const META_BG: Record<string, string> = {
   BRONZE: "bg-orange-950/40 border-orange-900/50",
 };
 
-const SELLER_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7"];
+const SELLER_COLORS = ["#16a34a", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7"];
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -102,14 +102,14 @@ export default function PdvComissoes() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
             />
             <span className="text-gray-600">até</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -122,7 +122,7 @@ export default function PdvComissoes() {
               step={0.5}
               value={taxaComissao}
               onChange={(e) => setTaxaComissao(parseFloat(e.target.value) || 0)}
-              className="w-20 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+              className="w-20 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
             />
             <span className="text-gray-400 text-sm">%</span>
           </div>
@@ -130,7 +130,7 @@ export default function PdvComissoes() {
 
         {isLoading ? (
           <div className="flex items-center justify-center h-40">
-            <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
           <>
@@ -140,7 +140,7 @@ export default function PdvComissoes() {
                 { label: "Faturamento Total", value: formatCurrency(summary?.totalFaturamento || 0), icon: DollarSign, color: "text-green-400" },
                 { label: "Total de Pedidos", value: String(summary?.totalPedidos || 0), icon: ShoppingBag, color: "text-blue-400" },
                 { label: "Total Comissões", value: formatCurrency(summary?.totalComissoes || 0), icon: TrendingUp, color: "text-yellow-400" },
-                { label: "Vendedores Ativos", value: String(sellers.filter(s => s.faturamento > 0).length), icon: Award, color: "text-red-400" },
+                { label: "Vendedores Ativos", value: String(sellers.filter(s => s.faturamento > 0).length), icon: Award, color: "text-green-500" },
               ].map((kpi) => (
                 <div key={kpi.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -276,7 +276,7 @@ export default function PdvComissoes() {
                     { key: "BRONZE", label: "Bronze", color: "text-orange-400", bg: "bg-orange-950/30 border-orange-900/50" },
                     { key: "PRATA", label: "Prata", color: "text-gray-300", bg: "bg-gray-800/60 border-gray-700/50" },
                     { key: "OURO", label: "Ouro", color: "text-yellow-400", bg: "bg-yellow-950/30 border-yellow-900/50" },
-                    { key: "META_LOJA", label: "Meta Loja", color: "text-red-400", bg: "bg-red-950/30 border-red-900/50" },
+                    { key: "META_LOJA", label: "Meta Loja", color: "text-green-500", bg: "bg-green-950/30 border-green-900/50" },
                   ].map(m => (
                     <div key={m.key} className={`border rounded-xl p-3 ${m.bg}`}>
                       <div className={`text-xs font-semibold ${m.color}`}>{m.label}</div>
