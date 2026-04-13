@@ -273,3 +273,7 @@
 
 ## Melhorias (v38)
 - [x] PDV redesign: identidade visual trocada de vermelho para verde gramado (#16a34a / green-700) em todos os 10 componentes PDV (PdvLayout, PdvLogin, PdvMain, PdvCheckout, PdvDashboard, PdvHistorico, PdvConfig, PdvComissoes, PdvNotificacoes, PdvVendedores, PdvConfiguracoes)
+
+## Bugs (v39)
+- [x] Admin login: senha redefinida para jurema@adm (hash bcrypt correto atualizado no banco)
+- [x] AdminPanel: setState durante render corrigido — navigate() substituído por <Redirect to="/admin/login" /> (wouter)

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Redirect } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Button } from "@/components/ui/button";
@@ -708,8 +708,7 @@ export default function AdminPanel() {
   }
 
   if (!admin) {
-    navigate("/admin/login");
-    return null;
+    return <Redirect to="/admin/login" />;
   }
 
   const tabs: { id: Tab; label: string; Icon: any }[] = [
