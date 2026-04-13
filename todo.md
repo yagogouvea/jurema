@@ -371,3 +371,6 @@
 - [x] Campo de taxa removido do painel do vendedor (PdvComissoes - SellerComissoes)
 - [x] Admin vê banner informativo com taxa atual + link para Configurações
 - [x] 111/111 testes passando
+
+## Bugs (v50)
+- [x] Checkout PDV: redirecionamento para WhatsApp removido — canal WHATSAPP é apenas indicativo, pedido finaliza dentro do sistema com botão único "Finalizar Venda"

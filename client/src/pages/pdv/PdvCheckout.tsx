@@ -111,13 +111,9 @@ export default function PdvCheckout({
   const previewMaquininha = !isNaN(previewVal) ? previewVal + previewTaxa : 0;
 
   const createOrderMutation = trpc.pdvOrders.create.useMutation({
-    onSuccess: (data) => {
-      if (canal === "WHATSAPP" && clienteTelefone) {
-        const msg = buildWhatsAppMessage(data.pedidoId);
-        const phone = clienteTelefone.replace(/\D/g, "");
-        const url = `https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`;
-        window.open(url, "_blank");
-      }
+    onSuccess: () => {
+      // Canal WHATSAPP é apenas indicativo de origem da venda
+      // O pedido é finalizado dentro do sistema, sem redirecionamento externo
       onSuccess();
     },
     onError: (err) => {
@@ -347,8 +343,8 @@ export default function PdvCheckout({
                 WhatsApp
               </button>
             </div>
-            {canal === "WHATSAPP" && !clienteTelefone && (
-              <p className="text-yellow-500 text-xs mt-2">⚠️ Preencha o telefone do cliente para gerar o link do WhatsApp automaticamente.</p>
+            {canal === "WHATSAPP" && (
+              <p className="text-gray-500 text-xs mt-2">Canal indicativo: a venda será registrada como originada pelo WhatsApp.</p>
             )}
           </div>
 
@@ -682,8 +678,6 @@ export default function PdvCheckout({
         >
           {createOrderMutation.isPending ? (
             <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : canal === "WHATSAPP" ? (
-            <><Send className="w-5 h-5" />Finalizar e Enviar WhatsApp</>
           ) : (
             <><CheckCircle className="w-5 h-5" />Finalizar Venda</>
           )}
