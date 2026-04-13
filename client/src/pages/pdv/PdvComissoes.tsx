@@ -5,7 +5,7 @@ import PdvLayout from "./PdvLayout";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from "recharts";
-import { Award, TrendingUp, DollarSign, ShoppingBag, Calendar, Download, Package } from "lucide-react";
+import { Award, TrendingUp, DollarSign, ShoppingBag, Calendar, Download, Package, Info } from "lucide-react";
 
 const META_COLORS: Record<string, string> = {
   OURO: "text-yellow-400",
@@ -26,6 +26,8 @@ function formatCurrency(value: number): string {
 
 // ============================================================
 // VISÃO ADMIN: relatório completo de todos os vendedores
+// A taxa de comissão é lida do banco (sem campo editável aqui)
+// Para alterar a taxa, use Configurações > Comissões
 // ============================================================
 function AdminComissoes() {
   const [startDate, setStartDate] = useState(() => {
@@ -33,19 +35,20 @@ function AdminComissoes() {
     return d.toISOString().split("T")[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [taxaComissao, setTaxaComissao] = useState(5);
 
+  // Sem taxaComissao no input — a comissão é calculada pelo valor registrado em cada item no momento da venda
   const { data, isLoading } = trpc.pdvComissoes.relatorio.useQuery(
-    { startDate, endDate, taxaComissao },
+    { startDate, endDate },
   );
 
   const sellers = data?.sellers || [];
   const summary = data?.summary;
   const goals = data?.goals || {};
+  const taxaAtual = summary?.taxaAtual ?? 0.5;
 
   function exportCSV() {
     if (!sellers.length) return;
-    const header = "Vendedor,Pedidos,Peças,Faturamento,Atacado,Varejo,Ticket Médio,Comissão (R$/peça),Meta\n";
+    const header = "Vendedor,Pedidos,Peças,Faturamento,Atacado,Varejo,Ticket Médio,Comissão,Meta\n";
     const rows = sellers.map(s =>
       `${s.sellerName},${s.totalPedidos},${s.totalPecas},${s.faturamento.toFixed(2)},${s.faturamentoAtacado.toFixed(2)},${s.faturamentoVarejo.toFixed(2)},${s.ticketMedio.toFixed(2)},${s.comissao.toFixed(2)},${s.metaAtingida || "Sem meta"}`
     ).join("\n");
@@ -76,6 +79,16 @@ function AdminComissoes() {
         </button>
       </div>
 
+      {/* Info: taxa atual + link para configurações */}
+      <div className="flex items-center gap-2 bg-green-950/30 border border-green-900/40 rounded-xl px-4 py-2.5 text-sm">
+        <Info className="w-4 h-4 text-green-400 flex-shrink-0" />
+        <span className="text-green-300">
+          Taxa de comissão atual: <strong>{formatCurrency(taxaAtual)}/peça</strong>
+          {" "}— cada venda registra o valor vigente no momento da venda.
+          Para alterar, acesse <strong>Configurações &gt; Comissões</strong>.
+        </span>
+      </div>
+
       {/* Filters */}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
@@ -85,17 +98,6 @@ function AdminComissoes() {
           <span className="text-gray-600">até</span>
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
             className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600" />
-        </div>
-        <div className="flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-gray-500" />
-          <label className="text-gray-400 text-sm">Valor por peça:</label>
-          <span className="text-gray-400 text-sm">R$</span>
-          <input
-            type="number" min={0} step={0.5} value={taxaComissao}
-            onChange={(e) => setTaxaComissao(parseFloat(e.target.value) || 0)}
-            className="w-20 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
-          />
-          <span className="text-gray-400 text-sm">/peça</span>
         </div>
       </div>
 
@@ -169,7 +171,7 @@ function AdminComissoes() {
                       <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Faturamento</th>
                       <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Atacado</th>
                       <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Varejo</th>
-                      <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Comissão (R${taxaComissao}/pç)</th>
+                      <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Comissão</th>
                       <th className="text-center text-gray-400 text-xs font-semibold px-4 py-3">Meta</th>
                     </tr>
                   </thead>
@@ -244,6 +246,7 @@ function AdminComissoes() {
 
 // ============================================================
 // VISÃO VENDEDOR: só vê suas próprias comissões
+// Sem campo de taxa — a comissão é calculada pelo valor registrado no momento da venda
 // ============================================================
 function SellerComissoes() {
   const { seller } = usePdvAuth();
@@ -252,10 +255,9 @@ function SellerComissoes() {
     return d.toISOString().split("T")[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [taxaComissao, setTaxaComissao] = useState(5);
 
   const { data, isLoading } = trpc.pdvComissoes.minhasComissoes.useQuery(
-    { startDate, endDate, taxaComissao },
+    { startDate, endDate },
   );
 
   return (
@@ -265,7 +267,7 @@ function SellerComissoes() {
         <p className="text-gray-400 text-sm mt-0.5">Olá, {seller?.name}! Veja suas vendas e comissões por peça.</p>
       </div>
 
-      {/* Filters */}
+      {/* Filters — apenas período, sem campo de taxa */}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-gray-500" />
@@ -274,14 +276,6 @@ function SellerComissoes() {
           <span className="text-gray-600">até</span>
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
             className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600" />
-        </div>
-        <div className="flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-gray-500" />
-          <label className="text-gray-400 text-sm">R$</label>
-          <input type="number" min={0} step={0.5} value={taxaComissao}
-            onChange={(e) => setTaxaComissao(parseFloat(e.target.value) || 0)}
-            className="w-20 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600" />
-          <span className="text-gray-400 text-sm">/peça</span>
         </div>
       </div>
 
@@ -335,11 +329,46 @@ function SellerComissoes() {
                     contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "12px" }}
                     labelStyle={{ color: "#fff" }}
                     labelFormatter={(v) => new Date(v + "T00:00:00").toLocaleDateString("pt-BR")}
-                    formatter={(value: any, name: string) => [value, name === "pecas" ? "Peças" : "Faturamento"]}
+                    formatter={(value: any, name: string) => [value, name === "pecas" ? "Peças" : name === "comissao" ? "Comissão" : "Faturamento"]}
                   />
                   <Bar dataKey="pecas" name="Peças" fill="#16a34a" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Daily table */}
+          {data.daily.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-800">
+                <h3 className="text-white font-semibold">Detalhamento Diário</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-800">
+                      <th className="text-left text-gray-400 text-xs font-semibold px-4 py-3">Data</th>
+                      <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Pedidos</th>
+                      <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Peças</th>
+                      <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Faturamento</th>
+                      <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Comissão</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.daily.map((d: any) => (
+                      <tr key={d.dia} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                        <td className="px-4 py-3 text-white text-sm">
+                          {new Date(d.dia + "T00:00:00").toLocaleDateString("pt-BR")}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-300 text-sm">{d.pedidos}</td>
+                        <td className="px-4 py-3 text-right text-green-400 font-bold text-sm">{d.pecas}</td>
+                        <td className="px-4 py-3 text-right text-white text-sm">{formatCurrency(d.faturamento)}</td>
+                        <td className="px-4 py-3 text-right text-yellow-400 font-semibold text-sm">{formatCurrency(d.comissao)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>
@@ -349,14 +378,13 @@ function SellerComissoes() {
 }
 
 // ============================================================
-// COMPONENTE PRINCIPAL: decide qual visão mostrar
+// ENTRY POINT: redireciona para visão correta baseada no role
 // ============================================================
 export default function PdvComissoes() {
-  const { isAdmin } = usePdvAuth();
-
+  const { seller } = usePdvAuth();
   return (
     <PdvLayout>
-      {isAdmin ? <AdminComissoes /> : <SellerComissoes />}
+      {seller?.role === "admin" ? <AdminComissoes /> : <SellerComissoes />}
     </PdvLayout>
   );
 }

@@ -361,3 +361,13 @@
 - [x] Consistência visual mantida em todo o site (loja + PDV)
 - [x] Scrollbar, animações e hover effects atualizados para verde
 - [x] 111/111 testes passando
+
+## Comissão por Peça (v49)
+- [x] Valor padrão R$0,50/peça configurado no banco (pdv_config.comissao_peca = 0.50)
+- [x] Coluna comissaoUnitaria adicionada em pdv_order_items (registra valor vigente no momento da venda)
+- [x] Vendas já feitas NÃO são retroativas (cada item guarda o valor da época)
+- [x] Itens Sofia registram comissaoUnitaria = 0 (não geram comissão)
+- [x] Alteração de comissão exclusiva do admin via Configurações > Comissões
+- [x] Campo de taxa removido do painel do vendedor (PdvComissoes - SellerComissoes)
+- [x] Admin vê banner informativo com taxa atual + link para Configurações
+- [x] 111/111 testes passando

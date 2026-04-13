@@ -26,12 +26,12 @@ async function requirePdvAdmin(ctx: any) {
 
 export const pdvComissoesRouter = router({
   // Relatório de comissões por vendedor — conta por PEÇA (quantidade de itens vendidos)
-  // Exclui itens Sofia (oi.isSofia=1) da comissão — agora por ITEM, não por pedido
+  // Usa comissaoUnitaria registrada no momento da venda (sem retroatividade)
+  // Exclui itens Sofia (oi.isSofia=1) da comissão — por ITEM, não por pedido
   relatorio: publicProcedure
     .input(z.object({
       startDate: z.string(),
       endDate: z.string(),
-      taxaComissao: z.number().min(0).max(100).default(5),
     }))
     .query(async ({ input, ctx }) => {
       await requirePdvAdmin(ctx);
@@ -39,7 +39,7 @@ export const pdvComissoesRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
       try {
-        // Resumo por vendedor — conta PEÇAS não-Sofia (oi.isSofia = 0)
+        // Resumo por vendedor — comissão = SUM(quantidade * comissaoUnitaria) para itens não-Sofia
         const [sellerRows] = await db.execute(
           `SELECT 
             s.id as sellerId,
@@ -48,6 +48,7 @@ export const pdvComissoesRouter = router({
             COUNT(DISTINCT o.id) as totalPedidos,
             COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
             COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+            COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as comissao,
             COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 AND o.regime = 'ATACADO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoAtacado,
             COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 AND o.regime = 'VAREJO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoVarejo,
             COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 AND o.canal = 'BALCAO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoBalcao,
@@ -71,7 +72,8 @@ export const pdvComissoesRouter = router({
             DATE(o.createdAt) as dia,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as pecas,
-            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as comissao
           FROM pdv_orders o
           JOIN pdv_sellers s ON s.id = o.sellerId
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
@@ -89,22 +91,26 @@ export const pdvComissoesRouter = router({
         const goals: Record<string, number> = {};
         (goalRows as any[]).forEach((g: any) => { goals[g.key] = parseFloat(g.value); });
 
+        // Comissão atual configurada (para exibição na UI)
+        const [cfgRows] = await db.execute("SELECT value FROM pdv_config WHERE `key` = 'comissao_peca' LIMIT 1");
+        const taxaAtual = parseFloat((cfgRows as any[])[0]?.value || '0.50');
+
         await db.end();
 
         const sellers = (sellerRows as any[]).map(s => {
           const totalPecas = parseInt(s.totalPecas) || 0;
           const faturamento = parseFloat(s.faturamento);
+          const comissao = parseFloat(s.comissao) || 0;
           return {
             ...s,
             totalPecas,
             faturamento,
+            comissao,
             faturamentoAtacado: parseFloat(s.faturamentoAtacado),
             faturamentoVarejo: parseFloat(s.faturamentoVarejo),
             faturamentoBalcao: parseFloat(s.faturamentoBalcao),
             faturamentoWhatsapp: parseFloat(s.faturamentoWhatsapp),
             ticketMedio: parseFloat(s.ticketMedio),
-            // Comissão por PEÇA: totalPecas * (taxaComissao em R$)
-            comissao: totalPecas * input.taxaComissao,
             metaAtingida: faturamento >= (goals.BRONZE || 0)
               ? faturamento >= (goals.OURO || 0)
                 ? "OURO"
@@ -129,6 +135,7 @@ export const pdvComissoesRouter = router({
             ...d,
             pecas: parseInt(d.pecas) || 0,
             faturamento: parseFloat(d.faturamento),
+            comissao: parseFloat(d.comissao) || 0,
           })),
           goals,
           summary: {
@@ -136,7 +143,7 @@ export const pdvComissoesRouter = router({
             totalPecas,
             totalComissoes,
             totalPedidos,
-            taxaComissao: input.taxaComissao,
+            taxaAtual,
             periodo: { startDate: input.startDate, endDate: input.endDate },
           },
         };
@@ -147,12 +154,11 @@ export const pdvComissoesRouter = router({
       }
     }),
 
-  // Minhas comissões (para vendedor comum — só vê as próprias)
+  // Minhas comissões (para vendedor comum — só vê as próprias, sem taxa configurável)
   minhasComissoes: publicProcedure
     .input(z.object({
       startDate: z.string(),
       endDate: z.string(),
-      taxaComissao: z.number().min(0).max(100).default(5),
     }))
     .query(async ({ input, ctx }) => {
       const seller = await requirePdvAuth(ctx);
@@ -161,11 +167,13 @@ export const pdvComissoesRouter = router({
 
       try {
         // Peças vendidas pelo vendedor (excluindo itens Sofia por item)
+        // Comissão calculada pelo valor registrado no momento da venda (sem retroatividade)
         const [rows] = await db.execute(
           `SELECT 
             COUNT(DISTINCT o.id) as totalPedidos,
             COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
             COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+            COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as comissao,
             COUNT(CASE WHEN o.status = 'CANCELADO' THEN 1 END) as pedidosCancelados
           FROM pdv_orders o
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND o.status != 'CANCELADO'
@@ -181,7 +189,8 @@ export const pdvComissoesRouter = router({
             DATE(o.createdAt) as dia,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as pecas,
-            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as comissao
           FROM pdv_orders o
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.sellerId = ?
@@ -204,13 +213,14 @@ export const pdvComissoesRouter = router({
         const data = (rows as any[])[0];
         const totalPecas = parseInt(data.totalPecas) || 0;
         const faturamento = parseFloat(data.faturamento) || 0;
+        const comissao = parseFloat(data.comissao) || 0;
 
         return {
           sellerName: seller.name,
           totalPedidos: parseInt(data.totalPedidos) || 0,
           totalPecas,
           faturamento,
-          comissao: totalPecas * input.taxaComissao,
+          comissao,
           pedidosCancelados: parseInt(data.pedidosCancelados) || 0,
           metaAtingida: faturamento >= (goals.BRONZE || 0)
             ? faturamento >= (goals.OURO || 0)
@@ -223,9 +233,9 @@ export const pdvComissoesRouter = router({
             ...d,
             pecas: parseInt(d.pecas) || 0,
             faturamento: parseFloat(d.faturamento),
+            comissao: parseFloat(d.comissao) || 0,
           })),
           goals,
-          taxaComissao: input.taxaComissao,
         };
       } catch (err) {
         if (err instanceof TRPCError) throw err;
@@ -254,7 +264,8 @@ export const pdvComissoesRouter = router({
           s.name as sellerName,
           COUNT(DISTINCT o.id) as totalPedidos,
           COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
-          COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento
+          COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+          COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as comissao
         FROM pdv_sellers s
         LEFT JOIN pdv_orders o ON o.sellerId = s.id ${dateFilter}
         LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND o.status != 'CANCELADO'
@@ -268,6 +279,7 @@ export const pdvComissoesRouter = router({
         ...r,
         totalPecas: parseInt(r.totalPecas) || 0,
         faturamento: parseFloat(r.faturamento),
+        comissao: parseFloat(r.comissao) || 0,
       }));
     }),
 });

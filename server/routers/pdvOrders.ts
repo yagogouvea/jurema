@@ -83,6 +83,12 @@ export const pdvOrdersRouter = router({
       try {
         const pedidoId = generatePedidoId();
         
+        // Buscar comissão vigente no momento da venda (para registrar por item — sem retroatividade)
+        const [cfgRows] = await db.execute(
+          "SELECT value FROM pdv_config WHERE `key` = 'comissao_peca' LIMIT 1"
+        );
+        const comissaoUnitaria = parseFloat((cfgRows as any[])[0]?.value || '0.50');
+        
         // Determinar isSofia do pedido: se QUALQUER item for Sofia, o pedido tem Sofia
         // Mas agora o controle é por item, então isSofia no pedido = true se TODOS os itens forem Sofia
         const hasSofiaItems = input.items.some(item => item.isSofia);
@@ -103,16 +109,18 @@ export const pdvOrdersRouter = router({
           ]
         );
         
-        // Insert items (com isSofia por item)
+        // Insert items (com isSofia por item e comissaoUnitaria vigente no momento da venda)
         for (const item of input.items) {
+          // Itens Sofia não geram comissão — registrar 0 para eles
+          const comissaoItem = item.isSofia ? 0 : comissaoUnitaria;
           await db.execute(
             `INSERT INTO pdv_order_items 
-             (pedidoId, productId, linha, modelo, time, descricao, tamanho, quantidade, precoUnitario, totalItem, isSofia)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (pedidoId, productId, linha, modelo, time, descricao, tamanho, quantidade, precoUnitario, totalItem, isSofia, comissaoUnitaria)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               pedidoId, item.productId || null, item.linha || null, item.modelo || null,
               item.time, item.descricao || null, item.tamanho, item.quantidade,
-              item.precoUnitario, item.totalItem, item.isSofia ? 1 : 0
+              item.precoUnitario, item.totalItem, item.isSofia ? 1 : 0, comissaoItem
             ]
           );
           
