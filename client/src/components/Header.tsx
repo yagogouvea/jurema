@@ -54,12 +54,12 @@ function CatalogDropdown() {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-[#111111] border border-[#C8102E]/30 rounded-xl shadow-2xl z-[100] overflow-hidden">
+        <div className="absolute top-full left-0 mt-1 w-72 bg-[#111111] border border-[#1B8C3D]/30 rounded-xl shadow-2xl z-[100] overflow-hidden">
           <div className="p-2">
             <Link
               href="/produtos"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-[#C8102E] hover:bg-[#C8102E]/10 rounded-lg transition-colors uppercase tracking-wider"
+              className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-[#1B8C3D] hover:bg-[#1B8C3D]/10 rounded-lg transition-colors uppercase tracking-wider"
             >
               Ver Todos os Produtos
             </Link>
@@ -100,9 +100,9 @@ export default function Header() {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[#0D0D0D] border-b border-[#C8102E]/30">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-[#0D0D0D] border-b border-[#1B8C3D]/30">
       {/* Top bar — desktop only */}
-      <div className="hidden md:flex items-center justify-between px-6 py-1 bg-[#C8102E] text-white text-xs">
+      <div className="hidden md:flex items-center justify-between px-6 py-1 bg-[#1B8C3D] text-white text-xs">
         <span className="font-medium tracking-wider">JUREMA SPORT — CAMISAS OFICIAIS DE TIMES E SELEÇÕES</span>
         <div className="flex items-center gap-3">
           <a href="https://instagram.com/jumerasport" target="_blank" rel="noopener noreferrer" className="hover:opacity-70 transition-opacity flex items-center gap-1">
@@ -124,7 +124,7 @@ export default function Header() {
         <Link href="/" className="flex items-center gap-2 flex-shrink-0" onClick={() => setMobileOpen(false)}>
           <img src={LOGO_URL} alt="Jurema Sport" className="h-10 w-10 md:h-12 md:w-12 object-contain rounded-full" />
           <span className="font-['Bebas_Neue'] text-xl md:text-2xl text-white tracking-widest">
-            JUREMA <span className="text-[#C8102E]">SPORT</span>
+            JUREMA <span className="text-[#1B8C3D]">SPORT</span>
           </span>
         </Link>
 
@@ -133,7 +133,7 @@ export default function Header() {
           <Link
             href="/"
             className={`px-4 py-2 text-sm font-semibold tracking-wider transition-colors rounded-md ${
-              location === "/" ? "text-[#C8102E] bg-[#C8102E]/10" : "text-gray-300 hover:text-white hover:bg-white/5"
+              location === "/" ? "text-[#1B8C3D] bg-[#1B8C3D]/10" : "text-gray-300 hover:text-white hover:bg-white/5"
             }`}
           >
             INÍCIO
@@ -151,7 +151,7 @@ export default function Header() {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Buscar camisas..."
-                className="w-40 lg:w-52 h-8 bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600 text-xs pl-8 focus:border-[#C8102E]"
+                className="w-40 lg:w-52 h-8 bg-[#1A1A1A] border-[#333] text-white placeholder:text-gray-600 text-xs pl-8 focus:border-[#1B8C3D]"
               />
             </div>
           </form>
@@ -175,7 +175,7 @@ export default function Header() {
           >
             <ShoppingCart size={19} />
             {itemCount > 0 && (
-              <Badge className="absolute -top-0.5 -right-0.5 h-4 w-4 flex items-center justify-center p-0 bg-[#C8102E] text-white text-[9px] rounded-full border-0 font-bold">
+              <Badge className="absolute -top-0.5 -right-0.5 h-4 w-4 flex items-center justify-center p-0 bg-[#1B8C3D] text-white text-[9px] rounded-full border-0 font-bold">
                 {itemCount > 9 ? '9+' : itemCount}
               </Badge>
             )}
@@ -205,9 +205,9 @@ export default function Header() {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Buscar camisas, times, seleções..."
-              className="flex-1 h-9 bg-[#1A1A1A] border-[#C8102E]/50 text-white placeholder:text-gray-600 text-sm focus:border-[#C8102E]"
+              className="flex-1 h-9 bg-[#1A1A1A] border-[#1B8C3D]/50 text-white placeholder:text-gray-600 text-sm focus:border-[#1B8C3D]"
             />
-            <Button type="submit" className="h-9 bg-[#C8102E] hover:bg-red-700 text-white px-3">
+            <Button type="submit" className="h-9 bg-[#1B8C3D] hover:bg-green-700 text-white px-3">
               <Search size={16} />
             </Button>
           </form>
@@ -232,7 +232,7 @@ export default function Header() {
               className="flex items-center justify-between w-full px-3 py-3 text-sm font-semibold text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
             >
               <span>CATÁLOGO</span>
-              <ChevronDown size={16} className={`transition-transform text-[#C8102E] ${mobileCatOpen ? "rotate-180" : ""}`} />
+              <ChevronDown size={16} className={`transition-transform text-[#1B8C3D] ${mobileCatOpen ? "rotate-180" : ""}`} />
             </button>
 
             {mobileCatOpen && (
@@ -240,7 +240,7 @@ export default function Header() {
                 <Link
                   href="/produtos"
                   onClick={() => setMobileOpen(false)}
-                  className="flex items-center px-4 py-2.5 text-xs font-bold text-[#C8102E] border-b border-[#1E1E1E]"
+                  className="flex items-center px-4 py-2.5 text-xs font-bold text-[#1B8C3D] border-b border-[#1E1E1E]"
                 >
                   Ver Todos os Produtos →
                 </Link>
@@ -260,19 +260,19 @@ export default function Header() {
 
           {/* Social + Login */}
           <div className="flex items-center gap-3 px-4 py-3 border-t border-[#1E1E1E]">
-            <a href="https://instagram.com/jumerasport" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-[#C8102E] transition-colors">
+            <a href="https://instagram.com/jumerasport" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-[#1B8C3D] transition-colors">
               <Instagram size={20} />
             </a>
-            <a href="https://facebook.com/jumerasport" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-[#C8102E] transition-colors">
+            <a href="https://facebook.com/jumerasport" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-[#1B8C3D] transition-colors">
               <Facebook size={20} />
             </a>
-            <a href="https://tiktok.com/@jumerasport" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-[#C8102E] transition-colors">
+            <a href="https://tiktok.com/@jumerasport" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-[#1B8C3D] transition-colors">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.76a4.85 4.85 0 01-1.01-.07z"/></svg>
             </a>
             <Link
               href="/login"
               onClick={() => setMobileOpen(false)}
-              className="ml-auto flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-[#C8102E] hover:bg-[#a00d24] rounded-lg transition-colors"
+              className="ml-auto flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-[#1B8C3D] hover:bg-[#15722F] rounded-lg transition-colors"
             >
               <User size={14} />
               ENTRAR

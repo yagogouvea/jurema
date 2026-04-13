@@ -44,39 +44,39 @@
 
 :root {
   --radius: 0.5rem;
-  /* Jumera Sport Dark Theme */
+  /* Jumera Sport Dark Theme — Verde & Preto (Futebol) */
   --background: oklch(0.08 0 0);
   --foreground: oklch(0.97 0 0);
   --card: oklch(0.12 0 0);
   --card-foreground: oklch(0.97 0 0);
   --popover: oklch(0.12 0 0);
   --popover-foreground: oklch(0.97 0 0);
-  --primary: oklch(0.45 0.22 25);
+  --primary: oklch(0.55 0.18 145);
   --primary-foreground: oklch(0.97 0 0);
   --secondary: oklch(0.18 0 0);
   --secondary-foreground: oklch(0.97 0 0);
   --muted: oklch(0.18 0 0);
   --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.45 0.22 25);
+  --accent: oklch(0.55 0.18 145);
   --accent-foreground: oklch(0.97 0 0);
   --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.97 0 0);
   --border: oklch(0.22 0 0);
   --input: oklch(0.18 0 0);
-  --ring: oklch(0.45 0.22 25);
-  --chart-1: oklch(0.45 0.22 25);
+  --ring: oklch(0.55 0.18 145);
+  --chart-1: oklch(0.55 0.18 145);
   --chart-2: oklch(0.6 0.15 200);
   --chart-3: oklch(0.7 0.15 100);
   --chart-4: oklch(0.5 0.2 300);
   --chart-5: oklch(0.65 0.18 50);
   --sidebar: oklch(0.10 0 0);
   --sidebar-foreground: oklch(0.97 0 0);
-  --sidebar-primary: oklch(0.45 0.22 25);
+  --sidebar-primary: oklch(0.55 0.18 145);
   --sidebar-primary-foreground: oklch(0.97 0 0);
   --sidebar-accent: oklch(0.18 0 0);
   --sidebar-accent-foreground: oklch(0.97 0 0);
   --sidebar-border: oklch(0.22 0 0);
-  --sidebar-ring: oklch(0.45 0.22 25);
+  --sidebar-ring: oklch(0.55 0.18 145);
 }
 
 /* Dark theme is the default for Jumera Sport */
@@ -106,11 +106,11 @@
   }
 }
 
-/* Scrollbar personalizada */
+/* Scrollbar personalizada — verde */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #0D0D0D; }
-::-webkit-scrollbar-thumb { background: #C8102E; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #a00e26; }
+::-webkit-scrollbar-thumb { background: #1B8C3D; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #15722F; }
 
 /* Animações */
 @keyframes fadeInUp {
@@ -119,18 +119,18 @@
 }
 .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
 
-@keyframes pulse-red {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(200, 16, 46, 0.4); }
-  50% { box-shadow: 0 0 0 10px rgba(200, 16, 46, 0); }
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(27, 140, 61, 0.4); }
+  50% { box-shadow: 0 0 0 10px rgba(27, 140, 61, 0); }
 }
-.animate-pulse-red { animation: pulse-red 2s infinite; }
+.animate-pulse-red { animation: pulse-green 2s infinite; }
 
 .product-card {
   transition: all 0.3s ease;
 }
 .product-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 40px rgba(200, 16, 46, 0.3);
+  box-shadow: 0 8px 40px rgba(27, 140, 61, 0.3);
 }
 
 @layer components {

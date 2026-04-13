@@ -185,12 +185,12 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
                   <img src={url} alt="" className="w-full h-full object-cover" />
                   <button
                     onClick={() => removeImage(idx)}
-                    className="absolute top-1 right-1 bg-red-600 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1 right-1 bg-green-600 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <X size={12} className="text-white" />
                   </button>
                   {idx === 0 && (
-                    <span className="absolute bottom-1 left-1 bg-[#C8102E] text-white text-[9px] px-1.5 py-0.5 rounded font-bold">CAPA</span>
+                    <span className="absolute bottom-1 left-1 bg-[#1B8C3D] text-white text-[9px] px-1.5 py-0.5 rounded font-bold">CAPA</span>
                   )}
                 </div>
               ))}
@@ -198,10 +198,10 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="aspect-square rounded-lg border-2 border-dashed border-[#333] hover:border-[#C8102E] flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-[#C8102E] transition-colors"
+                className="aspect-square rounded-lg border-2 border-dashed border-[#333] hover:border-[#1B8C3D] flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-[#1B8C3D] transition-colors"
               >
                 {uploading ? (
-                  <div className="w-5 h-5 border-2 border-[#C8102E] border-t-transparent rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-[#1B8C3D] border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
                     <Upload size={18} />
@@ -228,7 +228,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
               value={form.name}
               onChange={e => setForm(p => ({ ...p, name: e.target.value, slug: generateSlug(e.target.value) }))}
               placeholder="Ex: Camisa Flamengo 2026 Home"
-              className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]"
+              className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#1B8C3D]"
             />
           </div>
 
@@ -239,7 +239,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
               value={form.team}
               onChange={e => setForm(p => ({ ...p, team: e.target.value }))}
               placeholder="Ex: Flamengo, Brasil, Argentina..."
-              className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]"
+              className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#1B8C3D]"
             />
           </div>
 
@@ -251,7 +251,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
                 value={form.price}
                 onChange={e => setForm(p => ({ ...p, price: e.target.value }))}
                 placeholder="80,00"
-                className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]"
+                className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#1B8C3D]"
               />
             </div>
             <div>
@@ -260,7 +260,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
                 value={form.originalPrice}
                 onChange={e => setForm(p => ({ ...p, originalPrice: e.target.value }))}
                 placeholder="110,00"
-                className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]"
+                className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#1B8C3D]"
               />
             </div>
           </div>
@@ -274,7 +274,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
               </SelectTrigger>
               <SelectContent className="bg-[#1A1A1A] border-[#333]">
                 {CATEGORIES.map(c => (
-                  <SelectItem key={c.value} value={c.value} className="text-gray-300 focus:bg-[#C8102E] focus:text-white">
+                  <SelectItem key={c.value} value={c.value} className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">
                     {c.label}
                   </SelectItem>
                 ))}
@@ -292,8 +292,8 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
                   onClick={() => setForm(p => ({ ...p, gender: g }))}
                   className={`py-2 rounded-lg text-sm font-semibold border transition-all capitalize ${
                     form.gender === g
-                      ? "bg-[#C8102E] border-[#C8102E] text-white"
-                      : "bg-[#1A1A1A] border-[#333] text-gray-400 hover:border-[#C8102E]/50"
+                      ? "bg-[#1B8C3D] border-[#1B8C3D] text-white"
+                      : "bg-[#1A1A1A] border-[#333] text-gray-400 hover:border-[#1B8C3D]/50"
                   }`}
                 >
                   {g}
@@ -309,7 +309,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
               value={form.reference}
               onChange={e => setForm(p => ({ ...p, reference: e.target.value }))}
               placeholder="Ex: CAM-FLA-2025-01"
-              className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]"
+              className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#1B8C3D]"
             />
           </div>
 
@@ -321,7 +321,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
               onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
               rows={3}
               placeholder="Descrição do produto..."
-              className="w-full bg-[#1A1A1A] border border-[#333] text-white rounded-lg p-3 text-sm resize-none focus:outline-none focus:border-[#C8102E]"
+              className="w-full bg-[#1A1A1A] border border-[#333] text-white rounded-lg p-3 text-sm resize-none focus:outline-none focus:border-[#1B8C3D]"
             />
           </div>
 
@@ -364,8 +364,8 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
                   }}
                   className={`py-2 rounded-lg text-sm font-semibold border transition-all ${
                     (form.stock || []).includes(size)
-                      ? "bg-[#C8102E] border-[#C8102E] text-white"
-                      : "bg-[#1A1A1A] border-[#333] text-gray-400 hover:border-[#C8102E]/50"
+                      ? "bg-[#1B8C3D] border-[#1B8C3D] text-white"
+                      : "bg-[#1A1A1A] border-[#333] text-gray-400 hover:border-[#1B8C3D]/50"
                   }`}
                 >
                   {size}
@@ -383,9 +383,9 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
                   <SelectValue placeholder="Selecione uma seção" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#1A1A1A] border-[#333]">
-                  <SelectItem value="destaque" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">PRODUTOS EM DESTAQUE</SelectItem>
-                  <SelectItem value="mais-vendidos" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">MAIS VENDIDOS</SelectItem>
-                  <SelectItem value="nova-colecao" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">NOVA COLEÇÃO</SelectItem>
+                  <SelectItem value="destaque" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">PRODUTOS EM DESTAQUE</SelectItem>
+                  <SelectItem value="mais-vendidos" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">MAIS VENDIDOS</SelectItem>
+                  <SelectItem value="nova-colecao" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">NOVA COLEÇÃO</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -400,7 +400,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
           <Button
             onClick={handleSubmit}
             disabled={isPending}
-            className="flex-1 bg-[#C8102E] hover:bg-red-700 text-white font-bold"
+            className="flex-1 bg-[#1B8C3D] hover:bg-green-700 text-white font-bold"
           >
             {isPending ? "SALVANDO..." : product ? "SALVAR" : "CRIAR"}
           </Button>
@@ -444,7 +444,7 @@ function ProductsTab() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar produto..."
-            className="bg-[#1A1A1A] border-[#333] text-white pl-9 focus:border-[#C8102E]"
+            className="bg-[#1A1A1A] border-[#333] text-white pl-9 focus:border-[#1B8C3D]"
           />
         </div>
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -452,9 +452,9 @@ function ProductsTab() {
             <SelectValue placeholder="Categoria" />
           </SelectTrigger>
           <SelectContent className="bg-[#1A1A1A] border-[#333]">
-            <SelectItem value="all" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Todas</SelectItem>
+            <SelectItem value="all" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">Todas</SelectItem>
             {CATEGORIES.map(c => (
-              <SelectItem key={c.value} value={c.value} className="text-gray-300 focus:bg-[#C8102E] focus:text-white">{c.label}</SelectItem>
+              <SelectItem key={c.value} value={c.value} className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">{c.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -463,15 +463,15 @@ function ProductsTab() {
             <SelectValue placeholder="Seção" />
           </SelectTrigger>
           <SelectContent className="bg-[#1A1A1A] border-[#333]">
-            <SelectItem value="all" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Todas</SelectItem>
-            <SelectItem value="destaque" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">PRODUTOS EM DESTAQUE</SelectItem>
-            <SelectItem value="mais-vendidos" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">MAIS VENDIDOS</SelectItem>
-            <SelectItem value="nova-colecao" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">NOVA COLEÇÃO</SelectItem>
+            <SelectItem value="all" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">Todas</SelectItem>
+            <SelectItem value="destaque" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">PRODUTOS EM DESTAQUE</SelectItem>
+            <SelectItem value="mais-vendidos" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">MAIS VENDIDOS</SelectItem>
+            <SelectItem value="nova-colecao" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">NOVA COLEÇÃO</SelectItem>
           </SelectContent>
         </Select>
         <Button
           onClick={() => { setEditingProduct(null); setShowForm(true); }}
-          className="bg-[#C8102E] hover:bg-red-700 text-white gap-2 whitespace-nowrap"
+          className="bg-[#1B8C3D] hover:bg-green-700 text-white gap-2 whitespace-nowrap"
         >
           <Plus size={16} /> Novo Produto
         </Button>
@@ -523,7 +523,7 @@ function ProductsTab() {
                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                   <button
                     onClick={() => { setEditingProduct(p); setShowForm(true); }}
-                    className="bg-[#C8102E] text-white rounded-lg p-2 hover:bg-red-700"
+                    className="bg-[#1B8C3D] text-white rounded-lg p-2 hover:bg-green-700"
                   >
                     <Edit2 size={16} />
                   </button>
@@ -535,7 +535,7 @@ function ProductsTab() {
                   </button>
                   <button
                     onClick={() => { if (confirm("Remover produto?")) deleteMutation.mutate({ id: p.id }); }}
-                    className="bg-[#1A1A1A] text-red-400 rounded-lg p-2 hover:bg-red-900/30"
+                    className="bg-[#1A1A1A] text-green-400 rounded-lg p-2 hover:bg-green-900/30"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -544,7 +544,7 @@ function ProductsTab() {
               {/* Info */}
               <div className="p-2.5">
                 <p className="text-white text-xs font-semibold truncate leading-tight">{p.name}</p>
-                <p className="text-[#C8102E] text-sm font-bold mt-0.5">R$ {parseFloat(String(p.price)).toFixed(2).replace(".", ",")}</p>
+                <p className="text-[#1B8C3D] text-sm font-bold mt-0.5">R$ {parseFloat(String(p.price)).toFixed(2).replace(".", ",")}</p>
                 {p.team && <p className="text-gray-600 text-[10px] truncate">{p.team}</p>}
               </div>
             </div>
@@ -589,7 +589,7 @@ function OrdersTab() {
     processing: "text-purple-400 bg-purple-500/10 border-purple-500/30",
     shipped: "text-indigo-400 bg-indigo-500/10 border-indigo-500/30",
     delivered: "text-green-400 bg-green-500/10 border-green-500/30",
-    cancelled: "text-red-400 bg-red-500/10 border-red-500/30",
+    cancelled: "text-green-400 bg-green-600/10 border-green-600/30",
   };
 
   return (
@@ -605,7 +605,7 @@ function OrdersTab() {
           <div key={order.id} className="bg-[#111111] border border-[#1E1E1E] rounded-xl p-4">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div>
-                <span className="text-[#C8102E] font-bold text-sm">#{order.orderNumber}</span>
+                <span className="text-[#1B8C3D] font-bold text-sm">#{order.orderNumber}</span>
                 <p className="text-white text-sm font-semibold">{order.customerName}</p>
                 <p className="text-gray-500 text-xs">{order.customerPhone}</p>
               </div>
@@ -625,7 +625,7 @@ function OrdersTab() {
               </SelectTrigger>
               <SelectContent className="bg-[#1A1A1A] border-[#333]">
                 {Object.entries(STATUS_LABELS).map(([v, l]) => (
-                  <SelectItem key={v} value={v} className="text-gray-300 focus:bg-[#C8102E] focus:text-white text-xs">{l}</SelectItem>
+                  <SelectItem key={v} value={v} className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white text-xs">{l}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -660,22 +660,22 @@ function SettingsTab() {
         <div>
           <Label className="text-gray-400 text-xs mb-1 block">WhatsApp (com DDD)</Label>
           <div className="flex gap-2">
-            <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="11999999999" className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]" />
-            <Button onClick={() => save("whatsapp_number", whatsapp)} className="bg-[#C8102E] hover:bg-red-700 text-white shrink-0">Salvar</Button>
+            <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="11999999999" className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#1B8C3D]" />
+            <Button onClick={() => save("whatsapp_number", whatsapp)} className="bg-[#1B8C3D] hover:bg-green-700 text-white shrink-0">Salvar</Button>
           </div>
         </div>
         <div>
           <Label className="text-gray-400 text-xs mb-1 block">Instagram (@usuario)</Label>
           <div className="flex gap-2">
-            <Input value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@juremasport" className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]" />
-            <Button onClick={() => save("instagram_url", instagram)} className="bg-[#C8102E] hover:bg-red-700 text-white shrink-0">Salvar</Button>
+            <Input value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@juremasport" className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#1B8C3D]" />
+            <Button onClick={() => save("instagram_url", instagram)} className="bg-[#1B8C3D] hover:bg-green-700 text-white shrink-0">Salvar</Button>
           </div>
         </div>
         <div>
           <Label className="text-gray-400 text-xs mb-1 block">Facebook</Label>
           <div className="flex gap-2">
-            <Input value={facebook} onChange={e => setFacebook(e.target.value)} placeholder="Jurema Sport" className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#C8102E]" />
-            <Button onClick={() => save("facebook_url", facebook)} className="bg-[#C8102E] hover:bg-red-700 text-white shrink-0">Salvar</Button>
+            <Input value={facebook} onChange={e => setFacebook(e.target.value)} placeholder="Jurema Sport" className="bg-[#1A1A1A] border-[#333] text-white focus:border-[#1B8C3D]" />
+            <Button onClick={() => save("facebook_url", facebook)} className="bg-[#1B8C3D] hover:bg-green-700 text-white shrink-0">Salvar</Button>
           </div>
         </div>
       </div>
@@ -703,7 +703,7 @@ export default function AdminPanel() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#C8102E] border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-[#1B8C3D] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -740,7 +740,7 @@ export default function AdminPanel() {
           <span className="text-gray-500 text-xs hidden sm:block">{String(admin.name)}</span>
           <button
             onClick={() => logoutMutation.mutate()}
-            className="flex items-center gap-1.5 text-gray-400 hover:text-[#C8102E] text-sm transition-colors"
+            className="flex items-center gap-1.5 text-gray-400 hover:text-[#1B8C3D] text-sm transition-colors"
           >
             <LogOut size={16} />
             <span className="hidden sm:block text-xs">Sair</span>
@@ -756,7 +756,7 @@ export default function AdminPanel() {
             onClick={() => setTab(t.id)}
             className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 ${
               tab === t.id
-                ? "border-[#C8102E] text-[#C8102E]"
+                ? "border-[#1B8C3D] text-[#1B8C3D]"
                 : "border-transparent text-gray-500 hover:text-gray-300"
             }`}
           >

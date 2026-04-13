@@ -46,7 +46,7 @@ export default function ProductDetail() {
         <div className="text-center">
           <p className="text-gray-400 text-xl mb-4">Produto não encontrado</p>
           <Link href="/produtos">
-            <Button className="bg-[#C8102E] hover:bg-red-700 text-white">Voltar aos Produtos</Button>
+            <Button className="bg-[#1B8C3D] hover:bg-green-700 text-white">Voltar aos Produtos</Button>
           </Link>
         </div>
       </div>
@@ -54,7 +54,7 @@ export default function ProductDetail() {
   }
 
   const images = (product.images as string[]) || [];
-  const imageUrl = images[currentImage] || `https://placehold.co/600x600/1A1A1A/C8102E?text=${encodeURIComponent(product.name)}`;
+  const imageUrl = images[currentImage] || `https://placehold.co/600x600/1A1A1A/1B8C3D?text=${encodeURIComponent(product.name)}`;
   const numPrice = parseFloat(String(product.price));
   const numOriginal = product.originalPrice ? parseFloat(String(product.originalPrice)) : null;
   const discount = numOriginal ? Math.round((1 - numPrice / numOriginal) * 100) : null;
@@ -97,9 +97,9 @@ export default function ProductDetail() {
       <div className="container py-6">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-gray-600 mb-6">
-          <Link href="/" className="hover:text-[#C8102E] transition-colors">Início</Link>
+          <Link href="/" className="hover:text-[#1B8C3D] transition-colors">Início</Link>
           <span>/</span>
-          <Link href="/produtos" className="hover:text-[#C8102E] transition-colors">Produtos</Link>
+          <Link href="/produtos" className="hover:text-[#1B8C3D] transition-colors">Produtos</Link>
           {product.team && (
             <>
               <span>/</span>
@@ -129,13 +129,13 @@ export default function ProductDetail() {
                 <>
                   <button
                     onClick={() => setCurrentImage(i => (i - 1 + images.length) % images.length)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-[#C8102E] flex items-center justify-center text-white transition-all"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-[#1B8C3D] flex items-center justify-center text-white transition-all"
                   >
                     <ChevronLeft size={18} />
                   </button>
                   <button
                     onClick={() => setCurrentImage(i => (i + 1) % images.length)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-[#C8102E] flex items-center justify-center text-white transition-all"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-[#1B8C3D] flex items-center justify-center text-white transition-all"
                   >
                     <ChevronRight size={18} />
                   </button>
@@ -150,7 +150,7 @@ export default function ProductDetail() {
                     key={i}
                     onClick={() => setCurrentImage(i)}
                     className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                      i === currentImage ? 'border-[#C8102E]' : 'border-[#1E1E1E] hover:border-[#333]'
+                      i === currentImage ? 'border-[#1B8C3D]' : 'border-[#1E1E1E] hover:border-[#333]'
                     }`}
                   >
                     <img src={img} alt="" className="w-full h-full object-cover" />
@@ -163,7 +163,7 @@ export default function ProductDetail() {
           {/* Product info */}
           <div className="space-y-5">
             {product.team && (
-              <p className="text-[#C8102E] text-sm font-bold uppercase tracking-widest">{product.team}</p>
+              <p className="text-[#1B8C3D] text-sm font-bold uppercase tracking-widest">{product.team}</p>
             )}
             <h1 className="font-['Bebas_Neue'] text-3xl md:text-4xl text-white tracking-wider leading-tight">
               {product.name}
@@ -205,10 +205,10 @@ export default function ProductDetail() {
                       onClick={() => setSelectedSize(size)}
                       className={`w-14 h-10 rounded-lg text-sm font-bold border-2 transition-all ${
                         selectedSize === size
-                          ? 'bg-[#C8102E] border-[#C8102E] text-white'
+                          ? 'bg-[#1B8C3D] border-[#1B8C3D] text-white'
                           : outOfStock
                           ? 'bg-transparent border-[#1E1E1E] text-gray-700 cursor-not-allowed line-through'
-                          : 'bg-transparent border-[#333] text-gray-300 hover:border-[#C8102E] hover:text-white'
+                          : 'bg-transparent border-[#333] text-gray-300 hover:border-[#1B8C3D] hover:text-white'
                       }`}
                     >
                       {size}
@@ -217,7 +217,7 @@ export default function ProductDetail() {
                 })}
               </div>
               {availableSizes.length === 0 && (
-                <p className="text-xs mt-2 text-red-500">Nenhum tamanho disponível</p>
+                <p className="text-xs mt-2 text-green-500">Nenhum tamanho disponível</p>
               )}
               {selectedSize && selectedStockQty !== null && (
                 <p className={`text-xs mt-2 ${selectedStockQty <= 3 ? 'text-yellow-500' : 'text-green-500'}`}>
@@ -234,14 +234,14 @@ export default function ProductDetail() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                  className="w-9 h-9 rounded-lg bg-[#1A1A1A] border border-[#333] flex items-center justify-center text-gray-300 hover:text-white hover:border-[#C8102E] transition-all"
+                  className="w-9 h-9 rounded-lg bg-[#1A1A1A] border border-[#333] flex items-center justify-center text-gray-300 hover:text-white hover:border-[#1B8C3D] transition-all"
                 >
                   <Minus size={14} />
                 </button>
                 <span className="text-white font-bold text-lg w-8 text-center">{quantity}</span>
                 <button
                   onClick={() => setQuantity(q => q + 1)}
-                  className="w-9 h-9 rounded-lg bg-[#1A1A1A] border border-[#333] flex items-center justify-center text-gray-300 hover:text-white hover:border-[#C8102E] transition-all"
+                  className="w-9 h-9 rounded-lg bg-[#1A1A1A] border border-[#333] flex items-center justify-center text-gray-300 hover:text-white hover:border-[#1B8C3D] transition-all"
                 >
                   <Plus size={14} />
                 </button>
@@ -252,7 +252,7 @@ export default function ProductDetail() {
             <div className="flex gap-3">
               <Button
                 onClick={handleAddToCart}
-                className="flex-1 bg-[#C8102E] hover:bg-red-700 text-white font-bold py-3 text-base gap-2"
+                className="flex-1 bg-[#1B8C3D] hover:bg-green-700 text-white font-bold py-3 text-base gap-2"
               >
                 <ShoppingCart size={18} />
                 Adicionar ao Carrinho
@@ -260,7 +260,7 @@ export default function ProductDetail() {
               <Button
                 variant="outline"
                 size="icon"
-                className="border-[#333] text-gray-400 hover:text-[#C8102E] hover:border-[#C8102E] bg-transparent w-12 h-12"
+                className="border-[#333] text-gray-400 hover:text-[#1B8C3D] hover:border-[#1B8C3D] bg-transparent w-12 h-12"
                 onClick={() => toast.info("Lista de desejos em breve!")}
               >
                 <Heart size={18} />
@@ -277,7 +277,7 @@ export default function ProductDetail() {
                 { icon: RotateCcw, text: "Troca Fácil" },
               ].map(({ icon: Icon, text }) => (
                 <div key={text} className="flex flex-col items-center gap-1 p-2 bg-[#111111] rounded-lg text-center">
-                  <Icon size={16} className="text-[#C8102E]" />
+                  <Icon size={16} className="text-[#1B8C3D]" />
                   <span className="text-gray-500 text-xs">{text}</span>
                 </div>
               ))}
@@ -298,8 +298,8 @@ export default function ProductDetail() {
           <section className="mt-16">
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-1">
-                <div className="w-6 h-0.5 bg-[#C8102E]" />
-                <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Você também pode gostar</span>
+                <div className="w-6 h-0.5 bg-[#1B8C3D]" />
+                <span className="text-[#1B8C3D] text-xs font-bold uppercase tracking-[0.3em]">Você também pode gostar</span>
               </div>
               <h2 className="font-['Bebas_Neue'] text-3xl text-white tracking-wider">PRODUTOS RELACIONADOS</h2>
             </div>

@@ -353,3 +353,11 @@
 - [x] Aba "Geral" com nome da loja, WhatsApp, taxas, mínimo atacado
 - [x] Aba "Sincronização" para sync Google Sheets
 - [x] 9 testes vitest v47 + 111/111 total passando
+
+## Identidade Visual (v48)
+- [x] Paleta de cores alterada de vermelho/preto para verde/preto (futebol)
+- [x] CSS global (index.css) atualizado com nova paleta verde oklch(0.55 0.18 145)
+- [x] 19 arquivos de componentes e páginas atualizados (#C8102E -> #1B8C3D)
+- [x] Consistência visual mantida em todo o site (loja + PDV)
+- [x] Scrollbar, animações e hover effects atualizados para verde
+- [x] 111/111 testes passando

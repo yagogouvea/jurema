@@ -195,7 +195,7 @@ export default function CartDrawer() {
                       <div className="flex-1 min-w-0">
                         <p className="text-white text-sm font-semibold truncate">{item.productName}</p>
                         <p className="text-gray-400 text-xs">Tamanho: {item.size}</p>
-                        <p className="text-[#C8102E] text-sm font-bold">
+                        <p className="text-[#1B8C3D] text-sm font-bold">
                           R$ {(item.unitPrice * item.quantity).toFixed(2).replace(".", ",")}
                         </p>
                       </div>
@@ -218,7 +218,7 @@ export default function CartDrawer() {
                       </div>
                       <button
                         onClick={() => removeItem(item.productId, item.size)}
-                        className="text-gray-400 hover:text-red-500 transition"
+                        className="text-gray-400 hover:text-green-500 transition"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -240,9 +240,9 @@ export default function CartDrawer() {
 
                 {/* Aviso de quantidade mínima */}
                 {itemCount < 10 && (
-                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-start gap-2">
-                    <span className="text-red-400 text-xs font-semibold">Atenção!</span>
-                    <p className="text-red-300 text-xs">
+                  <div className="bg-green-600/10 border border-green-600/30 rounded-lg p-3 flex items-start gap-2">
+                    <span className="text-green-400 text-xs font-semibold">Atenção!</span>
+                    <p className="text-green-400 text-xs">
                       Quantidade mínima: 10 peças. Você tem {itemCount} peça(s). Adicione mais itens para continuar.
                     </p>
                   </div>
@@ -269,7 +269,7 @@ export default function CartDrawer() {
 
                 <Button
                   variant="outline"
-                  className="w-full border-red-500/30 text-red-400 hover:text-red-300 hover:border-red-500 hover:bg-red-500/5 bg-transparent"
+                  className="w-full border-green-600/30 text-green-400 hover:text-green-400 hover:border-green-500 hover:bg-green-600/5 bg-transparent"
                   onClick={() => {
                     clearCart();
                     toast.success("Carrinho limpo com sucesso!");
@@ -295,7 +295,7 @@ export default function CartDrawer() {
                     value={formData.name}
                     onChange={(e) => handleFormChange("name", e.target.value)}
                     required
-                    className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-10"
+                    className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-10"
                   />
                 </div>
 
@@ -309,7 +309,7 @@ export default function CartDrawer() {
                     value={formData.phone}
                     onChange={(e) => handleFormChange("phone", maskPhone(e.target.value))}
                     required
-                    className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-10"
+                    className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-10"
                   />
                 </div>
 
@@ -323,7 +323,7 @@ export default function CartDrawer() {
                     value={formData.cep}
                     onChange={(e) => handleFormChange("cep", maskCEP(e.target.value))}
                     required
-                    className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-10"
+                    className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-10"
                   />
                 </div>
 
@@ -335,7 +335,7 @@ export default function CartDrawer() {
                       <span>Total de itens:</span>
                       <span className="font-semibold">{itemCount} peça(s)</span>
                     </div>
-                    <div className="flex justify-between text-[#C8102E] font-bold">
+                    <div className="flex justify-between text-[#1B8C3D] font-bold">
                       <span>Total:</span>
                       <span>R$ {subtotal.toFixed(2).replace(".", ",")}</span>
                     </div>

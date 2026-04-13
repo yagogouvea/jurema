@@ -32,7 +32,7 @@ export default function ProductCard({
     : null;
   const imageUrl =
     images?.[0] ||
-    `https://placehold.co/400x400/1A1A1A/C8102E?text=${encodeURIComponent(name.split(' ')[0])}`;
+    `https://placehold.co/400x400/1A1A1A/1B8C3D?text=${encodeURIComponent(name.split(' ')[0])}`;
 
   const handleOpenModal = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -42,7 +42,7 @@ export default function ProductCard({
 
   return (
     <>
-      <div className="product-card bg-[#111111] rounded-xl overflow-hidden border border-[#1E1E1E] hover:border-[#C8102E]/40 transition-all group">
+      <div className="product-card bg-[#111111] rounded-xl overflow-hidden border border-[#1E1E1E] hover:border-[#1B8C3D]/40 transition-all group">
         {/* Image */}
         <Link href={`/produto/${slug}`}>
           <div className="relative aspect-square overflow-hidden bg-[#1A1A1A] cursor-pointer">
@@ -56,7 +56,7 @@ export default function ProductCard({
             {/* Badges */}
             <div className="absolute top-2 left-2 flex flex-col gap-1">
               {isFeatured && (
-                <span className="bg-[#C8102E] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                <span className="bg-[#1B8C3D] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                   Destaque
                 </span>
               )}
@@ -71,7 +71,7 @@ export default function ProductCard({
             <div className="hidden md:flex absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity items-end justify-center pb-4">
               <button
                 onClick={handleOpenModal}
-                className="flex items-center gap-2 bg-[#C8102E] hover:bg-red-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition-all transform translate-y-2 group-hover:translate-y-0 shadow-lg"
+                className="flex items-center gap-2 bg-[#1B8C3D] hover:bg-green-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition-all transform translate-y-2 group-hover:translate-y-0 shadow-lg"
               >
                 <ShoppingCart size={16} />
                 Selecionar Tamanho
@@ -83,12 +83,12 @@ export default function ProductCard({
         {/* Info */}
         <div className="p-2.5 md:p-3">
           {team && (
-            <p className="text-[#C8102E] text-[10px] font-bold uppercase tracking-wider mb-0.5 truncate">
+            <p className="text-[#1B8C3D] text-[10px] font-bold uppercase tracking-wider mb-0.5 truncate">
               {team}
             </p>
           )}
           <Link href={`/produto/${slug}`}>
-            <h3 className="text-white text-xs md:text-sm font-semibold leading-tight mb-1.5 line-clamp-2 hover:text-[#C8102E] transition-colors cursor-pointer">
+            <h3 className="text-white text-xs md:text-sm font-semibold leading-tight mb-1.5 line-clamp-2 hover:text-[#1B8C3D] transition-colors cursor-pointer">
               {name}
             </h3>
           </Link>
@@ -115,7 +115,7 @@ export default function ProductCard({
             {/* Add button — always visible on mobile */}
             <button
               onClick={handleOpenModal}
-              className="flex-shrink-0 flex items-center justify-center gap-1 bg-[#C8102E] hover:bg-red-700 active:bg-red-800 text-white font-bold rounded-lg transition-colors
+              className="flex-shrink-0 flex items-center justify-center gap-1 bg-[#1B8C3D] hover:bg-green-700 active:bg-green-800 text-white font-bold rounded-lg transition-colors
                 px-2.5 py-2 text-[10px] md:px-3 md:py-2 md:text-xs"
               title="Selecionar tamanho"
             >

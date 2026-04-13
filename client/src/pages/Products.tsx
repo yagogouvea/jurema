@@ -115,7 +115,7 @@ export default function Products() {
               onClick={() => { setCategory(cat.value); setPage(0); }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                 category === cat.value
-                  ? 'bg-[#C8102E] text-white font-semibold'
+                  ? 'bg-[#1B8C3D] text-white font-semibold'
                   : 'text-gray-400 hover:text-white hover:bg-[#1A1A1A]'
               }`}
             >
@@ -134,7 +134,7 @@ export default function Products() {
               onClick={() => { setGender(g.value); setPage(0); }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                 gender === g.value
-                  ? 'bg-[#C8102E] text-white font-semibold'
+                  ? 'bg-[#1B8C3D] text-white font-semibold'
                   : 'text-gray-400 hover:text-white hover:bg-[#1A1A1A]'
               }`}
             >
@@ -163,8 +163,8 @@ export default function Products() {
       <div className="bg-[#0A0A0A] border-b border-[#1E1E1E] py-8">
         <div className="container">
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-6 h-0.5 bg-[#C8102E]" />
-            <span className="text-[#C8102E] text-xs font-bold uppercase tracking-[0.3em]">Loja</span>
+            <div className="w-6 h-0.5 bg-[#1B8C3D]" />
+            <span className="text-[#1B8C3D] text-xs font-bold uppercase tracking-[0.3em]">Loja</span>
           </div>
           <h1 className="font-['Bebas_Neue'] text-4xl md:text-5xl text-white tracking-wider">
             {category === 'times' ? 'TIMES BRASILEIROS' :
@@ -186,7 +186,7 @@ export default function Products() {
             className="border-[#333] text-gray-300 hover:text-white bg-transparent gap-2"
           >
             <SlidersHorizontal size={16} />
-            Filtros {hasFilters && <span className="bg-[#C8102E] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">!</span>}
+            Filtros {hasFilters && <span className="bg-[#1B8C3D] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">!</span>}
           </Button>
           <Select value={orderBy} onValueChange={v => { setOrderBy(v); setPage(0); }}>
             <SelectTrigger className="w-44 bg-[#1A1A1A] border-[#333] text-white text-sm">
@@ -194,7 +194,7 @@ export default function Products() {
             </SelectTrigger>
             <SelectContent className="bg-[#1A1A1A] border-[#333]">
               {ORDER_OPTIONS.map(o => (
-                <SelectItem key={o.value} value={o.value} className="text-gray-300 focus:bg-[#C8102E] focus:text-white">
+                <SelectItem key={o.value} value={o.value} className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">
                   {o.label}
                 </SelectItem>
               ))}
@@ -214,7 +214,7 @@ export default function Products() {
           <aside className="hidden lg:block w-56 flex-shrink-0">
             <div className="bg-[#111111] rounded-xl p-4 border border-[#1E1E1E] sticky top-24">
               <div className="flex items-center gap-2 mb-4">
-                <Filter size={16} className="text-[#C8102E]" />
+                <Filter size={16} className="text-[#1B8C3D]" />
                 <h3 className="font-['Bebas_Neue'] text-lg text-white tracking-wider">FILTROS</h3>
               </div>
               <FilterPanel />
@@ -232,7 +232,7 @@ export default function Products() {
                 </SelectTrigger>
                 <SelectContent className="bg-[#1A1A1A] border-[#333]">
                   {ORDER_OPTIONS.map(o => (
-                    <SelectItem key={o.value} value={o.value} className="text-gray-300 focus:bg-[#C8102E] focus:text-white">
+                    <SelectItem key={o.value} value={o.value} className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">
                       {o.label}
                     </SelectItem>
                   ))}
@@ -251,7 +251,7 @@ export default function Products() {
                 <div className="text-6xl">😕</div>
                 <p className="text-gray-400 font-semibold text-lg">Nenhum produto encontrado</p>
                 <p className="text-gray-600 text-sm">Tente ajustar os filtros</p>
-                <Button onClick={clearFilters} className="bg-[#C8102E] hover:bg-red-700 text-white">
+                <Button onClick={clearFilters} className="bg-[#1B8C3D] hover:bg-green-700 text-white">
                   Limpar Filtros
                 </Button>
               </div>

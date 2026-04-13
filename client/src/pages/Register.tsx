@@ -82,8 +82,8 @@ export default function Register() {
     <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center px-4 py-12">
       {/* Background decorativo */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-[#C8102E]/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-[#C8102E]/5 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-[#1B8C3D]/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-[#1B8C3D]/5 rounded-full blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-md">
@@ -111,21 +111,21 @@ export default function Register() {
             {/* Nome */}
             <div>
               <Label className="text-gray-300 text-sm font-medium mb-1.5 flex items-center gap-2">
-                <User size={14} className="text-[#C8102E]" /> Nome Completo
+                <User size={14} className="text-[#1B8C3D]" /> Nome Completo
               </Label>
               <Input
                 placeholder="Seu nome completo"
                 value={form.name}
                 onChange={(e) => handleChange("name", e.target.value)}
                 required
-                className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-11"
+                className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-11"
               />
             </div>
 
             {/* Email */}
             <div>
               <Label className="text-gray-300 text-sm font-medium mb-1.5 flex items-center gap-2">
-                <Mail size={14} className="text-[#C8102E]" /> E-mail
+                <Mail size={14} className="text-[#1B8C3D]" /> E-mail
               </Label>
               <Input
                 type="email"
@@ -133,21 +133,21 @@ export default function Register() {
                 value={form.email}
                 onChange={(e) => handleChange("email", e.target.value)}
                 required
-                className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-11"
+                className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-11"
               />
             </div>
 
             {/* Telefone */}
             <div>
               <Label className="text-gray-300 text-sm font-medium mb-1.5 flex items-center gap-2">
-                <Phone size={14} className="text-[#C8102E]" /> Telefone
+                <Phone size={14} className="text-[#1B8C3D]" /> Telefone
               </Label>
               <Input
                 placeholder="(00) 94729-3221"
                 value={form.phone}
                 onChange={(e) => handleChange("phone", maskPhone(e.target.value))}
                 required
-                className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-11"
+                className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-11"
               />
             </div>
 
@@ -162,14 +162,14 @@ export default function Register() {
                   handleChange("addressZip", masked);
                 }}
                 required
-                className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-11"
+                className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-11"
               />
             </div>
 
             {/* Senha */}
             <div>
               <Label className="text-gray-300 text-sm font-medium mb-1.5 flex items-center gap-2">
-                <Lock size={14} className="text-[#C8102E]" /> Senha
+                <Lock size={14} className="text-[#1B8C3D]" /> Senha
               </Label>
               <div className="relative">
                 <Input
@@ -178,7 +178,7 @@ export default function Register() {
                   value={form.password}
                   onChange={(e) => handleChange("password", e.target.value)}
                   required
-                  className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-11 pr-10"
+                  className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-11 pr-10"
                 />
                 <button
                   type="button"
@@ -193,7 +193,7 @@ export default function Register() {
             {/* Confirmação de Senha */}
             <div>
               <Label className="text-gray-300 text-sm font-medium mb-1.5 flex items-center gap-2">
-                <Lock size={14} className="text-[#C8102E]" /> Confirmar Senha
+                <Lock size={14} className="text-[#1B8C3D]" /> Confirmar Senha
               </Label>
               <div className="relative">
                 <Input
@@ -202,7 +202,7 @@ export default function Register() {
                   value={form.confirmPassword}
                   onChange={(e) => handleChange("confirmPassword", e.target.value)}
                   required
-                  className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-11 pr-10"
+                  className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-11 pr-10"
                 />
                 <button
                   type="button"
@@ -218,7 +218,7 @@ export default function Register() {
             <Button
               type="submit"
               disabled={register.isPending}
-              className="w-full bg-[#C8102E] hover:bg-red-700 text-white font-black py-3 h-11 text-base"
+              className="w-full bg-[#1B8C3D] hover:bg-green-700 text-white font-black py-3 h-11 text-base"
               style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.1em" }}
             >
               {register.isPending ? (
@@ -234,7 +234,7 @@ export default function Register() {
             {/* Link para Login */}
             <p className="text-center text-gray-400 text-sm">
               Já tem conta?{" "}
-              <Link href="/login" className="text-[#C8102E] font-semibold hover:underline">
+              <Link href="/login" className="text-[#1B8C3D] font-semibold hover:underline">
                 Faça login
               </Link>
             </p>

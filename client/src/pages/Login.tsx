@@ -37,8 +37,8 @@ export default function Login() {
     <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center px-4 py-12">
       {/* Background decorativo */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-[#C8102E]/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-[#C8102E]/5 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-[#1B8C3D]/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-[#1B8C3D]/5 rounded-full blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-md">
@@ -67,7 +67,7 @@ export default function Login() {
             {/* Email */}
             <div>
               <Label className="text-gray-300 text-sm font-medium mb-1.5 flex items-center gap-2">
-                <Mail size={14} className="text-[#C8102E]" /> E-mail
+                <Mail size={14} className="text-[#1B8C3D]" /> E-mail
               </Label>
               <Input
                 type="email"
@@ -75,14 +75,14 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-11"
+                className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-11"
               />
             </div>
 
             {/* Senha */}
             <div>
               <Label className="text-gray-300 text-sm font-medium mb-1.5 flex items-center gap-2">
-                <Lock size={14} className="text-[#C8102E]" /> Senha
+                <Lock size={14} className="text-[#1B8C3D]" /> Senha
               </Label>
               <div className="relative">
                 <Input
@@ -91,7 +91,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#C8102E] h-11 pr-10"
+                  className="bg-[#0D0D0D] border-white/20 text-white placeholder:text-gray-600 focus:border-[#1B8C3D] h-11 pr-10"
                 />
                 <button
                   type="button"
@@ -107,7 +107,7 @@ export default function Login() {
             <Button
               type="submit"
               disabled={login.isPending}
-              className="w-full h-12 bg-[#C8102E] hover:bg-[#a00d24] text-white font-black text-base tracking-widest mt-2"
+              className="w-full h-12 bg-[#1B8C3D] hover:bg-[#15722F] text-white font-black text-base tracking-widest mt-2"
               style={{ fontFamily: "'Bebas Neue', sans-serif" }}
             >
               {login.isPending ? (
@@ -119,7 +119,7 @@ export default function Login() {
 
             <p className="text-center text-gray-500 text-sm">
               Não tem uma conta?{" "}
-              <Link href="/cadastro" className="text-[#C8102E] hover:text-red-400 font-semibold">
+              <Link href="/cadastro" className="text-[#1B8C3D] hover:text-green-400 font-semibold">
                 Criar conta grátis
               </Link>
             </p>

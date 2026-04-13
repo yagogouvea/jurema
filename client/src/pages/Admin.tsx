@@ -29,7 +29,7 @@ function DashboardTab() {
     { label: 'Total de Pedidos', value: stats?.totalOrders ?? 0, icon: ShoppingBag, color: 'text-blue-400' },
     { label: 'Pedidos Hoje', value: stats?.todayOrders ?? 0, icon: Clock, color: 'text-green-400' },
     { label: 'Faturamento', value: `R$ ${(stats?.totalRevenue ?? 0).toFixed(2).replace('.', ',')}`, icon: DollarSign, color: 'text-yellow-400' },
-    { label: 'Estoque Crítico', value: stats?.lowStockProducts ?? 0, icon: AlertTriangle, color: 'text-red-400' },
+    { label: 'Estoque Crítico', value: stats?.lowStockProducts ?? 0, icon: AlertTriangle, color: 'text-green-400' },
   ];
 
   const statusColors: Record<string, string> = {
@@ -38,7 +38,7 @@ function DashboardTab() {
     processing: 'bg-purple-500/20 text-purple-400',
     shipped: 'bg-indigo-500/20 text-indigo-400',
     delivered: 'bg-green-500/20 text-green-400',
-    cancelled: 'bg-red-500/20 text-red-400',
+    cancelled: 'bg-green-600/20 text-green-400',
   };
   const statusLabels: Record<string, string> = {
     pending: 'Pendente', confirmed: 'Confirmado', processing: 'Processando',
@@ -77,7 +77,7 @@ function DashboardTab() {
               <tbody>
                 {recentOrders.map(order => (
                   <tr key={order.id} className="border-b border-[#111111]">
-                    <td className="py-2 text-[#C8102E] font-bold">#{order.orderNumber}</td>
+                    <td className="py-2 text-[#1B8C3D] font-bold">#{order.orderNumber}</td>
                     <td className="py-2 text-gray-300 hidden md:table-cell">{order.customerName}</td>
                     <td className="py-2 text-white font-semibold">R$ {parseFloat(String(order.total)).toFixed(2).replace('.', ',')}</td>
                     <td className="py-2">
@@ -184,14 +184,14 @@ function ProductsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider">PRODUTOS ({products.length})</h3>
-        <Button onClick={openCreate} className="bg-[#C8102E] hover:bg-red-700 text-white gap-2">
+        <Button onClick={openCreate} className="bg-[#1B8C3D] hover:bg-green-700 text-white gap-2">
           <Plus size={16} /> Novo Produto
         </Button>
       </div>
 
       {/* Form */}
       {showForm && (
-        <div className="bg-[#111111] rounded-xl p-5 border border-[#C8102E]/30">
+        <div className="bg-[#111111] rounded-xl p-5 border border-[#1B8C3D]/30">
           <div className="flex items-center justify-between mb-4">
             <h4 className="font-['Bebas_Neue'] text-xl text-white">{editing ? 'EDITAR PRODUTO' : 'NOVO PRODUTO'}</h4>
             <Button variant="ghost" size="icon" onClick={() => setShowForm(false)} className="text-gray-400">
@@ -231,17 +231,17 @@ function ProductsTab() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#1A1A1A] border-[#333]">
-                  <SelectItem value="1linha-nacional" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$30,00/at - 1 LINHA - NACIONAL</SelectItem>
-                  <SelectItem value="tailandesa-promocao" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$35,00/at - TAILANDESA Promoção</SelectItem>
-                  <SelectItem value="conj-calor-nacional" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$50,00/at - CONJ CALOR NACIONAL</SelectItem>
-                  <SelectItem value="conj-calor-tailandesa" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$75,00/at - CONJ CALOR TAILANDESA</SelectItem>
-                  <SelectItem value="tailandesa" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$80,00/at - TAILANDESA</SelectItem>
-                  <SelectItem value="infantil" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$80,00/at - Infantil</SelectItem>
-                  <SelectItem value="jogador-tailandesa" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$110,00/at - JOGADOR TAILANDESA</SelectItem>
-                  <SelectItem value="retro-tailandesa" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$110,00/at - RETRO TAILANDESA</SelectItem>
-                  <SelectItem value="conj-frio-tailandes" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$180,00/at - CONJ FRIO TAILANDÊS</SelectItem>
-                  <SelectItem value="tailandesa-3xl" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$variado - tailandesa 3XL</SelectItem>
-                  <SelectItem value="tailandesa-4xl" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">R$variados - tailandesa 4XL</SelectItem>
+                  <SelectItem value="1linha-nacional" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$30,00/at - 1 LINHA - NACIONAL</SelectItem>
+                  <SelectItem value="tailandesa-promocao" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$35,00/at - TAILANDESA Promoção</SelectItem>
+                  <SelectItem value="conj-calor-nacional" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$50,00/at - CONJ CALOR NACIONAL</SelectItem>
+                  <SelectItem value="conj-calor-tailandesa" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$75,00/at - CONJ CALOR TAILANDESA</SelectItem>
+                  <SelectItem value="tailandesa" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$80,00/at - TAILANDESA</SelectItem>
+                  <SelectItem value="infantil" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$80,00/at - Infantil</SelectItem>
+                  <SelectItem value="jogador-tailandesa" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$110,00/at - JOGADOR TAILANDESA</SelectItem>
+                  <SelectItem value="retro-tailandesa" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$110,00/at - RETRO TAILANDESA</SelectItem>
+                  <SelectItem value="conj-frio-tailandes" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$180,00/at - CONJ FRIO TAILANDÊS</SelectItem>
+                  <SelectItem value="tailandesa-3xl" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$variado - tailandesa 3XL</SelectItem>
+                  <SelectItem value="tailandesa-4xl" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">R$variados - tailandesa 4XL</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -252,9 +252,9 @@ function ProductsTab() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#1A1A1A] border-[#333]">
-                  <SelectItem value="masculino" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Masculino</SelectItem>
-                  <SelectItem value="feminino" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Feminino</SelectItem>
-                  <SelectItem value="infantil" className="text-gray-300 focus:bg-[#C8102E] focus:text-white">Infantil</SelectItem>
+                  <SelectItem value="masculino" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">Masculino</SelectItem>
+                  <SelectItem value="feminino" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">Feminino</SelectItem>
+                  <SelectItem value="infantil" className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">Infantil</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -262,7 +262,7 @@ function ProductsTab() {
               <Label className="text-gray-400 text-xs">Descrição</Label>
               <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
                 rows={3} placeholder="Descrição do produto..."
-                className="w-full mt-1 bg-[#1A1A1A] border border-[#333] text-white rounded-md p-2 text-sm resize-none focus:outline-none focus:border-[#C8102E]" />
+                className="w-full mt-1 bg-[#1A1A1A] border border-[#333] text-white rounded-md p-2 text-sm resize-none focus:outline-none focus:border-[#1B8C3D]" />
             </div>
             {/* Image upload */}
             <div className="md:col-span-2">
@@ -272,15 +272,15 @@ function ProductsTab() {
                   <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-[#333]">
                     <img src={img} alt="" className="w-full h-full object-cover" />
                     <button onClick={() => setForm(p => ({ ...p, images: p.images.filter((_, idx) => idx !== i) }))}
-                      className="absolute top-0 right-0 bg-red-600 rounded-bl-lg p-0.5">
+                      className="absolute top-0 right-0 bg-green-600 rounded-bl-lg p-0.5">
                       <X size={10} className="text-white" />
                     </button>
                   </div>
                 ))}
                 <button onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingImages}
-                  className="w-16 h-16 rounded-lg border-2 border-dashed border-[#333] hover:border-[#C8102E] flex items-center justify-center text-gray-600 hover:text-[#C8102E] transition-colors">
-                  {uploadingImages ? <div className="w-4 h-4 border-2 border-[#C8102E] border-t-transparent rounded-full animate-spin" /> : <Upload size={18} />}
+                  className="w-16 h-16 rounded-lg border-2 border-dashed border-[#333] hover:border-[#1B8C3D] flex items-center justify-center text-gray-600 hover:text-[#1B8C3D] transition-colors">
+                  {uploadingImages ? <div className="w-4 h-4 border-2 border-[#1B8C3D] border-t-transparent rounded-full animate-spin" /> : <Upload size={18} />}
                 </button>
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
@@ -307,12 +307,12 @@ function ProductsTab() {
             <div className="flex items-center gap-6">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.isActive} onChange={e => setForm(p => ({ ...p, isActive: e.target.checked }))}
-                  className="w-4 h-4 accent-[#C8102E]" />
+                  className="w-4 h-4 accent-[#1B8C3D]" />
                 <span className="text-gray-300 text-sm">Ativo</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.isFeatured} onChange={e => setForm(p => ({ ...p, isFeatured: e.target.checked }))}
-                  className="w-4 h-4 accent-[#C8102E]" />
+                  className="w-4 h-4 accent-[#1B8C3D]" />
                 <span className="text-gray-300 text-sm">Destaque</span>
               </label>
             </div>
@@ -320,7 +320,7 @@ function ProductsTab() {
           <div className="flex gap-3 mt-5">
             <Button variant="outline" onClick={() => setShowForm(false)} className="border-[#333] text-gray-400 bg-transparent">Cancelar</Button>
             <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}
-              className="bg-[#C8102E] hover:bg-red-700 text-white">
+              className="bg-[#1B8C3D] hover:bg-green-700 text-white">
               {editing ? 'Salvar Alterações' : 'Criar Produto'}
             </Button>
           </div>
@@ -370,7 +370,7 @@ function ProductsTab() {
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500 hover:text-white" onClick={() => openEdit(p)}>
                       <Edit size={13} />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500 hover:text-red-400"
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500 hover:text-green-400"
                       onClick={() => { if (confirm('Remover produto?')) deleteMutation.mutate({ id: p.id }); }}>
                       <Trash2 size={13} />
                     </Button>
@@ -409,7 +409,7 @@ function OrdersTab() {
     processing: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
     shipped: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
     delivered: 'bg-green-500/20 text-green-400 border-green-500/30',
-    cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
+    cancelled: 'bg-green-600/20 text-green-400 border-green-600/30',
   };
   const statusLabels: Record<string, string> = {
     pending: 'Pendente', confirmed: 'Confirmado', processing: 'Processando',
@@ -421,7 +421,7 @@ function OrdersTab() {
       <h3 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider">PEDIDOS ({orders.length})</h3>
 
       {selectedOrder && orderDetail ? (
-        <div className="bg-[#111111] rounded-xl p-5 border border-[#C8102E]/30">
+        <div className="bg-[#111111] rounded-xl p-5 border border-[#1B8C3D]/30">
           <div className="flex items-center justify-between mb-4">
             <h4 className="font-['Bebas_Neue'] text-xl text-white">PEDIDO #{orderDetail.orderNumber}</h4>
             <Button variant="ghost" size="icon" onClick={() => setSelectedOrder(null)} className="text-gray-400"><X size={16} /></Button>
@@ -459,7 +459,7 @@ function OrdersTab() {
               </SelectTrigger>
               <SelectContent className="bg-[#1A1A1A] border-[#333]">
                 {Object.entries(statusLabels).map(([v, l]) => (
-                  <SelectItem key={v} value={v} className="text-gray-300 focus:bg-[#C8102E] focus:text-white">{l}</SelectItem>
+                  <SelectItem key={v} value={v} className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">{l}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -469,7 +469,7 @@ function OrdersTab() {
               </SelectTrigger>
               <SelectContent className="bg-[#1A1A1A] border-[#333]">
                 {[['pending','Pendente'],['paid','Pago'],['failed','Falhou'],['refunded','Reembolsado']].map(([v,l]) => (
-                  <SelectItem key={v} value={v} className="text-gray-300 focus:bg-[#C8102E] focus:text-white">{l}</SelectItem>
+                  <SelectItem key={v} value={v} className="text-gray-300 focus:bg-[#1B8C3D] focus:text-white">{l}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -490,7 +490,7 @@ function OrdersTab() {
             <tbody>
               {orders.map(order => (
                 <tr key={order.id} className="border-b border-[#111111] hover:bg-[#111111]">
-                  <td className="py-2 text-[#C8102E] font-bold">#{order.orderNumber}</td>
+                  <td className="py-2 text-[#1B8C3D] font-bold">#{order.orderNumber}</td>
                   <td className="py-2 text-gray-300 hidden md:table-cell">{order.customerName}</td>
                   <td className="py-2 text-white font-semibold">R$ {parseFloat(String(order.total)).toFixed(2).replace('.', ',')}</td>
                   <td className="py-2">
@@ -574,7 +574,7 @@ function BannersTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-['Bebas_Neue'] text-2xl text-white tracking-wider">BANNERS</h3>
-        <Button onClick={() => setShowForm(!showForm)} className="bg-[#C8102E] hover:bg-red-700 text-white gap-2">
+        <Button onClick={() => setShowForm(!showForm)} className="bg-[#1B8C3D] hover:bg-green-700 text-white gap-2">
           <Plus size={16} /> Novo Banner
         </Button>
       </div>
@@ -582,7 +582,7 @@ function BannersTab() {
       {/* AI Banner Generator */}
       <div className="bg-[#111111] rounded-xl p-5 border border-[#1E1E1E]">
         <div className="flex items-center gap-2 mb-4">
-          <Wand2 size={18} className="text-[#C8102E]" />
+          <Wand2 size={18} className="text-[#1B8C3D]" />
           <h4 className="font-['Bebas_Neue'] text-xl text-white tracking-wider">GERADOR DE BANNERS COM IA</h4>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -600,12 +600,12 @@ function BannersTab() {
             <Label className="text-gray-400 text-xs">Descrição para IA *</Label>
             <textarea value={aiForm.description} onChange={e => setAiForm(p => ({ ...p, description: e.target.value }))}
               rows={2} placeholder="Descreva o banner que deseja gerar. Ex: Banner promocional de camisas do Flamengo com fundo escuro e detalhes em vermelho..."
-              className="w-full mt-1 bg-[#1A1A1A] border border-[#333] text-white rounded-md p-2 text-sm resize-none focus:outline-none focus:border-[#C8102E]" />
+              className="w-full mt-1 bg-[#1A1A1A] border border-[#333] text-white rounded-md p-2 text-sm resize-none focus:outline-none focus:border-[#1B8C3D]" />
           </div>
         </div>
         <div className="flex gap-3 mt-4">
           <Button onClick={handleGenerateAI} disabled={isGenerating}
-            className="bg-gradient-to-r from-purple-600 to-[#C8102E] hover:from-purple-700 hover:to-red-700 text-white gap-2">
+            className="bg-gradient-to-r from-purple-600 to-[#1B8C3D] hover:from-purple-700 hover:to-green-700 text-white gap-2">
             <Wand2 size={16} />
             {isGenerating ? 'Gerando...' : 'Gerar Banner com IA'}
           </Button>
@@ -615,7 +615,7 @@ function BannersTab() {
             <p className="text-gray-400 text-xs mb-2">Banner gerado:</p>
             <img src={generatedBanner.imageUrl} alt="Banner gerado" className="w-full max-h-40 object-cover rounded-lg mb-3" />
             <div className="flex gap-2">
-              <Button onClick={handleSaveGenerated} className="bg-[#C8102E] hover:bg-red-700 text-white text-sm">
+              <Button onClick={handleSaveGenerated} className="bg-[#1B8C3D] hover:bg-green-700 text-white text-sm">
                 Salvar Banner
               </Button>
               <Button variant="outline" onClick={() => setGeneratedBanner(null)} className="border-[#333] text-gray-400 bg-transparent text-sm">
@@ -628,7 +628,7 @@ function BannersTab() {
 
       {/* Manual banner form */}
       {showForm && (
-        <div className="bg-[#111111] rounded-xl p-5 border border-[#C8102E]/30">
+        <div className="bg-[#111111] rounded-xl p-5 border border-[#1B8C3D]/30">
           <h4 className="font-['Bebas_Neue'] text-xl text-white mb-4">NOVO BANNER MANUAL</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -668,7 +668,7 @@ function BannersTab() {
           <div className="flex gap-3 mt-4">
             <Button variant="outline" onClick={() => setShowForm(false)} className="border-[#333] text-gray-400 bg-transparent">Cancelar</Button>
             <Button onClick={() => { if (!form.title || !form.imageUrl) { toast.error("Preencha título e imagem"); return; } createBanner.mutate(form as any); }}
-              className="bg-[#C8102E] hover:bg-red-700 text-white">Criar Banner</Button>
+              className="bg-[#1B8C3D] hover:bg-green-700 text-white">Criar Banner</Button>
           </div>
         </div>
       )}
@@ -698,7 +698,7 @@ function BannersTab() {
                   onClick={() => updateBanner.mutate({ id: banner.id, isActive: !banner.isActive })}>
                   {banner.isActive ? <EyeOff size={13} /> : <Eye size={13} />}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500 hover:text-red-400"
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500 hover:text-green-400"
                   onClick={() => { if (confirm('Remover banner?')) deleteBanner.mutate({ id: banner.id }); }}>
                   <Trash2 size={13} />
                 </Button>
@@ -789,13 +789,13 @@ function SettingsTab() {
           <Input value={form.mp_access_token} onChange={e => setForm(p => ({ ...p, mp_access_token: e.target.value }))}
             type="password" placeholder="APP_USR-..." className="bg-[#1A1A1A] border-[#333] text-white mt-1" />
           <p className="text-gray-600 text-xs mt-1">
-            Obtenha em: <a href="https://www.mercadopago.com.br/developers" target="_blank" className="text-[#C8102E] hover:underline">mercadopago.com.br/developers</a>
+            Obtenha em: <a href="https://www.mercadopago.com.br/developers" target="_blank" className="text-[#1B8C3D] hover:underline">mercadopago.com.br/developers</a>
           </p>
         </div>
       </div>
 
       <Button onClick={handleSave} disabled={setMany.isPending}
-        className="bg-[#C8102E] hover:bg-red-700 text-white font-bold px-8">
+        className="bg-[#1B8C3D] hover:bg-green-700 text-white font-bold px-8">
         {setMany.isPending ? 'Salvando...' : 'Salvar Configurações'}
       </Button>
     </div>
@@ -811,7 +811,7 @@ export default function Admin() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#C8102E] border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-[#1B8C3D] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -824,7 +824,7 @@ export default function Admin() {
           <h1 className="font-['Bebas_Neue'] text-3xl text-white tracking-wider mb-2">PAINEL ADMIN</h1>
           <p className="text-gray-500 text-sm mb-6">Faça login para acessar o painel administrativo</p>
           <a href={getLoginUrl()}>
-            <Button className="w-full bg-[#C8102E] hover:bg-red-700 text-white font-bold py-3">
+            <Button className="w-full bg-[#1B8C3D] hover:bg-green-700 text-white font-bold py-3">
               Fazer Login
             </Button>
           </a>
@@ -871,7 +871,7 @@ export default function Admin() {
               key={item.key}
               onClick={() => { setActiveTab(item.key); setSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === item.key ? 'bg-[#C8102E] text-white' : 'text-gray-400 hover:text-white hover:bg-[#1A1A1A]'
+                activeTab === item.key ? 'bg-[#1B8C3D] text-white' : 'text-gray-400 hover:text-white hover:bg-[#1A1A1A]'
               }`}
             >
               <item.icon size={16} />

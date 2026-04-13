@@ -216,11 +216,11 @@ export default function PdvDescontoFolha() {
           <>
             {/* Total pendente (destaque) */}
             {isAdmin && totalPendente > 0 && (
-              <div className="bg-red-950/30 border border-red-900/50 rounded-2xl p-5 flex items-center gap-4">
-                <AlertTriangle className="w-8 h-8 text-red-400 flex-shrink-0" />
+              <div className="bg-green-950/30 border border-green-900/50 rounded-2xl p-5 flex items-center gap-4">
+                <AlertTriangle className="w-8 h-8 text-green-400 flex-shrink-0" />
                 <div>
-                  <div className="text-red-400 font-bold text-xl">{formatCurrency(totalPendente)}</div>
-                  <div className="text-red-300/70 text-sm">Total pendente de desconto em folha</div>
+                  <div className="text-green-400 font-bold text-xl">{formatCurrency(totalPendente)}</div>
+                  <div className="text-green-400/70 text-sm">Total pendente de desconto em folha</div>
                 </div>
               </div>
             )}
@@ -252,7 +252,7 @@ export default function PdvDescontoFolha() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right text-gray-300 text-sm">{v.totalItens}</td>
-                          <td className="px-4 py-3 text-right text-red-400 font-semibold text-sm">{formatCurrency(v.pendente)}</td>
+                          <td className="px-4 py-3 text-right text-green-400 font-semibold text-sm">{formatCurrency(v.pendente)}</td>
                           <td className="px-4 py-3 text-right text-green-400 text-sm">{formatCurrency(v.quitado)}</td>
                           <td className="px-4 py-3 text-center">
                             {v.pendente > 0 && (
@@ -429,7 +429,7 @@ export default function PdvDescontoFolha() {
                                 Quitado
                               </span>
                             ) : (
-                              <span className="text-xs px-2.5 py-1 rounded-full bg-red-950/40 border border-red-900/50 text-red-400 font-medium">
+                              <span className="text-xs px-2.5 py-1 rounded-full bg-green-950/40 border border-green-900/50 text-green-400 font-medium">
                                 Pendente
                               </span>
                             )}
@@ -454,7 +454,7 @@ export default function PdvDescontoFolha() {
                                     }
                                   }}
                                   disabled={deleteMutation.isPending}
-                                  className="p-1.5 hover:bg-red-900/30 rounded-lg text-red-500 transition-colors"
+                                  className="p-1.5 hover:bg-green-900/30 rounded-lg text-green-500 transition-colors"
                                   title="Remover"
                                 >
                                   <Trash2 className="w-4 h-4" />

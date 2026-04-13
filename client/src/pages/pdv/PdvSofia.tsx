@@ -126,7 +126,7 @@ export default function PdvSofia() {
                 { label: "Faturamento", value: formatCurrency(summary?.faturamento || 0), icon: DollarSign, color: "text-blue-400" },
                 { label: "Pedidos", value: String(summary?.totalPedidos || 0), icon: ShoppingBag, color: "text-gray-300" },
                 { label: "Comissão Loja", value: formatCurrency(summary?.comissaoTotal || 0), icon: ArrowUpRight, color: "text-green-400" },
-                { label: "Reembolso", value: formatCurrency(summary?.reembolsoTotal || 0), icon: ArrowDownRight, color: "text-red-400" },
+                { label: "Reembolso", value: formatCurrency(summary?.reembolsoTotal || 0), icon: ArrowDownRight, color: "text-green-400" },
               ].map((kpi) => (
                 <div key={kpi.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -167,7 +167,7 @@ export default function PdvSofia() {
                           <td className="px-4 py-3 text-right text-purple-400 font-bold text-sm">{v.pecas}</td>
                           <td className="px-4 py-3 text-right text-white text-sm">{formatCurrency(v.faturamento)}</td>
                           <td className="px-4 py-3 text-right text-green-400 text-sm">{formatCurrency(v.comissao)}</td>
-                          <td className="px-4 py-3 text-right text-red-400 font-semibold text-sm">{formatCurrency(v.reembolso)}</td>
+                          <td className="px-4 py-3 text-right text-green-400 font-semibold text-sm">{formatCurrency(v.reembolso)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -177,7 +177,7 @@ export default function PdvSofia() {
                         <td className="px-4 py-3 text-right text-purple-400 font-bold text-sm">{summary?.totalPecas}</td>
                         <td className="px-4 py-3 text-right text-white font-bold text-sm">{formatCurrency(summary?.faturamento || 0)}</td>
                         <td className="px-4 py-3 text-right text-green-400 font-bold text-sm">{formatCurrency(summary?.comissaoTotal || 0)}</td>
-                        <td className="px-4 py-3 text-right text-red-400 font-bold text-sm">{formatCurrency(summary?.reembolsoTotal || 0)}</td>
+                        <td className="px-4 py-3 text-right text-green-400 font-bold text-sm">{formatCurrency(summary?.reembolsoTotal || 0)}</td>
                       </tr>
                     </tfoot>
                   </table>

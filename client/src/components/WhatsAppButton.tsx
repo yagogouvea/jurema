@@ -14,14 +14,14 @@ export default function WhatsAppButton() {
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
       {/* Tooltip / chat bubble */}
       {showTooltip && (
-        <div className="relative bg-[#0D0D0D] border border-[#C8102E]/40 text-white text-sm px-4 py-3 rounded-xl shadow-2xl max-w-[200px] text-center animate-fade-in-up">
+        <div className="relative bg-[#0D0D0D] border border-[#1B8C3D]/40 text-white text-sm px-4 py-3 rounded-xl shadow-2xl max-w-[200px] text-center animate-fade-in-up">
           {/* Arrow */}
-          <div className="absolute -bottom-2 right-6 w-4 h-4 bg-[#0D0D0D] border-r border-b border-[#C8102E]/40 rotate-45" />
-          <p className="font-['Bebas_Neue'] text-base tracking-wider text-[#C8102E]">FALE CONOSCO</p>
+          <div className="absolute -bottom-2 right-6 w-4 h-4 bg-[#0D0D0D] border-r border-b border-[#1B8C3D]/40 rotate-45" />
+          <p className="font-['Bebas_Neue'] text-base tracking-wider text-[#1B8C3D]">FALE CONOSCO</p>
           <p className="text-gray-400 text-xs mt-0.5">Atendimento via WhatsApp</p>
           <button
             onClick={(e) => { e.preventDefault(); setShowTooltip(false); }}
-            className="absolute -top-2 -right-2 bg-[#1A1A1A] border border-[#333] rounded-full p-0.5 text-gray-400 hover:text-white hover:border-[#C8102E] transition-all"
+            className="absolute -top-2 -right-2 bg-[#1A1A1A] border border-[#333] rounded-full p-0.5 text-gray-400 hover:text-white hover:border-[#1B8C3D] transition-all"
           >
             <X size={10} />
           </button>
@@ -37,12 +37,12 @@ export default function WhatsAppButton() {
         onMouseLeave={() => setShowTooltip(false)}
         className="group relative flex items-center gap-0 overflow-hidden rounded-full shadow-2xl transition-all duration-300 hover:gap-3 hover:pr-4 animate-pulse-red"
         aria-label="Falar no WhatsApp"
-        style={{ backgroundColor: "#0D0D0D", border: "2px solid #C8102E" }}
+        style={{ backgroundColor: "#0D0D0D", border: "2px solid #1B8C3D" }}
       >
         {/* Icon container */}
         <div
-          className="w-14 h-14 flex items-center justify-center flex-shrink-0 rounded-full transition-colors duration-300 group-hover:bg-[#C8102E]"
-          style={{ backgroundColor: "#C8102E" }}
+          className="w-14 h-14 flex items-center justify-center flex-shrink-0 rounded-full transition-colors duration-300 group-hover:bg-[#1B8C3D]"
+          style={{ backgroundColor: "#1B8C3D" }}
         >
           {/* WhatsApp SVG icon */}
           <svg width="26" height="26" viewBox="0 0 24 24" fill="white">

@@ -22,7 +22,7 @@ export default function OrderConfirmation() {
           <h1 className="font-['Bebas_Neue'] text-4xl text-white tracking-wider mb-2">PEDIDO CONFIRMADO!</h1>
           {orderNumber && (
             <p className="text-gray-400 text-sm mb-4">
-              Número do pedido: <span className="text-[#C8102E] font-bold text-base">#{orderNumber}</span>
+              Número do pedido: <span className="text-[#1B8C3D] font-bold text-base">#{orderNumber}</span>
             </p>
           )}
           <p className="text-gray-400 text-sm leading-relaxed mb-6">
@@ -48,7 +48,7 @@ export default function OrderConfirmation() {
               </Button>
             </Link>
             <Link href="/produtos" className="flex-1">
-              <Button className="w-full bg-[#C8102E] hover:bg-red-700 text-white gap-2">
+              <Button className="w-full bg-[#1B8C3D] hover:bg-green-700 text-white gap-2">
                 <ShoppingBag size={16} /> Continuar Comprando
               </Button>
             </Link>

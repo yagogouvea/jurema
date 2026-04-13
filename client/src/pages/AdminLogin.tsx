@@ -47,7 +47,7 @@ export default function AdminLogin() {
     <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center px-4">
       {/* Background pattern */}
       <div className="absolute inset-0 opacity-5" style={{
-        backgroundImage: `repeating-linear-gradient(45deg, #C8102E 0, #C8102E 1px, transparent 0, transparent 50%)`,
+        backgroundImage: `repeating-linear-gradient(45deg, #1B8C3D 0, #1B8C3D 1px, transparent 0, transparent 50%)`,
         backgroundSize: "20px 20px"
       }} />
 
@@ -57,8 +57,8 @@ export default function AdminLogin() {
           <img src={LOGO_URL} alt="Jurema Sport" className="w-24 h-24 object-contain mb-3" />
           <h1 className="font-['Bebas_Neue'] text-3xl text-white tracking-widest">JUREMA SPORT</h1>
           <div className="flex items-center gap-2 mt-1">
-            <ShieldCheck size={14} className="text-[#C8102E]" />
-            <span className="text-[#C8102E] text-xs font-semibold tracking-widest uppercase">Área Administrativa</span>
+            <ShieldCheck size={14} className="text-[#1B8C3D]" />
+            <span className="text-[#1B8C3D] text-xs font-semibold tracking-widest uppercase">Área Administrativa</span>
           </div>
         </div>
 
@@ -76,7 +76,7 @@ export default function AdminLogin() {
                   value={username}
                   onChange={e => setUsername(e.target.value)}
                   placeholder="jurema@adm"
-                  className="bg-[#1A1A1A] border-[#333] text-white pl-9 focus:border-[#C8102E] focus:ring-0"
+                  className="bg-[#1A1A1A] border-[#333] text-white pl-9 focus:border-[#1B8C3D] focus:ring-0"
                   autoComplete="username"
                 />
               </div>
@@ -91,7 +91,7 @@ export default function AdminLogin() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="bg-[#1A1A1A] border-[#333] text-white pl-9 pr-10 focus:border-[#C8102E] focus:ring-0"
+                  className="bg-[#1A1A1A] border-[#333] text-white pl-9 pr-10 focus:border-[#1B8C3D] focus:ring-0"
                   autoComplete="current-password"
                 />
                 <button
@@ -107,7 +107,7 @@ export default function AdminLogin() {
             <Button
               type="submit"
               disabled={loginMutation.isPending}
-              className="w-full bg-[#C8102E] hover:bg-red-700 text-white font-bold tracking-wider h-11 mt-2"
+              className="w-full bg-[#1B8C3D] hover:bg-green-700 text-white font-bold tracking-wider h-11 mt-2"
             >
               {loginMutation.isPending ? "ENTRANDO..." : "ENTRAR NO PAINEL"}
             </Button>

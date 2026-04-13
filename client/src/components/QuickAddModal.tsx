@@ -92,7 +92,7 @@ export default function QuickAddModal({ isOpen, onClose, product }: QuickAddModa
       {/* Modal */}
       <div className="fixed inset-0 z-[61] flex items-center justify-center p-4 pointer-events-none">
         <div
-          className="pointer-events-auto w-full max-w-sm bg-[#111111] border border-[#C8102E]/30 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          className="pointer-events-auto w-full max-w-sm bg-[#111111] border border-[#1B8C3D]/30 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
@@ -104,7 +104,7 @@ export default function QuickAddModal({ isOpen, onClose, product }: QuickAddModa
             />
             <div className="flex-1 min-w-0">
               {product.team && (
-                <p className="text-[#C8102E] text-[10px] font-bold uppercase tracking-widest mb-0.5">
+                <p className="text-[#1B8C3D] text-[10px] font-bold uppercase tracking-widest mb-0.5">
                   {product.team}
                 </p>
               )}
@@ -138,7 +138,7 @@ export default function QuickAddModal({ isOpen, onClose, product }: QuickAddModa
           {/* Tamanhos e quantidades */}
           <div className="p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Package size={14} className="text-[#C8102E]" />
+              <Package size={14} className="text-[#1B8C3D]" />
               <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">
                 Selecione tamanho e quantidade
               </p>
@@ -153,13 +153,13 @@ export default function QuickAddModal({ isOpen, onClose, product }: QuickAddModa
                     key={size}
                     className={`rounded-xl border transition-all duration-150 ${
                       isSelected
-                        ? "border-[#C8102E] bg-[#C8102E]/10"
+                        ? "border-[#1B8C3D] bg-[#1B8C3D]/10"
                         : "border-[#2A2A2A] bg-[#1A1A1A]"
                     }`}
                   >
                     {/* Label do tamanho */}
                     <div className={`text-center py-1.5 text-sm font-bold tracking-wider ${
-                      isSelected ? "text-[#C8102E]" : "text-gray-400"
+                      isSelected ? "text-[#1B8C3D]" : "text-gray-400"
                     }`}>
                       {size}
                     </div>
@@ -172,7 +172,7 @@ export default function QuickAddModal({ isOpen, onClose, product }: QuickAddModa
                         className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
                           qty === 0
                             ? "text-gray-700 cursor-not-allowed"
-                            : "text-white bg-[#2A2A2A] hover:bg-[#C8102E] active:scale-95"
+                            : "text-white bg-[#2A2A2A] hover:bg-[#1B8C3D] active:scale-95"
                         }`}
                       >
                         <Minus size={12} />
@@ -186,7 +186,7 @@ export default function QuickAddModal({ isOpen, onClose, product }: QuickAddModa
 
                       <button
                         onClick={() => increment(size)}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-white bg-[#2A2A2A] hover:bg-[#C8102E] active:scale-95 transition-all"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-white bg-[#2A2A2A] hover:bg-[#1B8C3D] active:scale-95 transition-all"
                       >
                         <Plus size={12} />
                       </button>
@@ -209,7 +209,7 @@ export default function QuickAddModal({ isOpen, onClose, product }: QuickAddModa
                 </div>
                 <div className="flex flex-wrap gap-1 mt-2">
                   {SIZES.filter(s => quantities[s] > 0).map(s => (
-                    <span key={s} className="text-[10px] bg-[#C8102E]/20 text-[#C8102E] font-bold px-2 py-0.5 rounded-full">
+                    <span key={s} className="text-[10px] bg-[#1B8C3D]/20 text-[#1B8C3D] font-bold px-2 py-0.5 rounded-full">
                       {s}: {quantities[s]}x
                     </span>
                   ))}
@@ -231,7 +231,7 @@ export default function QuickAddModal({ isOpen, onClose, product }: QuickAddModa
               disabled={totalPecas === 0}
               className={`flex-[2] py-2.5 text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all ${
                 totalPecas > 0
-                  ? "bg-[#C8102E] hover:bg-red-700 text-white active:scale-[0.98]"
+                  ? "bg-[#1B8C3D] hover:bg-green-700 text-white active:scale-[0.98]"
                   : "bg-[#2A2A2A] text-gray-600 cursor-not-allowed"
               }`}
             >
