@@ -693,6 +693,7 @@ export default function AdminPanel() {
 
   const logoutMutation = trpc.adminAuth.logout.useMutation({
     onSuccess: () => {
+      localStorage.removeItem("admin_token");
       utils.adminAuth.me.invalidate();
       navigate("/admin/login");
       toast.success("Saiu do painel");

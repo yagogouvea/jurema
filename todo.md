@@ -280,3 +280,6 @@
 
 ## Bugs (v40)
 - [x] Admin login: redirecionamento corrigido — utils.adminAuth.me.fetch() aguardado antes do navigate("/admin") para garantir que o estado de auth esteja atualizado
+
+## Bugs (v41)
+- [x] Admin login: corrigido definitivamente — token JWT salvo no localStorage após login e enviado como header Authorization em todas as requisições tRPC (resolve problema de cookies não persistidos em produção)

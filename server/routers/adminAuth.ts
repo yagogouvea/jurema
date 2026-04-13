@@ -52,7 +52,7 @@ export const adminAuthRouter = router({
         path: "/",
       });
 
-      return { success: true, name: admin.name };
+      return { success: true, name: admin.name, token };
     }),
 
   me: publicProcedure.query(async ({ ctx }) => {
@@ -64,7 +64,14 @@ export const adminAuthRouter = router({
       return acc;
     }, {} as Record<string, string>);
     
-    const token = cookies[ADMIN_COOKIE];
+    // Aceitar token via cookie OU header Authorization
+    let token = cookies[ADMIN_COOKIE];
+    if (!token) {
+      const authHeader = ctx.req.headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) {
+        token = authHeader.slice(7);
+      }
+    }
     if (!token) return null;
     try {
       const { payload } = await jwtVerify(token, ADMIN_JWT_SECRET);

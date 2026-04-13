@@ -20,7 +20,12 @@ export default function AdminLogin() {
   const loginMutation = trpc.adminAuth.login.useMutation({
     onSuccess: async (data) => {
       toast.success(`Bem-vindo, ${data.name}!`);
+      // Salvar token no localStorage para enviar como header Authorization
+      if (data.token) {
+        localStorage.setItem("admin_token", data.token);
+      }
       // Refetch explícito para garantir que o estado de auth seja atualizado antes de navegar
+      await utils.adminAuth.me.invalidate();
       await utils.adminAuth.me.fetch();
       navigate("/admin");
     },
