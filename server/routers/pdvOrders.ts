@@ -37,6 +37,7 @@ const OrderItemSchema = z.object({
   modelo: z.string().optional(),
   time: z.string(),
   descricao: z.string().optional(),
+  tipo: z.string().optional(),
   tamanho: z.string(),
   quantidade: z.number().min(1),
   precoUnitario: z.number().min(0),
@@ -116,11 +117,11 @@ export const pdvOrdersRouter = router({
           const comissaoItem = item.isSofia ? 0 : comissaoUnitaria;
           await db.execute(
             `INSERT INTO pdv_order_items 
-             (pedidoId, productId, linha, modelo, time, descricao, tamanho, quantidade, precoUnitario, totalItem, isSofia, comissaoUnitaria)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (pedidoId, productId, linha, modelo, time, descricao, tipo, tamanho, quantidade, precoUnitario, totalItem, isSofia, comissaoUnitaria)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               pedidoId, item.productId || null, item.linha || null, item.modelo || null,
-              item.time, item.descricao || null, item.tamanho, item.quantidade,
+              item.time, item.descricao || null, item.tipo || null, item.tamanho, item.quantidade,
               item.precoUnitario, item.totalItem, item.isSofia ? 1 : 0, comissaoItem
             ]
           );
@@ -207,13 +208,14 @@ export const pdvOrdersRouter = router({
             const itemsWithCodigo = await Promise.all(input.items.map(async (item) => {
               if (!item.productId || !db3) return { ...item, codigo: null, precoAtacado: null, precoVarejo: null };
               const [pRows] = await db3.execute(
-                'SELECT codigo, precoAtacado, precoVarejo FROM pdv_products WHERE id = ? LIMIT 1',
+                'SELECT codigo, tipo, precoAtacado, precoVarejo FROM pdv_products WHERE id = ? LIMIT 1',
                 [item.productId]
               );
               const prod = (pRows as any[])[0];
               return {
                 ...item,
                 codigo: prod?.codigo || null,
+                tipo: item.tipo || prod?.tipo || null,
                 precoAtacado: prod ? parseFloat(prod.precoAtacado) : null,
                 precoVarejo: prod ? parseFloat(prod.precoVarejo) : null,
               };
@@ -381,9 +383,12 @@ export const pdvOrdersRouter = router({
         if (orders.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido não encontrado" });
         const statusAtual = orders[0].status;
 
-        // Buscar itens do pedido (apenas os que têm productId para controle de estoque)
+        // Buscar itens do pedido com código para atualizar planilha
         const [itemRows] = await db.execute(
-          "SELECT productId, quantidade FROM pdv_order_items WHERE pedidoId = ? AND productId IS NOT NULL",
+          `SELECT oi.productId, oi.quantidade, p.codigo
+           FROM pdv_order_items oi
+           LEFT JOIN pdv_products p ON p.id = oi.productId
+           WHERE oi.pedidoId = ? AND oi.productId IS NOT NULL`,
           [input.pedidoId]
         );
         const items = itemRows as any[];
@@ -396,14 +401,23 @@ export const pdvOrdersRouter = router({
 
         // Ajustar estoque conforme a transição de status
         if (statusAtual !== "CANCELADO" && input.status === "CANCELADO") {
-          // Pedido sendo cancelado: DEVOLVER estoque
+          // Pedido sendo cancelado: DEVOLVER estoque no banco
           for (const item of items) {
             await db.execute(
               "UPDATE pdv_products SET estoque = estoque + ? WHERE id = ?",
               [item.quantidade, item.productId]
             );
           }
+          await db.end();
           console.log(`[PDV Orders] Pedido ${input.pedidoId} cancelado — estoque devolvido para ${items.length} produto(s)`);
+          // Devolver estoque também na planilha (assíncrono)
+          setImmediate(async () => {
+            for (const item of items) {
+              if (item.codigo) {
+                await restoreProductStockInSheet(item.codigo, item.quantidade);
+              }
+            }
+          });
         } else if (statusAtual === "CANCELADO" && input.status !== "CANCELADO") {
           // Pedido sendo reativado (cancelado -> pago/pendente): DESCONTAR estoque novamente
           for (const item of items) {
@@ -412,10 +426,20 @@ export const pdvOrdersRouter = router({
               [item.quantidade, item.productId]
             );
           }
+          await db.end();
           console.log(`[PDV Orders] Pedido ${input.pedidoId} reativado (${statusAtual} -> ${input.status}) — estoque descontado para ${items.length} produto(s)`);
+          // Descontar estoque também na planilha (assíncrono)
+          setImmediate(async () => {
+            for (const item of items) {
+              if (item.codigo) {
+                await updateProductStockInSheet(item.codigo, item.quantidade);
+              }
+            }
+          });
+        } else {
+          await db.end();
         }
 
-        await db.end();
         return { success: true };
       } catch (err) {
         if (err instanceof TRPCError) throw err;

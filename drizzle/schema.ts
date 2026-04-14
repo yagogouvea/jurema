@@ -260,6 +260,7 @@ export const pdvOrderItems = mysqlTable("pdv_order_items", {
   modelo: varchar("modelo", { length: 50 }),
   time: varchar("time", { length: 100 }),
   descricao: varchar("descricao", { length: 255 }),
+  tipo: varchar("tipo", { length: 100 }),
   tamanho: varchar("tamanho", { length: 20 }).notNull(),
   quantidade: int("quantidade").notNull(),
   precoUnitario: decimal("precoUnitario", { precision: 10, scale: 2 }).notNull(),

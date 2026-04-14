@@ -194,7 +194,7 @@ export async function appendOrderToSheet(order: {
       totalComTaxa.toFixed(2),                           // O: total_com_taxa
       order.totalPendente > 0 ? order.totalPendente.toFixed(2) : '', // P: pendente
       order.justificativa || '',                         // Q: justificativa
-      order.status === 'PENDENTE' ? 'Pendente' : 'Pago', // R: modalidade
+      order.status === 'CANCELADO' ? 'Cancelado' : order.status === 'PENDENTE' ? 'Pendente' : 'Pago', // R: status
       order.qtdItens,                                    // S: qtd_itens
       order.comissaoTotal.toFixed(2),                    // T: comissao
     ];
@@ -212,21 +212,21 @@ export async function appendOrderToSheet(order: {
  */
 export async function updateProductStockInSheet(codigo: string, quantidadeVendida: number): Promise<boolean> {
   try {
-    const rows = await readSheet(PRODUCTS_RANGE);
+    // Ler a partir da linha 2 (sem cabeçalho) — rows[0] = linha 2 da planilha
+    const rows = await readSheet('PRODUTOS!A2:O2000');
     
-    // Encontrar a linha do produto (índice 0 = linha 1 da planilha, mas linha 1 = cabeçalho)
-    // rows[0] = linha 2 da planilha (A2), rows[1] = linha 3 (A3), etc.
     const rowIndex = rows.findIndex(row => row[0]?.toString().trim() === codigo.trim());
     if (rowIndex === -1) {
-      console.warn(`[SheetsWriter] Produto ${codigo} não encontrado na planilha`);
+      console.warn(`[SheetsWriter] Produto ${codigo} não encontrado na planilha para deduzir estoque`);
       return false;
     }
     
     const currentStock = parseInt(rows[rowIndex][7] || '0', 10); // coluna H = índice 7
     const newStock = Math.max(0, currentStock - quantidadeVendida);
     
-    // Linha na planilha = rowIndex + 2 (porque rows[0] = linha 2 da planilha)
+    // Linha na planilha = rowIndex + 2 (rows[0] = linha 2 da planilha)
     const sheetRow = rowIndex + 2;
+    console.log(`[SheetsWriter] Deduzindo estoque ${codigo}: ${currentStock} - ${quantidadeVendida} = ${newStock} (linha ${sheetRow})`);
     return await updateCellInSheet(`PRODUTOS!H${sheetRow}`, newStock);
   } catch (err) {
     console.error('[SheetsWriter] updateProductStockInSheet error:', err);
@@ -239,13 +239,18 @@ export async function updateProductStockInSheet(codigo: string, quantidadeVendid
  */
 export async function restoreProductStockInSheet(codigo: string, quantidadeDevolvida: number): Promise<boolean> {
   try {
-    const rows = await readSheet(PRODUCTS_RANGE);
+    // Ler a partir da linha 2 (sem cabeçalho) — rows[0] = linha 2 da planilha
+    const rows = await readSheet('PRODUTOS!A2:O2000');
     const rowIndex = rows.findIndex(row => row[0]?.toString().trim() === codigo.trim());
-    if (rowIndex === -1) return false;
+    if (rowIndex === -1) {
+      console.warn(`[SheetsWriter] Produto ${codigo} não encontrado na planilha para restaurar estoque`);
+      return false;
+    }
     
     const currentStock = parseInt(rows[rowIndex][7] || '0', 10);
     const newStock = currentStock + quantidadeDevolvida;
     const sheetRow = rowIndex + 2;
+    console.log(`[SheetsWriter] Restaurando estoque ${codigo}: ${currentStock} + ${quantidadeDevolvida} = ${newStock} (linha ${sheetRow})`);
     return await updateCellInSheet(`PRODUTOS!H${sheetRow}`, newStock);
   } catch (err) {
     console.error('[SheetsWriter] restoreProductStockInSheet error:', err);
@@ -396,7 +401,8 @@ export async function appendOrderItemsToSheet(params: {
  */
 export async function getNewProductsFromSheet(existingCodigos: Set<string>): Promise<any[]> {
   try {
-    const rows = await readSheet(PRODUCTS_RANGE);
+    // Usar A2:O para pular a linha de cabeçalho (igual ao pdvSync que usa PRODUTOS!A2:O2000)
+    const rows = await readSheet('PRODUTOS!A2:O2000');
     const newProducts = [];
     
     for (const row of rows) {

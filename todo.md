@@ -417,3 +417,13 @@
 - [x] serviço extra: tipo(s) do serviço; valor serviço extra: R$ proporcional por item
 - [x] TOTAL: preco_utilizado + valor serviço extra proporcional
 - [x] Integrado no pdvOrders.ts: busca codigo/precoAtacado/precoVarejo do banco e chama appendOrderItemsToSheet após gravar na aba PEDIDOS
+
+## Revisão Integração Google Sheets (v54)
+- [x] BUG 1: pdv_order_items não tem coluna `tipo` — campo não é salvo no banco nem enviado à planilha
+- [x] BUG 2: CartItem no PdvCheckout não tem campo `tipo` — não é passado ao criar pedido
+- [x] BUG 3: updateStatus ao cancelar não chama restoreProductStockInSheet (planilha fica desatualizada)
+- [x] BUG 4: updateStatus ao reativar não chama updateProductStockInSheet (planilha fica desatualizada)
+- [x] BUG 5: appendOrderToSheet — coluna R é "status" (Pendente/Pago/Cancelado) corretamente
+- [x] BUG 6: appendProductToSheet — coluna J (precoVarejo) corrigida com .toFixed(2)
+- [x] BUG 7: getNewProductsFromSheet e updateProductStockInSheet agora usam A2:O2000 (sem cabeçalho)
+- [x] MELHORIA: pdvOrders.ts — busca campo `tipo` do produto ao montar itemsWithCodigo para a planilha

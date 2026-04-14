@@ -16,6 +16,7 @@ interface CartItem {
   modelo: string;
   time: string;
   descricao?: string;
+  tipo?: string;
   tamanho: string;
   quantidade: number;
   precoUnitario: number;
@@ -155,6 +156,7 @@ export default function PdvMain() {
         modelo: product.modelo,
         time: product.time,
         descricao: product.descricao,
+        tipo: product.tipo,
         tamanho,
         quantidade: 1,
         precoUnitario,
