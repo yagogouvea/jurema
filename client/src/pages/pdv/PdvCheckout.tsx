@@ -89,6 +89,9 @@ export default function PdvCheckout({
   const [editingMaquininhaVal, setEditingMaquininhaVal] = useState("");
   const [justificativa, setJustificativa] = useState("");
   const [showItems, setShowItems] = useState(false);
+  // Pendente explícito: checkbox + valor manual + justificativa
+  const [isPendente, setIsPendente] = useState(false);
+  const [valorPendenteManual, setValorPendenteManual] = useState("");
   // Sofia por item: mapa de índice do carrinho -> boolean
   const [sofiaItems, setSofiaItems] = useState<Record<number, boolean>>({});
   const toggleSofiaItem = (idx: number) => {
@@ -100,7 +103,11 @@ export default function PdvCheckout({
   const totalServicos = useMemo(() => services.reduce((sum, s) => sum + s.valor, 0), [services]);
   const totalGeral = totalAplicado + totalServicos;
   const totalPago = useMemo(() => payments.reduce((sum, p) => sum + p.valor, 0), [payments]);
-  const totalPendente = Math.max(0, totalGeral - totalPago);
+  // Pendente: usa valor manual se checkbox ativo, senão calcula automaticamente
+  const totalPendente = isPendente
+    ? (parseFloat(valorPendenteManual.replace(',', '.')) || Math.max(0, totalGeral - totalPago))
+    : Math.max(0, totalGeral - totalPago);
+  const statusPedido = isPendente || totalPendente > 0 ? 'PENDENTE' : 'PAGO';
 
   // Preview of taxa/maquininha while user types in the add-payment form
   const previewVal = parseFloat(newPaymentValor.replace(",", "."));
@@ -210,6 +217,10 @@ export default function PdvCheckout({
       toast.error("Adicione pelo menos uma forma de pagamento");
       return;
     }
+    if (isPendente && !justificativa.trim()) {
+      toast.error("Informe a justificativa para o valor pendente");
+      return;
+    }
     createOrderMutation.mutate({
       canal,
       clienteNome: clienteNome || undefined,
@@ -221,7 +232,7 @@ export default function PdvCheckout({
       totalPago,
       totalPendente,
       justificativa: justificativa || undefined,
-      status: totalPendente > 0 ? "PENDENTE" : "PAGO",
+      status: statusPedido,
       items: cart.map((item, idx) => ({
         productId: item.productId,
         linha: item.linha,
@@ -614,7 +625,66 @@ export default function PdvCheckout({
             )}
           </div>
 
-          {/* Observações */}
+          {/* Pendente */}
+          <div className={`border rounded-2xl p-4 transition-all ${
+            isPendente
+              ? 'bg-yellow-950/30 border-yellow-800/60'
+              : 'bg-gray-900 border-gray-800'
+          }`}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-white font-semibold">Valor Pendente</h3>
+                <p className="text-gray-400 text-xs mt-0.5">Marque se parte do pagamento ficou pendente</p>
+              </div>
+              <button
+                onClick={() => { setIsPendente(!isPendente); if (isPendente) setValorPendenteManual(''); }}
+                className={`relative w-12 h-6 rounded-full transition-all ${
+                  isPendente ? 'bg-yellow-600' : 'bg-gray-700'
+                }`}
+              >
+                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
+                  isPendente ? 'left-7' : 'left-1'
+                }`} />
+              </button>
+            </div>
+
+            {isPendente && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-yellow-400 mb-1">Valor pendente (R$) <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={valorPendenteManual}
+                    onChange={(e) => setValorPendenteManual(e.target.value)}
+                    placeholder={`Sugerido: ${fmt(Math.max(0, totalGeral - totalPago))}`}
+                    className="w-full bg-gray-800 border border-yellow-800 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-600 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-yellow-400 mb-1">Justificativa <span className="text-red-400">*</span></label>
+                  <textarea
+                    value={justificativa}
+                    onChange={(e) => setJustificativa(e.target.value)}
+                    placeholder="Ex: cliente vai pagar amanha, faltou R$20..."
+                    rows={2}
+                    className="w-full bg-gray-800 border border-yellow-800 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-600 resize-none transition-colors"
+                  />
+                </div>
+                <div className="bg-yellow-900/30 border border-yellow-800/50 rounded-xl p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                    <span className="text-yellow-300 text-xs font-semibold">Modalidade: PENDENTE</span>
+                  </div>
+                  <p className="text-yellow-400/70 text-xs mt-1">
+                    Este pedido será registrado como pendente e aparecerá no relatório de pendências.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Observações (apenas quando não está pendente) */}
+          {!isPendente && (
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
             <h3 className="text-white font-semibold mb-2">Observações</h3>
             <textarea
@@ -625,6 +695,7 @@ export default function PdvCheckout({
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-600 resize-none"
             />
           </div>
+          )}
 
           {/* Total Summary */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-2">

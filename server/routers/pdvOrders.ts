@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
+import { appendOrderToSheet, updateProductStockInSheet, restoreProductStockInSheet } from "./pdvSheetsWriter";
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -167,6 +168,62 @@ export const pdvOrdersRouter = router({
         }
 
         await db.end();
+        
+        // ── Integração Google Sheets (assíncrona, não bloqueia a resposta) ──
+        // Buscar dados completos do pedido para gravar na planilha
+        setImmediate(async () => {
+          try {
+            // Calcular totais para a planilha
+            const qtdItens = input.items.reduce((sum, item) => sum + item.quantidade, 0);
+            const comissaoTotal = input.items.reduce((sum, item) => {
+              if (item.isSofia) return sum;
+              return sum + (item.quantidade * comissaoUnitaria);
+            }, 0);
+            
+            // Gravar pedido na aba PEDIDOS
+            await appendOrderToSheet({
+              pedidoId,
+              createdAt: new Date(),
+              sellerName: seller.name,
+              canal: input.canal,
+              clienteNome: input.clienteNome,
+              clienteTelefone: input.clienteTelefone,
+              totalVarejo: input.totalVarejo,
+              totalAtacado: input.totalAtacado,
+              regime: input.regime,
+              services: input.services,
+              totalAplicado: input.totalAplicado,
+              payments: input.payments,
+              totalPendente: input.totalPendente,
+              justificativa: input.justificativa,
+              status: input.status,
+              qtdItens,
+              comissaoTotal,
+            });
+            
+            // Deduzir estoque na aba PRODUTOS para cada item com código
+            for (const item of input.items) {
+              if (item.productId) {
+                // Buscar o código do produto para atualizar a planilha
+                const db2 = await getDb();
+                if (db2) {
+                  const [rows] = await db2.execute(
+                    'SELECT codigo FROM pdv_products WHERE id = ? LIMIT 1',
+                    [item.productId]
+                  );
+                  await db2.end();
+                  const codigo = (rows as any[])[0]?.codigo;
+                  if (codigo) {
+                    await updateProductStockInSheet(codigo, item.quantidade);
+                  }
+                }
+              }
+            }
+          } catch (sheetErr) {
+            console.error('[PDV Orders] Sheet sync error (non-blocking):', sheetErr);
+          }
+        });
+        
         return { success: true, pedidoId };
       } catch (err) {
         if (err instanceof TRPCError) throw err;

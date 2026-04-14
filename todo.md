@@ -381,3 +381,25 @@
 - [x] Reimportados 657 produtos únicos da planilha original (808 linhas, 151 duplicatas somadas)
 - [x] Nova planilha (ID: 1SGUr5Sh...) configurada no pdvSync.ts (aba PRODUTOS!A2:O2000)
 - [x] Banco agora tem 657 produtos | 641 com estoque | 657 ativos
+
+## Integração Google Sheets Bidirecional (v52)
+
+### 1. Planilha PRODUTOS ↔ Sistema (bidirecional)
+- [x] Toda vez que a Vanessa adiciona um produto na aba PRODUTOS, o sistema detecta e adiciona no banco (via webhook Apps Script)
+- [x] Toda vez que uma venda é realizada, o sistema deduz o estoque na aba PRODUTOS da planilha (pdvSheetsWriter.updateProductStockInSheet)
+
+### 2. Planilha PEDIDOS ← Sistema (escrita automática)
+- [x] Ao finalizar pedido, gravar linha completa na aba PEDIDOS da planilha (pdvSheetsWriter.appendOrderToSheet)
+- [x] 20 colunas: pedido_id, data, vendedor, canal, cliente, telefone, varejo, atacado, regime, extra, valor_adicional, total_sem_taxa, forma_pagamento, taxa, total_com_taxa, pendente, justificativa, modalidade, qtd_itens, comissao
+
+### 3. Novos campos no sistema de pedidos
+- [x] Toggle "Valor Pendente" no checkout PDV com visual amarelo e valor manual
+- [x] Campo "Justificativa" obrigatório quando Pendente ativo
+- [x] Status PAGO/PENDENTE calculado e gravado no banco e na planilha
+- [x] Banco já tinha colunas totalPendente, justificativa, status em pdv_orders
+
+### 4. Apps Script (Planilha → Sistema em tempo real)
+- [x] Código Apps Script gerado para instalar na planilha da Vanessa
+- [x] Script detecta nova linha em PRODUTOS e faz POST para o webhook do sistema
+- [x] Endpoint POST /api/sheets-webhook no servidor recebe e processa o novo produto
+- [x] 12 testes vitest v52 + 123/123 total passando

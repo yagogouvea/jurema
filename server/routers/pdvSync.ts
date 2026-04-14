@@ -410,6 +410,129 @@ export const pdvSyncRouter = router({
       };
     }),
 
+  // Webhook: recebe novo produto adicionado na planilha via Apps Script
+  // Chamado automaticamente quando a Vanessa adiciona uma linha na aba PRODUTOS
+  webhookNewProduct: publicProcedure
+    .input(z.object({
+      secret: z.string(), // Chave secreta para autenticar o Apps Script
+      product: z.object({
+        codigo: z.string(),
+        linha: z.string().default(''),
+        modelo: z.string().default(''),
+        time: z.string(),
+        descricao: z.string().default(''),
+        tamanho: z.string(),
+        tipo: z.string().default('CAMISETA'),
+        estoque: z.number().default(0),
+        precoAtacado: z.number().default(0),
+        precoVarejo: z.number().default(0),
+        isActive: z.boolean().default(true),
+      }),
+    }))
+    .mutation(async ({ input }) => {
+      // Verificar chave secreta do Apps Script
+      const expectedSecret = process.env.SHEETS_WEBHOOK_SECRET || 'jurema-pdv-2024';
+      if (input.secret !== expectedSecret) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Chave inválida' });
+      }
+      
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+      
+      try {
+        // Verificar se o produto já existe
+        const [existing] = await db.execute(
+          'SELECT id FROM pdv_products WHERE codigo = ? LIMIT 1',
+          [input.product.codigo]
+        );
+        
+        if ((existing as any[]).length > 0) {
+          // Produto já existe — atualizar
+          await db.execute(
+            `UPDATE pdv_products SET linha=?, modelo=?, \`time\`=?, descricao=?, tamanho=?,
+             estoque=?, precoAtacado=?, precoVarejo=?, isActive=?, updatedAt=NOW()
+             WHERE codigo=?`,
+            [
+              input.product.linha, input.product.modelo, input.product.time,
+              input.product.descricao, input.product.tamanho, input.product.estoque,
+              input.product.precoAtacado, input.product.precoVarejo,
+              input.product.isActive ? 1 : 0, input.product.codigo
+            ]
+          );
+          await db.end();
+          return { action: 'updated', codigo: input.product.codigo };
+        } else {
+          // Produto novo — inserir
+          await db.execute(
+            `INSERT INTO pdv_products
+             (codigo, linha, modelo, \`time\`, descricao, tamanho, tipo, estoque, precoAtacado, precoVarejo, isActive, createdAt, updatedAt)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            [
+              input.product.codigo, input.product.linha, input.product.modelo,
+              input.product.time, input.product.descricao, input.product.tamanho,
+              input.product.tipo, input.product.estoque, input.product.precoAtacado,
+              input.product.precoVarejo, input.product.isActive ? 1 : 0
+            ]
+          );
+          await db.end();
+          
+          // Notificar sobre novo produto
+          try {
+            await savePdvNotification(
+              'novo_produto',
+              `Novo produto adicionado via planilha: ${input.product.codigo}`,
+              `Produto: ${input.product.time} ${input.product.descricao} (${input.product.tamanho})\nEstoque: ${input.product.estoque} | ATC: R$${input.product.precoAtacado} / VAR: R$${input.product.precoVarejo}`
+            );
+          } catch (e) { /* não bloquear */ }
+          
+          return { action: 'inserted', codigo: input.product.codigo };
+        }
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+        console.error('[PDV Sync] Webhook error:', err);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao processar produto' });
+      }
+    }),
+
+  // Webhook: recebe atualização de produto existente (edição de linha na planilha)
+  webhookUpdateProduct: publicProcedure
+    .input(z.object({
+      secret: z.string(),
+      codigo: z.string(),
+      field: z.string(), // campo alterado: estoque, precoAtacado, precoVarejo, etc.
+      value: z.union([z.string(), z.number()]),
+    }))
+    .mutation(async ({ input }) => {
+      const expectedSecret = process.env.SHEETS_WEBHOOK_SECRET || 'jurema-pdv-2024';
+      if (input.secret !== expectedSecret) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Chave inválida' });
+      }
+      
+      const allowedFields: Record<string, string> = {
+        estoque: 'estoque', precoAtacado: 'precoAtacado', precoVarejo: 'precoVarejo',
+        descricao: 'descricao', isActive: 'isActive', linha: 'linha',
+        modelo: 'modelo', time: '`time`', tamanho: 'tamanho', tipo: 'tipo',
+      };
+      
+      const dbField = allowedFields[input.field];
+      if (!dbField) throw new TRPCError({ code: 'BAD_REQUEST', message: `Campo inválido: ${input.field}` });
+      
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+      
+      try {
+        await db.execute(
+          `UPDATE pdv_products SET ${dbField}=?, updatedAt=NOW() WHERE codigo=?`,
+          [input.value, input.codigo]
+        );
+        await db.end();
+        return { success: true, codigo: input.codigo, field: input.field };
+      } catch (err) {
+        console.error('[PDV Sync] webhookUpdateProduct error:', err);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+      }
+    }),
+
   // Status atual do catálogo
   status: publicProcedure.query(async ({ ctx }) => {
     await requirePdvAuth(ctx);
