@@ -374,3 +374,10 @@
 
 ## Bugs (v50)
 - [x] Checkout PDV: redirecionamento para WhatsApp removido — canal WHATSAPP é apenas indicativo, pedido finaliza dentro do sistema com botão único "Finalizar Venda"
+
+## Reimportação de Produtos (v51)
+- [x] Apagados 1.462 produtos do banco (pdv_products)
+- [x] Colunas linha/modelo/tipo alteradas de ENUM para VARCHAR (aceita qualquer valor da planilha)
+- [x] Reimportados 657 produtos únicos da planilha original (808 linhas, 151 duplicatas somadas)
+- [x] Nova planilha (ID: 1SGUr5Sh...) configurada no pdvSync.ts (aba PRODUTOS!A2:O2000)
+- [x] Banco agora tem 657 produtos | 641 com estoque | 657 ativos

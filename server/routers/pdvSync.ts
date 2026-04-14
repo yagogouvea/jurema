@@ -23,32 +23,20 @@ async function requirePdvAdmin(ctx: any) {
   return seller;
 }
 
-const SHEET_ID = "1z-Qr08Oy9tc3c7rd1nspR0F20oP0cRskEXmUxPxvo7M";
-const SHEET_RANGE = "PRODUTOS VISUAL!A2:M2000";
+const SHEET_ID = "1SGUr5Sh2gZ5nkYg0km-QhllQS4Jm2_aVxy6PuyATsLU"; // Nova planilha PDV JUREMA 5.0
+const SHEET_RANGE = "PRODUTOS!A2:O2000"; // Aba PRODUTOS (15 colunas: CODIGO,LINHA,MODELO,TIME,DESCRIÇÃO,TAM,TIPO,QTD,ATC,VAR,ATIVO,FOTO,TEMPORADA,PT ATAC,PT VAR)
 
-// Colunas obrigatórias — FOTO (11) e TEMPORADA (12) são IGNORADAS na validação
+// Colunas obrigatórias — FOTO (11), TEMPORADA (12), PT ATAC (13), PT VAR (14) são IGNORADAS na validação
 // [0]CODIGO [1]LINHA [2]MODELO [3]TIME [4]DESCRIÇÃO [5]TAM [6]TIPO [7]QTD [8]ATC [9]VAR [10]ATIVO
-const REQUIRED_COLS = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10];
+const REQUIRED_COLS = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10]; // DESCRIÇÃO (4) opcional na nova planilha
 const COL_NAMES: Record<number, string> = {
   0: "CODIGO", 1: "LINHA", 2: "MODELO", 3: "TIME", 4: "DESCRIÇÃO",
   5: "TAM", 6: "TIPO", 7: "QTD", 8: "ATC", 9: "VAR", 10: "ATIVO",
 };
 
-function mapLinha(val: string): string {
-  const v = val.toUpperCase().trim();
-  if (v.includes("TAILANDESA")) return "TAILANDESA";
-  if (v.includes("NACIONAL")) return "NACIONAL";
-  if (v.includes("TORCEDOR")) return "TORCEDOR";
-  if (v.includes("PECA") || v.includes("PEÇA")) return "PECA";
-  return "TAILANDESA";
-}
-
-function mapModelo(val: string): string {
-  const v = val.toUpperCase().trim();
-  if (v.includes("JOGADOR")) return "JOGADOR";
-  if (v.includes("TORCEDOR")) return "TORCEDOR";
-  if (v.includes("BONE") || v.includes("BONÉ")) return "BONE";
-  return "TORCEDOR";
+// Normaliza string: trim + uppercase
+function norm(val: string): string {
+  return (val || '').trim().toUpperCase();
 }
 
 interface SheetProduct {
@@ -132,11 +120,11 @@ async function fetchSheetData(apiKey: string): Promise<{
     const ativo = row[10]?.toString().toUpperCase().trim();
     validRaw.push({
       codigo: row[0].trim(),
-      linha: mapLinha(row[1]),
-      modelo: mapModelo(row[2]),
-      time: row[3].trim().toUpperCase(),
-      descricao: row[4].trim(),
-      tamanho: row[5].trim().toUpperCase(),
+      linha: norm(row[1]),
+      modelo: norm(row[2]),
+      time: norm(row[3]),
+      descricao: (row[4] || '').trim(),
+      tamanho: norm(row[5]),
       estoque: qtd,
       precoAtacado: atc,
       precoVarejo: varejo,
