@@ -15,6 +15,7 @@
 const SHEET_ID = '1SGUr5Sh2gZ5nkYg0km-QhllQS4Jm2_aVxy6PuyATsLU';
 const PRODUCTS_RANGE = 'PRODUTOS!A:O';
 const ORDERS_SHEET = 'PEDIDOS';
+const ITEMS_SHEET = 'pedidos_itens';
 
 // ─── JWT para Service Account ───────────────────────────────────────────────
 
@@ -290,6 +291,101 @@ export async function appendProductToSheet(product: {
     return await appendToSheet(`PRODUTOS!A:O`, [row]);
   } catch (err) {
     console.error('[SheetsWriter] appendProductToSheet error:', err);
+    return false;
+  }
+}
+
+/**
+ * Grava os itens de um pedido na aba pedidos_itens da planilha
+ *
+ * Colunas (13 no total):
+ * A: pedido_id
+ * B: cod (SKU)
+ * C: produto (Linha Modelo Time Descrição Tamanho Tipo)
+ * D: quantidade
+ * E: preco_atacado (unitário)
+ * F: preco_varejo (unitário)
+ * G: subtotal_atacado (preco_atacado × quantidade)
+ * H: subtotal_varejo (preco_varejo × quantidade)
+ * I: modalidade usada (Atacado | Varejo)
+ * J: preco_utilizado (subtotal na modalidade escolhida)
+ * K: serviço extra (tipo/descrição)
+ * L: valor serviço extra (R$)
+ * M: TOTAL (preco_utilizado + valor serviço extra)
+ */
+export async function appendOrderItemsToSheet(params: {
+  pedidoId: string;
+  regime: string;
+  services: Array<{ tipo: string; valor: number }>;
+  items: Array<{
+    codigo?: string | null;
+    linha?: string | null;
+    modelo?: string | null;
+    time: string;
+    descricao?: string | null;
+    tamanho: string;
+    tipo?: string | null;
+    quantidade: number;
+    precoUnitario: number;
+    totalItem: number;
+    precoAtacado?: number | null;
+    precoVarejo?: number | null;
+  }>;
+}): Promise<boolean> {
+  try {
+    const { pedidoId, regime, services, items } = params;
+
+    // Serviços extras: tipo(s) e valor total
+    const extraTipos = services.map(s => s.tipo).join(', ');
+    const extraValorTotal = services.reduce((sum, s) => sum + s.valor, 0);
+    // Distribuir valor do serviço extra proporcionalmente entre os itens
+    const extraPorItem = items.length > 0 ? extraValorTotal / items.length : 0;
+
+    const rows = items.map(item => {
+      // Descrição completa: Linha Modelo Time Descrição Tamanho Tipo
+      const descParts = [
+        item.linha || '',
+        item.modelo || '',
+        item.time || '',
+        item.descricao || '',
+        item.tamanho || '',
+        item.tipo || '',
+      ].filter(Boolean);
+      const produtoDesc = descParts.join(' ');
+
+      // Preços unitários (por unidade, não subtotal)
+      const precoAtacadoUnit = item.precoAtacado ?? item.precoUnitario;
+      const precoVarejoUnit = item.precoVarejo ?? item.precoUnitario;
+
+      // Subtotais (preço unitário × quantidade)
+      const subtotalAtacado = precoAtacadoUnit * item.quantidade;
+      const subtotalVarejo = precoVarejoUnit * item.quantidade;
+
+      const modalidade = regime === 'ATACADO' ? 'Atacado' : 'Varejo';
+      // preco_utilizado = subtotal na modalidade escolhida
+      const precoUtilizado = regime === 'ATACADO' ? subtotalAtacado : subtotalVarejo;
+      const totalComExtra = precoUtilizado + extraPorItem;
+
+      return [
+        pedidoId,                          // A: pedido_id
+        item.codigo || '',                 // B: cod (SKU)
+        produtoDesc,                       // C: produto
+        item.quantidade,                   // D: quantidade
+        precoAtacadoUnit.toFixed(2),       // E: preco_atacado (unitário)
+        precoVarejoUnit.toFixed(2),        // F: preco_varejo (unitário)
+        subtotalAtacado.toFixed(2),        // G: subtotal_atacado
+        subtotalVarejo.toFixed(2),         // H: subtotal_varejo
+        modalidade,                        // I: modalidade usada
+        precoUtilizado.toFixed(2),         // J: preco_utilizado
+        extraTipos || '',                  // K: serviço extra
+        extraPorItem > 0 ? extraPorItem.toFixed(2) : '', // L: valor serviço extra
+        totalComExtra.toFixed(2),          // M: TOTAL
+      ];
+    });
+
+    return await appendToSheet(`${ITEMS_SHEET}!A:M`, rows);
+  } catch (err) {
+    console.error('[SheetsWriter] appendOrderItemsToSheet error:', err);
     return false;
   }
 }

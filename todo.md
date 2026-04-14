@@ -403,3 +403,17 @@
 - [x] Script detecta nova linha em PRODUTOS e faz POST para o webhook do sistema
 - [x] Endpoint POST /api/sheets-webhook no servidor recebe e processa o novo produto
 - [x] 12 testes vitest v52 + 123/123 total passando
+## Aba PEDIDOS_ITENS + Validação (v53)
+- [ ] Analisar estrutura das 3 abas na planilha (PRODUTOS, PEDIDOS, PEDIDOS_ITENS)
+- [ ] Validar campos do produto no sistema (linha, modelo, time, descrição, tamanho, tipo)
+- [ ] Gravar PEDIDOS_ITENS automaticamente ao finalizar pedido (cod, produto desc completa, qtd, preços, modalidade, serviço extra, total)
+- [ ] Criar descrição completa do produto: "Linha Modelo Time Descrição Tamanho Tipo"
+- [ ] Validar as 3 abas com dados reais após implementação
+
+## Integração Google Sheets — Aba pedidos_itens (v53)
+- [x] appendOrderItemsToSheet: 13 colunas na ordem correta (pedido_id, cod, produto, quantidade, preco_atacado, preco_varejo, subtotal_atacado, subtotal_varejo, modalidade usada, preco_utilizado, serviço extra, valor serviço extra, TOTAL)
+- [x] preco_atacado e preco_varejo são unitários (por peça), subtotais calculados separadamente
+- [x] modalidade usada: "Atacado" ou "Varejo" conforme regime do pedido
+- [x] serviço extra: tipo(s) do serviço; valor serviço extra: R$ proporcional por item
+- [x] TOTAL: preco_utilizado + valor serviço extra proporcional
+- [x] Integrado no pdvOrders.ts: busca codigo/precoAtacado/precoVarejo do banco e chama appendOrderItemsToSheet após gravar na aba PEDIDOS

@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
-import { appendOrderToSheet, updateProductStockInSheet, restoreProductStockInSheet } from "./pdvSheetsWriter";
+import { appendOrderToSheet, appendOrderItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet } from "./pdvSheetsWriter";
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -201,22 +201,36 @@ export const pdvOrdersRouter = router({
               comissaoTotal,
             });
             
+            // Gravar itens na aba pedidos_itens
+            // Buscar códigos e preços dos produtos para a descrição completa
+            const db3 = await getDb();
+            const itemsWithCodigo = await Promise.all(input.items.map(async (item) => {
+              if (!item.productId || !db3) return { ...item, codigo: null, precoAtacado: null, precoVarejo: null };
+              const [pRows] = await db3.execute(
+                'SELECT codigo, precoAtacado, precoVarejo FROM pdv_products WHERE id = ? LIMIT 1',
+                [item.productId]
+              );
+              const prod = (pRows as any[])[0];
+              return {
+                ...item,
+                codigo: prod?.codigo || null,
+                precoAtacado: prod ? parseFloat(prod.precoAtacado) : null,
+                precoVarejo: prod ? parseFloat(prod.precoVarejo) : null,
+              };
+            }));
+            if (db3) await db3.end();
+
+            await appendOrderItemsToSheet({
+              pedidoId,
+              regime: input.regime,
+              services: input.services,
+              items: itemsWithCodigo,
+            });
+
             // Deduzir estoque na aba PRODUTOS para cada item com código
-            for (const item of input.items) {
-              if (item.productId) {
-                // Buscar o código do produto para atualizar a planilha
-                const db2 = await getDb();
-                if (db2) {
-                  const [rows] = await db2.execute(
-                    'SELECT codigo FROM pdv_products WHERE id = ? LIMIT 1',
-                    [item.productId]
-                  );
-                  await db2.end();
-                  const codigo = (rows as any[])[0]?.codigo;
-                  if (codigo) {
-                    await updateProductStockInSheet(codigo, item.quantidade);
-                  }
-                }
+            for (const item of itemsWithCodigo) {
+              if (item.codigo) {
+                await updateProductStockInSheet(item.codigo, item.quantidade);
               }
             }
           } catch (sheetErr) {
