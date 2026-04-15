@@ -445,3 +445,8 @@
 - [x] Itens Sofia devem entrar APENAS na aba SOFIA_ITENS e no dashboard Sofia
 - [x] Validar que comissões de vendedores excluem itens Sofia corretamente
 - [x] Listagem geral de pedidos exclui pedidos 100% Sofia (isSofia=0)
+
+## Exclusão de Produtos via Planilha (v57)
+- [x] Implementar detecção de exclusão de linhas na planilha e desativação no sistema
+- [x] Criar webhook webhookReconcile no backend (pdvSync) — compara códigos e desativa ausentes
+- [x] Atualizar Apps Script v3.0 com função reconcileProducts (acionador a cada 5 min)

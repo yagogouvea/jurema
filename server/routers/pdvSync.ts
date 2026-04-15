@@ -533,6 +533,83 @@ export const pdvSyncRouter = router({
       }
     }),
 
+  // Webhook: reconciliação — recebe lista de todos os códigos ativos na planilha
+  // Produtos no banco que NÃO estão nessa lista são desativados (isActive=0)
+  webhookReconcile: publicProcedure
+    .input(z.object({
+      secret: z.string(),
+      codigos: z.array(z.string()), // Todos os códigos ativos na planilha
+    }))
+    .mutation(async ({ input }) => {
+      const expectedSecret = process.env.SHEETS_WEBHOOK_SECRET || 'jurema-pdv-2024';
+      if (input.secret !== expectedSecret) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Chave inválida' });
+      }
+
+      if (input.codigos.length === 0) {
+        return { desativados: 0, message: 'Nenhum código recebido — nada alterado' };
+      }
+
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+
+      try {
+        // Buscar todos os produtos ativos no banco
+        const [activeRows] = await db.execute(
+          'SELECT codigo FROM pdv_products WHERE isActive = 1 AND codigo IS NOT NULL AND codigo != ""'
+        );
+
+        const sheetCodigos = new Set(input.codigos.map(c => c.trim().toUpperCase()));
+        const toDeactivate: string[] = [];
+
+        for (const row of activeRows as any[]) {
+          if (!sheetCodigos.has(row.codigo.trim().toUpperCase())) {
+            toDeactivate.push(row.codigo);
+          }
+        }
+
+        if (toDeactivate.length === 0) {
+          await db.end();
+          return { desativados: 0, message: 'Todos os produtos do banco estão na planilha' };
+        }
+
+        // Desativar em lotes de 100
+        const CHUNK = 100;
+        for (let i = 0; i < toDeactivate.length; i += CHUNK) {
+          const chunk = toDeactivate.slice(i, i + CHUNK);
+          const placeholders = chunk.map(() => '?').join(',');
+          await db.execute(
+            `UPDATE pdv_products SET isActive = 0, updatedAt = NOW() WHERE codigo IN (${placeholders})`,
+            chunk
+          );
+        }
+
+        await db.end();
+
+        // Notificar sobre desativação
+        if (toDeactivate.length > 0) {
+          try {
+            const lista = toDeactivate.slice(0, 10).join(', ');
+            const sufixo = toDeactivate.length > 10 ? ` e mais ${toDeactivate.length - 10}` : '';
+            await savePdvNotification(
+              'produto_removido',
+              `${toDeactivate.length} produto(s) desativado(s) (removidos da planilha)`,
+              `Códigos: ${lista}${sufixo}`
+            );
+          } catch (e) { /* não bloquear */ }
+        }
+
+        return {
+          desativados: toDeactivate.length,
+          codigos: toDeactivate.slice(0, 20),
+          message: `${toDeactivate.length} produto(s) desativado(s) por não estarem mais na planilha`
+        };
+      } catch (err) {
+        console.error('[PDV Sync] webhookReconcile error:', err);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro na reconciliação' });
+      }
+    }),
+
   // Status atual do catálogo
   status: publicProcedure.query(async ({ ctx }) => {
     await requirePdvAuth(ctx);
