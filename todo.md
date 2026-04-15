@@ -450,3 +450,9 @@
 - [x] Implementar detecção de exclusão de linhas na planilha e desativação no sistema
 - [x] Criar webhook webhookReconcile no backend (pdvSync) — compara códigos e desativa ausentes
 - [x] Atualizar Apps Script v3.0 com função reconcileProducts (acionador a cada 5 min)
+
+## Unificação de Produtos por Modelo (v58)
+- [x] Criar endpoint pdvProducts.listGrouped no backend (agrupa por código base sem sufixo de tamanho)
+- [x] Criar componente SizePickerModal (popup de seleção de tamanho/quantidade)
+- [x] Refatorar catálogo PdvMain para usar cards agrupados e o SizePickerModal
+- [x] Validar fluxo completo: catálogo → popup → carrinho → checkout → planilha

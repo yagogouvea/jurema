@@ -3,13 +3,16 @@ import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import {
-  Search, ShoppingCart, Plus, Minus, Trash2, ChevronRight,
-  Package, Users, ArrowRight, X, Tag, Filter, ChevronLeft, ChevronRight as ChevronRightIcon,
-  RefreshCw, Bell
+  Search, ShoppingCart, Plus, Minus, Trash2, ArrowRight,
+  Package, X, ChevronLeft, ChevronRight as ChevronRightIcon,
+  RefreshCw, Bell, Layers
 } from "lucide-react";
 import PdvLayout from "./PdvLayout";
 import PdvCheckout from "./PdvCheckout";
+import SizePickerModal from "@/components/pdv/SizePickerModal";
+import type { GroupedProduct } from "@/components/pdv/SizePickerModal";
 
+// Re-export CartItem type used throughout this file
 interface CartItem {
   productId?: number;
   linha: string;
@@ -45,7 +48,7 @@ export default function PdvMain() {
   const syncMutation = trpc.pdvSync.sync.useMutation({
     onSuccess: (data) => {
       setSyncResult(data);
-      utils.pdvProducts.list.invalidate();
+      utils.pdvProducts.listGrouped.invalidate();
       utils.pdvNotifications.unreadCount.invalidate();
       toast.success(`Sincronização concluída! ${data.inseridos} novos, ${data.atualizados} atualizados.`);
     },
@@ -67,6 +70,7 @@ export default function PdvMain() {
   const handleSync = () => {
     syncMutation.mutate({ confirmar: true });
   };
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedLinha, setSelectedLinha] = useState("");
@@ -74,135 +78,119 @@ export default function PdvMain() {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 60;
 
-  // Debounce search input — espera 350ms antes de disparar a query
+  // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 350);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Resetar para página 1 quando filtros mudam
+  // Reset to page 1 when filters change
   useEffect(() => { setPage(1); }, [debouncedSearch, selectedLinha, apenasComEstoque]);
-  const [cart, setCart] = useState<CartItem[]>([]);
 
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCart, setShowCart] = useState(false);
-  // null = automático (baseado em quantidade), "ATACADO" ou "VAREJO" = forçado manualmente
   const [regimeManual, setRegimeManual] = useState<"ATACADO" | "VAREJO" | null>(null);
 
-  // Fetch products — usa debouncedSearch para evitar queries a cada tecla
-  // safePage/safeLimit garantem inteiros válidos mesmo em renders intermediários
+  // Size picker modal state
+  const [selectedGroup, setSelectedGroup] = useState<GroupedProduct | null>(null);
+
+  // Fetch grouped products
   const safePage = Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1;
   const safeLimit = Number.isFinite(PAGE_SIZE) && PAGE_SIZE >= 1 ? Math.floor(PAGE_SIZE) : 60;
-  const { data: productsData, isLoading } = trpc.pdvProducts.list.useQuery({
+
+  const { data: groupedData, isLoading } = trpc.pdvProducts.listGrouped.useQuery({
     search: debouncedSearch || undefined,
     linha: selectedLinha || undefined,
     apenasComEstoque: apenasComEstoque || undefined,
     page: safePage,
     limit: safeLimit,
   }, {
-    // Mantém dados anteriores enquanto carrega novos (evita flash de "nenhum produto")
     placeholderData: (prev) => prev,
   });
 
   const { data: linhas } = trpc.pdvProducts.getLinhas.useQuery();
 
-  const products = productsData?.products || [];
+  const groups: GroupedProduct[] = groupedData?.groups || [];
 
   // Cart calculations
   const totalPecas = useMemo(() => cart.reduce((sum, item) => sum + item.quantidade, 0), [cart]);
   const regimeAuto = useMemo(() => totalPecas >= 6 ? "ATACADO" : "VAREJO", [totalPecas]);
-  // Regime efetivo: manual tem prioridade, senão usa automático
   const regime = regimeManual ?? regimeAuto;
   const isRegimeManual = regimeManual !== null;
-  
-  const totalCart = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.totalItem, 0);
-  }, [cart]);
 
-  const addToCart = useCallback((product: any, tamanho: string) => {
-    if (product.estoque <= 0) {
-      toast.error("Produto sem estoque");
-      return;
-    }
-    
-    const precoAtacado = parseFloat(product.precoAtacado) || 0;
-    const precoVarejo = parseFloat(product.precoVarejo) || 0;
-    
-    setCart(prev => {
-      const existing = prev.find(
-        item => item.productId === product.id && item.tamanho === tamanho
-      );
-      
-      if (existing) {
-        // Validar limite de estoque ao incrementar
-        const novaQtd = existing.quantidade + 1;
-        if (novaQtd > product.estoque) {
-          toast.error(`Estoque insuficiente! Disponível: ${product.estoque} un.`);
-          return prev;
-        }
-        return prev.map(item =>
-          item.productId === product.id && item.tamanho === tamanho
-            ? { ...item, quantidade: novaQtd, totalItem: novaQtd * item.precoUnitario }
-            : item
-        );
+  // For price recalculation we need a flat product lookup by id
+  // We build it from the grouped data
+  const productLookup = useMemo(() => {
+    const map = new Map<number, { precoAtacado: number; precoVarejo: number; estoque: number }>();
+    for (const g of groups) {
+      for (const v of g.variantes) {
+        map.set(v.id, { precoAtacado: v.precoAtacado, precoVarejo: v.precoVarejo, estoque: v.estoque });
       }
-      
-      // Use varejo price initially (will be recalculated based on regime)
-      const precoUnitario = precoVarejo;
-      
-      return [...prev, {
-        productId: product.id,
-        linha: product.linha,
-        modelo: product.modelo,
-        time: product.time,
-        descricao: product.descricao,
-        tipo: product.tipo,
-        tamanho,
-        quantidade: 1,
-        precoUnitario,
-        totalItem: precoUnitario,
-      }];
-    });
-    
-    toast.success(`${product.time} (${tamanho}) adicionado`);
-  }, []);
+    }
+    return map;
+  }, [groups]);
 
-  // Recalculate prices when regime changes
   const cartWithPrices = useMemo(() => {
     return cart.map(item => {
-      // Find product to get atacado price
-      const product = products.find(p => p.id === item.productId);
-      if (!product) return item;
-      
-      const precoAtacado = parseFloat(product.precoAtacado) || 0;
-      const precoVarejo = parseFloat(product.precoVarejo) || 0;
-      const precoUnitario = regime === "ATACADO" ? precoAtacado : precoVarejo;
-      
-      return {
-        ...item,
-        precoUnitario,
-        totalItem: item.quantidade * precoUnitario,
-      };
+      if (!item.productId) return item;
+      const p = productLookup.get(item.productId);
+      if (!p) return item;
+      const precoUnitario = regime === "ATACADO" ? p.precoAtacado : p.precoVarejo;
+      return { ...item, precoUnitario, totalItem: item.quantidade * precoUnitario };
     });
-  }, [cart, regime, products]);
+  }, [cart, regime, productLookup]);
 
   const totalAtacado = useMemo(() => {
     return cart.reduce((sum, item) => {
-      const product = products.find(p => p.id === item.productId);
-      if (!product) return sum + item.totalItem;
-      return sum + item.quantidade * (parseFloat(product.precoAtacado) || 0);
+      if (!item.productId) return sum + item.totalItem;
+      const p = productLookup.get(item.productId);
+      if (!p) return sum + item.totalItem;
+      return sum + item.quantidade * p.precoAtacado;
     }, 0);
-  }, [cart, products]);
+  }, [cart, productLookup]);
 
   const totalVarejo = useMemo(() => {
     return cart.reduce((sum, item) => {
-      const product = products.find(p => p.id === item.productId);
-      if (!product) return sum + item.totalItem;
-      return sum + item.quantidade * (parseFloat(product.precoVarejo) || 0);
+      if (!item.productId) return sum + item.totalItem;
+      const p = productLookup.get(item.productId);
+      if (!p) return sum + item.totalItem;
+      return sum + item.quantidade * p.precoVarejo;
     }, 0);
-  }, [cart, products]);
+  }, [cart, productLookup]);
 
   const totalAplicado = regime === "ATACADO" ? totalAtacado : totalVarejo;
+
+  // Add multiple items from SizePickerModal
+  const addItemsToCart = useCallback((newItems: CartItem[]) => {
+    setCart(prev => {
+      let updated = [...prev];
+      for (const newItem of newItems) {
+        const existingIdx = updated.findIndex(
+          i => i.productId === newItem.productId && i.tamanho === newItem.tamanho
+        );
+        if (existingIdx >= 0) {
+          const existing = updated[existingIdx];
+          // Check stock limit
+          const p = newItem.productId != null ? productLookup.get(newItem.productId) : undefined;
+          const maxEstoque = p?.estoque ?? 999;
+          const novaQtd = existing.quantidade + newItem.quantidade;
+          if (novaQtd > maxEstoque) {
+            toast.error(`Estoque insuficiente para ${newItem.tamanho}! Disponível: ${maxEstoque} un.`);
+            continue;
+          }
+          updated[existingIdx] = {
+            ...existing,
+            quantidade: novaQtd,
+            totalItem: novaQtd * existing.precoUnitario,
+          };
+        } else {
+          updated.push(newItem);
+        }
+      }
+      return updated;
+    });
+  }, [productLookup]);
 
   const updateQuantity = (index: number, delta: number) => {
     setCart(prev => {
@@ -212,11 +200,10 @@ export default function PdvMain() {
       if (newQty <= 0) {
         updated.splice(index, 1);
       } else {
-        // Validar limite de estoque ao incrementar
         if (delta > 0 && item.productId) {
-          const product = products.find(p => p.id === item.productId);
-          if (product && newQty > product.estoque) {
-            toast.error(`Estoque insuficiente! Disponível: ${product.estoque} un.`);
+          const p = productLookup.get(item.productId);
+          if (p && newQty > p.estoque) {
+            toast.error(`Estoque insuficiente! Disponível: ${p.estoque} un.`);
             return prev;
           }
         }
@@ -234,9 +221,7 @@ export default function PdvMain() {
     setCart(prev => prev.filter((_, i) => i !== index));
   };
 
-  const clearCart = () => {
-    setCart([]);
-  };
+  const clearCart = () => setCart([]);
 
   const handleCheckout = () => {
     if (cartWithPrices.length === 0) {
@@ -247,14 +232,14 @@ export default function PdvMain() {
   };
 
   // Group products by time for display
-  const groupedProducts = useMemo(() => {
-    const groups: Record<string, any[]> = {};
-    products.forEach(p => {
-      if (!groups[p.time]) groups[p.time] = [];
-      groups[p.time].push(p);
-    });
-    return groups;
-  }, [products]);
+  const groupedByTime = useMemo(() => {
+    const map: Record<string, GroupedProduct[]> = {};
+    for (const g of groups) {
+      if (!map[g.time]) map[g.time] = [];
+      map[g.time].push(g);
+    }
+    return map;
+  }, [groups]);
 
   if (showCheckout) {
     return (
@@ -284,12 +269,12 @@ export default function PdvMain() {
           {/* Header */}
           <div className="bg-gray-900 border-b border-gray-800 p-4">
             <div className="flex items-center gap-3 mb-3">
-              {/* Regime toggle: Atacado / Varejo */}
+              {/* Regime toggle */}
               <div className="flex flex-col gap-0.5">
                 <div className="flex bg-gray-800 rounded-xl p-1 gap-1">
                   <button
                     onClick={() => setRegimeManual("ATACADO")}
-                    title="Forçar Atacado (independente da quantidade)"
+                    title="Forçar Atacado"
                     className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                       regime === "ATACADO"
                         ? "bg-blue-600 text-white shadow-lg"
@@ -300,7 +285,7 @@ export default function PdvMain() {
                   </button>
                   <button
                     onClick={() => setRegimeManual("VAREJO")}
-                    title="Forçar Varejo (independente da quantidade)"
+                    title="Forçar Varejo"
                     className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                       regime === "VAREJO"
                         ? "bg-orange-600 text-white shadow-lg"
@@ -312,19 +297,19 @@ export default function PdvMain() {
                   {isRegimeManual && (
                     <button
                       onClick={() => setRegimeManual(null)}
-                      title="Voltar para modo automático (≥6 peças = Atacado)"
+                      title="Voltar para modo automático"
                       className="px-2 py-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-700 transition-all text-xs"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
-                <span className="text-center text-gray-600" style={{fontSize: '10px'}}>
+                <span className="text-center text-gray-600" style={{ fontSize: "10px" }}>
                   {isRegimeManual ? "⚠️ manual" : "⚙️ auto"}
                 </span>
               </div>
 
-              {/* Botões admin: Sync + Notificações */}
+              {/* Admin buttons */}
               {isAdmin && (
                 <div className="flex items-center gap-1.5">
                   <button
@@ -352,7 +337,7 @@ export default function PdvMain() {
             </div>
 
             {/* Search */}
-            <div className="relative">
+            <div className="relative mb-3">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
                 type="text"
@@ -371,7 +356,7 @@ export default function PdvMain() {
               )}
             </div>
 
-            {/* Linha filter + Filtro de estoque */}
+            {/* Filters */}
             <div className="flex gap-1.5 flex-wrap items-center">
               <button
                 onClick={() => setSelectedLinha("")}
@@ -396,7 +381,6 @@ export default function PdvMain() {
                   {l}
                 </button>
               ))}
-              {/* Filtro: apenas com estoque */}
               <button
                 onClick={() => setApenasComEstoque(v => !v)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
@@ -404,27 +388,25 @@ export default function PdvMain() {
                     ? "bg-green-700 text-white border border-green-600"
                     : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white border border-gray-700"
                 }`}
-                title="Mostrar apenas produtos com estoque disponível"
               >
                 <Package className="w-3 h-3" />
                 Com estoque
               </button>
-              {/* Indicador de busca ativa */}
               {(search || selectedLinha || apenasComEstoque) && (
                 <span className="ml-auto text-xs text-gray-500 self-center">
-                  {productsData?.total ?? 0} resultado{(productsData?.total ?? 0) !== 1 ? "s" : ""}
+                  {groupedData?.total ?? 0} modelo{(groupedData?.total ?? 0) !== 1 ? "s" : ""}
                 </span>
               )}
             </div>
           </div>
 
-          {/* Products Grid — pb no mobile garante espaço para o botão flutuante do carrinho */}
+          {/* Products Grid */}
           <div className="flex-1 overflow-y-auto p-4 flex flex-col">
             {isLoading ? (
               <div className="flex items-center justify-center h-40">
                 <div className="w-8 h-8 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
               </div>
-            ) : products.length === 0 ? (
+            ) : groups.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-40 text-gray-500">
                 <Package className="w-12 h-12 mb-3 opacity-30" />
                 <p className="text-sm">Nenhum produto encontrado</p>
@@ -439,20 +421,20 @@ export default function PdvMain() {
               </div>
             ) : (
               <div className="flex-1 space-y-4">
-                {Object.entries(groupedProducts).map(([time, timeProducts]) => (
+                {Object.entries(groupedByTime).map(([time, timeGroups]) => (
                   <div key={time}>
                     <h3 className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-2">
                       <span className="w-2 h-2 bg-green-600 rounded-full" />
                       {time}
-                      <span className="text-gray-600">({timeProducts.length})</span>
+                      <span className="text-gray-600">({timeGroups.length} modelo{timeGroups.length !== 1 ? "s" : ""})</span>
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-                      {timeProducts.map((product) => (
-                        <ProductCard
-                          key={product.id}
-                          product={product}
+                      {timeGroups.map((group) => (
+                        <GroupedProductCard
+                          key={group.baseCode}
+                          group={group}
                           regime={regime}
-                          onAdd={addToCart}
+                          onSelect={setSelectedGroup}
                         />
                       ))}
                     </div>
@@ -460,11 +442,10 @@ export default function PdvMain() {
                 ))}
               </div>
             )}
-
           </div>
 
-          {/* Paginação — fora do scroll para não ser sobreposta pelo botão flutuante do carrinho */}
-          {productsData && productsData.totalPages > 1 && (
+          {/* Pagination */}
+          {groupedData && groupedData.totalPages > 1 && (
             <div className="bg-gray-900/95 backdrop-blur border-t border-gray-800 py-3 px-4 flex items-center justify-between gap-2 shrink-0">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
@@ -474,10 +455,9 @@ export default function PdvMain() {
                 <ChevronLeft className="w-4 h-4" />
                 Anterior
               </button>
-
               <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(7, productsData.totalPages) }, (_, i) => {
-                  const total = productsData.totalPages;
+                {Array.from({ length: Math.min(7, groupedData.totalPages) }, (_, i) => {
+                  const total = groupedData.totalPages;
                   let start = Math.max(1, page - 3);
                   let end = Math.min(total, start + 6);
                   if (end - start < 6) start = Math.max(1, end - 6);
@@ -498,10 +478,9 @@ export default function PdvMain() {
                   );
                 })}
               </div>
-
               <button
-                onClick={() => setPage(p => Math.min(productsData.totalPages, p + 1))}
-                disabled={page >= productsData.totalPages}
+                onClick={() => setPage(p => Math.min(groupedData.totalPages, p + 1))}
+                disabled={page >= groupedData.totalPages}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
               >
                 Próxima
@@ -561,12 +540,21 @@ export default function PdvMain() {
         )}
       </div>
 
-      {/* Modal de Sincronização */}
+      {/* Size Picker Modal */}
+      {selectedGroup && (
+        <SizePickerModal
+          product={selectedGroup}
+          regime={regime}
+          onClose={() => setSelectedGroup(null)}
+          onAddToCart={addItemsToCart}
+        />
+      )}
+
+      {/* Sync Modal */}
       {showSyncModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowSyncModal(false)} />
           <div className="relative bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-800">
               <div className="flex items-center gap-2">
                 <RefreshCw className="w-5 h-5 text-blue-400" />
@@ -576,10 +564,7 @@ export default function PdvMain() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            {/* Modal Body */}
             <div className="p-4 space-y-4">
-              {/* Resultado da sync */}
               {syncResult ? (
                 <div className="bg-green-900/30 border border-green-700/40 rounded-xl p-4 space-y-2">
                   <p className="text-green-400 font-semibold text-sm">✓ Sincronização concluída em {syncResult.tempoSegundos}s</p>
@@ -609,7 +594,6 @@ export default function PdvMain() {
                 </div>
               ) : (
                 <>
-                  {/* Prévia */}
                   {isLoadingPreview ? (
                     <div className="flex items-center justify-center py-8 gap-3 text-gray-400">
                       <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -617,11 +601,10 @@ export default function PdvMain() {
                     </div>
                   ) : syncPreview ? (
                     <div className="space-y-3">
-                      {/* Indicador de status geral */}
                       {syncPreview.novos === 0 && syncPreview.alterados === 0 ? (
                         <div className="bg-green-900/20 border border-green-800/40 rounded-xl p-3 text-center">
                           <p className="text-green-400 font-semibold text-sm">✅ Catálogo atualizado</p>
-                          <p className="text-xs text-gray-400 mt-1">Nenhuma alteração detectada desde a última sincronização</p>
+                          <p className="text-xs text-gray-400 mt-1">Nenhuma alteração detectada</p>
                         </div>
                       ) : (
                         <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-xl p-3 text-center">
@@ -644,10 +627,9 @@ export default function PdvMain() {
                         </div>
                         <div className="bg-gray-800/60 rounded-xl p-3 text-center">
                           <p className="text-2xl font-bold text-green-500">{syncPreview.totalInvalidos}</p>
-                          <p className="text-xs text-gray-400">Ignorados (incompletos)</p>
+                          <p className="text-xs text-gray-400">Ignorados</p>
                         </div>
                       </div>
-
                       {syncPreview.novosProdutos?.length > 0 && (
                         <div className="bg-green-900/20 border border-green-800/40 rounded-xl p-3">
                           <p className="text-xs text-green-400 font-semibold mb-1">Novos produtos (amostra):</p>
@@ -656,7 +638,6 @@ export default function PdvMain() {
                           ))}
                         </div>
                       )}
-
                       {syncPreview.alteradosProdutos?.length > 0 && (
                         <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-xl p-3">
                           <p className="text-xs text-yellow-400 font-semibold mb-1">Alterações detectadas (amostra):</p>
@@ -672,15 +653,13 @@ export default function PdvMain() {
                       <button onClick={() => refetchPreview()} className="mt-2 text-blue-400 hover:text-blue-300 text-xs">Tentar novamente</button>
                     </div>
                   )}
-
-                  {/* Ações */}
                   <div className="flex gap-2 pt-2">
                     <button
                       onClick={() => refetchPreview()}
                       disabled={isLoadingPreview}
                       className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      <RefreshCw className={`w-4 h-4 ${isLoadingPreview ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-4 h-4 ${isLoadingPreview ? "animate-spin" : ""}`} />
                       Atualizar prévia
                     </button>
                     <button
@@ -705,63 +684,97 @@ export default function PdvMain() {
   );
 }
 
-// Product Card Component
-function ProductCard({ product, regime, onAdd }: {
-  product: any;
+// Grouped Product Card Component
+function GroupedProductCard({
+  group,
+  regime,
+  onSelect,
+}: {
+  group: GroupedProduct;
   regime: "ATACADO" | "VAREJO";
-  onAdd: (product: any, tamanho: string) => void;
+  onSelect: (g: GroupedProduct) => void;
 }) {
-  const precoAtacado = parseFloat(product.precoAtacado) || 0;
-  const precoVarejo = parseFloat(product.precoVarejo) || 0;
-  const precoAtual = regime === "ATACADO" ? precoAtacado : precoVarejo;
-  const semEstoque = product.estoque <= 0;
+  const precoAtual = regime === "ATACADO" ? group.precoAtacado : group.precoVarejo;
+  const semEstoque = group.estoqueTotal <= 0;
+
+  // Count variants with stock
+  const variantesComEstoque = group.variantes.filter(v => v.estoque > 0);
+  const tamanhos = variantesComEstoque.map(v => v.tamanho);
+
+  // Check if prices vary across variants
+  const precos = group.variantes.map(v => regime === "ATACADO" ? v.precoAtacado : v.precoVarejo);
+  const minPreco = Math.min(...precos);
+  const maxPreco = Math.max(...precos);
+  const precoVaria = Math.abs(maxPreco - minPreco) > 0.01;
 
   return (
-    <div className={`bg-gray-800 border rounded-xl p-3 transition-all ${
-      semEstoque ? "border-gray-700 opacity-60" : "border-gray-700 hover:border-gray-600"
-    }`}>
+    <button
+      onClick={() => onSelect(group)}
+      disabled={semEstoque}
+      className={`w-full text-left bg-gray-800 border rounded-xl p-3 transition-all group ${
+        semEstoque
+          ? "border-gray-700 opacity-60 cursor-not-allowed"
+          : "border-gray-700 hover:border-green-600 hover:bg-gray-750 cursor-pointer"
+      }`}
+    >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
-          <div className="text-white font-semibold text-sm truncate">{product.time}</div>
+          <div className="text-white font-semibold text-sm truncate">{group.time}</div>
           <div className="text-gray-400 text-xs">
-            {product.linha} · {product.modelo} · {product.tamanho}
+            {group.linha} · {group.modelo}
+            {group.descricao ? ` · ${group.descricao}` : ""}
           </div>
-          {product.descricao && (
-            <div className="text-gray-500 text-xs truncate">{product.descricao}</div>
-          )}
         </div>
         <div className="text-right flex-shrink-0">
           <div className="text-white font-bold text-sm">
-            R$ {precoAtual.toFixed(2).replace(".", ",")}
+            {precoVaria
+              ? `R$ ${minPreco.toFixed(2).replace(".", ",")}+`
+              : `R$ ${precoAtual.toFixed(2).replace(".", ",")}`
+            }
           </div>
-          {regime === "ATACADO" && precoVarejo > 0 && (
+          {regime === "ATACADO" && group.precoVarejo > 0 && (
             <div className="text-gray-500 text-xs line-through">
-              R$ {precoVarejo.toFixed(2).replace(".", ",")}
+              R$ {group.precoVarejo.toFixed(2).replace(".", ",")}
             </div>
           )}
         </div>
       </div>
 
+      {/* Tamanhos disponíveis */}
+      <div className="flex flex-wrap gap-1 mb-2">
+        {tamanhos.slice(0, 8).map(t => (
+          <span
+            key={t}
+            className="text-xs px-1.5 py-0.5 bg-gray-700 text-gray-300 rounded font-medium"
+          >
+            {t}
+          </span>
+        ))}
+        {tamanhos.length > 8 && (
+          <span className="text-xs px-1.5 py-0.5 bg-gray-700 text-gray-500 rounded">
+            +{tamanhos.length - 8}
+          </span>
+        )}
+      </div>
+
       <div className="flex items-center justify-between">
-        <div className={`text-xs px-2 py-0.5 rounded-full ${
+        <div className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
           semEstoque
-            ? "bg-green-950/50 text-green-500"
-            : product.estoque <= 5
+            ? "bg-red-950/50 text-red-500"
+            : group.estoqueTotal <= 10
             ? "bg-yellow-950/50 text-yellow-400"
             : "bg-green-950/50 text-green-400"
         }`}>
-          {semEstoque ? "Sem estoque" : `${product.estoque} un.`}
+          {semEstoque ? "Sem estoque" : `${group.estoqueTotal} un.`}
         </div>
-        <button
-          onClick={() => onAdd(product, product.tamanho)}
-          disabled={semEstoque}
-          className="bg-green-700 hover:bg-green-800 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-3 py-1.5 text-xs font-semibold flex items-center gap-1 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Adicionar
-        </button>
+        <div className={`flex items-center gap-1 text-xs font-semibold transition-colors ${
+          semEstoque ? "text-gray-600" : "text-green-500 group-hover:text-green-400"
+        }`}>
+          <Layers className="w-3.5 h-3.5" />
+          {group.variantes.length} tam.
+        </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -817,12 +830,12 @@ function CartPanel({ cart, regime, totalPecas, totalAplicado, onUpdateQuantity, 
                 <div className="min-w-0">
                   <div className="text-white text-sm font-medium truncate">{item.time}</div>
                   <div className="text-gray-400 text-xs">
-                    {item.linha} · {item.tamanho}
+                    {item.linha} · <span className="font-semibold text-gray-300">{item.tamanho}</span>
                   </div>
                 </div>
                 <button
                   onClick={() => onRemove(index)}
-                  className="text-gray-600 hover:text-green-500 transition-colors flex-shrink-0"
+                  className="text-gray-600 hover:text-red-500 transition-colors flex-shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -871,7 +884,7 @@ function CartPanel({ cart, regime, totalPecas, totalAplicado, onUpdateQuantity, 
             </button>
             <button
               onClick={onClear}
-              className="w-full text-gray-500 hover:text-green-500 text-sm py-1 transition-colors"
+              className="w-full text-gray-500 hover:text-red-400 text-sm py-1 transition-colors"
             >
               Limpar carrinho
             </button>

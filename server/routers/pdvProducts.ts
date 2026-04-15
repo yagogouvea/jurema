@@ -207,6 +207,110 @@ export const pdvProductsRouter = router({
       return { success: true };
     }),
 
+  listGrouped: publicProcedure
+    .input(z.object({
+      search: z.string().optional(),
+      linha: z.string().optional(),
+      apenasComEstoque: z.boolean().optional(),
+      page: z.number().int().min(1).default(1),
+      limit: z.number().int().min(1).max(500).default(60),
+    }))
+    .query(async ({ input, ctx }) => {
+      await requirePdvAuth(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      try {
+        // Build WHERE clause for individual products
+        let where = "WHERE isActive = 1";
+        const params: any[] = [];
+
+        if (input.search) {
+          const terms = input.search.toLowerCase().trim().split(/\s+/).filter(Boolean);
+          for (const term of terms) {
+            const s = `%${term}%`;
+            where += " AND (LOWER(time) LIKE ? OR LOWER(descricao) LIKE ? OR LOWER(codigo) LIKE ? OR LOWER(modelo) LIKE ?)";
+            params.push(s, s, s, s);
+          }
+        }
+        if (input.linha) {
+          where += " AND linha = ?";
+          params.push(input.linha);
+        }
+        if (input.apenasComEstoque) {
+          where += " AND estoque > 0";
+        }
+
+        // Fetch ALL matching products (no pagination here — we group in JS)
+        const [rows] = await db.execute(
+          `SELECT id, codigo, linha, modelo, time, descricao, tipo, tamanho, estoque, precoAtacado, precoVarejo
+           FROM pdv_products ${where}
+           ORDER BY time ASC, codigo ASC`,
+          params
+        );
+        await db.end();
+
+        const products = rows as any[];
+
+        // Group by base code (remove last hyphen-separated segment = tamanho)
+        const groupMap = new Map<string, any>();
+
+        for (const p of products) {
+          const parts = (p.codigo || "").split("-");
+          // Base code = all parts except the last one
+          const baseCode = parts.length > 1 ? parts.slice(0, -1).join("-") : (p.codigo || `${p.time}-${p.modelo}`);
+
+          if (!groupMap.has(baseCode)) {
+            groupMap.set(baseCode, {
+              baseCode,
+              linha: p.linha,
+              modelo: p.modelo,
+              time: p.time,
+              descricao: p.descricao,
+              tipo: p.tipo,
+              precoAtacado: parseFloat(p.precoAtacado) || 0,
+              precoVarejo: parseFloat(p.precoVarejo) || 0,
+              estoqueTotal: 0,
+              variantes: [],
+            });
+          }
+
+          const group = groupMap.get(baseCode)!;
+          group.estoqueTotal += parseInt(p.estoque) || 0;
+          // Update prices: use min for atacado (cheapest), max for varejo (most expensive)
+          // Actually keep the first product's price (they should be the same per model)
+          // But track if prices differ
+          group.variantes.push({
+            id: p.id,
+            tamanho: p.tamanho,
+            estoque: parseInt(p.estoque) || 0,
+            codigo: p.codigo,
+            precoAtacado: parseFloat(p.precoAtacado) || 0,
+            precoVarejo: parseFloat(p.precoVarejo) || 0,
+          });
+        }
+
+        const allGroups = Array.from(groupMap.values());
+        const total = allGroups.length;
+
+        // Paginate groups
+        const safeLimit = Math.max(1, Math.floor(Number(input.limit) || 60));
+        const safePage = Math.max(1, Math.floor(Number(input.page) || 1));
+        const offset = (safePage - 1) * safeLimit;
+        const pagedGroups = allGroups.slice(offset, offset + safeLimit);
+
+        return {
+          groups: pagedGroups,
+          total,
+          page: safePage,
+          totalPages: Math.ceil(total / safeLimit),
+        };
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao buscar produtos agrupados" });
+      }
+    }),
+
   getLinhas: publicProcedure.query(async ({ ctx }) => {
     await requirePdvAuth(ctx);
     const db = await getDb();
