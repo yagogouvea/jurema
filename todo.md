@@ -456,3 +456,13 @@
 - [x] Criar componente SizePickerModal (popup de seleção de tamanho/quantidade)
 - [x] Refatorar catálogo PdvMain para usar cards agrupados e o SizePickerModal
 - [x] Validar fluxo completo: catálogo → popup → carrinho → checkout → planilha
+
+## Bug: Valores extras não somados ao total (v59)
+- [x] Bug 1 — Sistema: totalAplicado enviado ao backend nao incluia totalServicos (extras ficavam de fora do total salvo no banco)
+- [x] Bug 2 — Planilha PEDIDOS: coluna L (valor_sem_taxa) usava totalAplicado sem extras; coluna O (total_com_taxa) calculava certo mas L ficava errado
+- [x] Bug 3 — Sistema: totalPendente calculado no frontend sem considerar os extras, causando pendente errado
+- [x] Bug 4 — Planilha pedidos_itens: extra distribuido igualmente por item em vez de proporcionalmente ao valor de cada item
+- [x] Corrigir: frontend envia totalGeral (totalAplicado + totalServicos) como totalAplicado ao backend
+- [x] Corrigir: planilha PEDIDOS coluna L usa totalAplicado diretamente (ja inclui extras)
+- [x] Corrigir: planilha pedidos_itens distribui extra proporcional ao valor do item
+- [x] 14 novos testes vitest (154/154 total passando)

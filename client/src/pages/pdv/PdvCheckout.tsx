@@ -238,7 +238,8 @@ export default function PdvCheckout({
       regime,
       totalVarejo,
       totalAtacado,
-      totalAplicado,
+      // totalAplicado = subtotal dos produtos + serviços extras (valor real da venda sem taxa de cartão)
+      totalAplicado: totalGeral,
       totalPago,
       totalPendente,
       justificativa: justificativa || undefined,

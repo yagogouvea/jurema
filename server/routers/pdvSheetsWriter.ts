@@ -165,7 +165,12 @@ export async function appendOrderToSheet(order: {
     // Pagamentos
     const formasPagamento = order.payments.map(p => p.formaPagamento).join(', ');
     const taxaTotal = order.payments.reduce((sum, p) => sum + (p.taxa || 0), 0);
-    const totalComTaxa = order.totalAplicado + extraValor + taxaTotal;
+    // valor_sem_taxa = subtotal dos produtos + extras (sem taxa de cartão)
+    // Nota: a partir da v59, totalAplicado já inclui extras (enviado como totalGeral do frontend)
+    // Mantemos o cálculo compatível: se totalAplicado já inclui extras, extraValor seria duplo.
+    // Por isso usamos totalAplicado diretamente como valor_sem_taxa.
+    const valorSemTaxa = order.totalAplicado; // já inclui extras
+    const totalComTaxa = valorSemTaxa + taxaTotal;
     
     // Formatar data
     const dataFormatada = new Date(order.createdAt).toLocaleString('pt-BR', {
@@ -189,7 +194,7 @@ export async function appendOrderToSheet(order: {
       order.regime === 'ATACADO' ? 'Atacado' : 'Varejo', // I: atacado/varejo
       extraTipos,                                        // J: extra
       extraValor > 0 ? extraValor.toFixed(2) : '',       // K: valor_adicional
-      order.totalAplicado.toFixed(2),                    // L: valor_sem_taxa
+      valorSemTaxa.toFixed(2),                           // L: valor_sem_taxa (subtotal + extras)
       formasPagamento,                                   // M: forma_pagamento
       taxaTotal > 0 ? taxaTotal.toFixed(2) : '',         // N: taxa
       totalComTaxa.toFixed(2),                           // O: total_com_taxa
@@ -344,8 +349,8 @@ export async function appendOrderItemsToSheet(params: {
     // Serviços extras: tipo(s) e valor total
     const extraTipos = services.map(s => s.tipo).join(', ');
     const extraValorTotal = services.reduce((sum, s) => sum + s.valor, 0);
-    // Distribuir valor do serviço extra proporcionalmente entre os itens
-    const extraPorItem = items.length > 0 ? extraValorTotal / items.length : 0;
+    // Total geral dos itens para distribuição proporcional
+    const totalGeralItens = items.reduce((sum, i) => sum + i.totalItem, 0);
 
     const rows = items.map(item => {
       // Descrição completa: Linha Modelo Time Descrição Tamanho Tipo
@@ -370,7 +375,10 @@ export async function appendOrderItemsToSheet(params: {
       const modalidade = regime === 'ATACADO' ? 'Atacado' : 'Varejo';
       // preco_utilizado = subtotal na modalidade escolhida
       const precoUtilizado = regime === 'ATACADO' ? subtotalAtacado : subtotalVarejo;
-      const totalComExtra = precoUtilizado + extraPorItem;
+      // Distribuir extra proporcionalmente ao valor do item (não dividir por nº de itens)
+      const proporcao = totalGeralItens > 0 ? item.totalItem / totalGeralItens : 0;
+      const extraProporcional = extraValorTotal * proporcao;
+      const totalComExtra = precoUtilizado + extraProporcional;
 
       return [
         pedidoId,                          // A: pedido_id
@@ -384,7 +392,7 @@ export async function appendOrderItemsToSheet(params: {
         modalidade,                        // I: modalidade usada
         precoUtilizado.toFixed(2),         // J: preco_utilizado
         extraTipos || '',                  // K: serviço extra
-        extraPorItem > 0 ? extraPorItem.toFixed(2) : '', // L: valor serviço extra
+        extraProporcional > 0 ? extraProporcional.toFixed(2) : '', // L: valor serviço extra
         totalComExtra.toFixed(2),          // M: TOTAL
       ];
     });
