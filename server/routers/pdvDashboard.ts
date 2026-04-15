@@ -40,45 +40,59 @@ export const pdvDashboardRouter = router({
         const params: any[] = [];
         
         if (input.startDate) {
-          dateFilter += " AND DATE(createdAt) >= ?";
+          dateFilter += " AND DATE(o.createdAt) >= ?";
           params.push(input.startDate);
         }
         if (input.endDate) {
-          dateFilter += " AND DATE(createdAt) <= ?";
+          dateFilter += " AND DATE(o.createdAt) <= ?";
           params.push(input.endDate);
         }
         
-        const baseFilter = `WHERE status != 'CANCELADO'${dateFilter}`;
-        
-        // Total faturamento
+        // Dashboard geral: exclui pedidos 100% Sofia (isSofia=1)
+        // Para pedidos mistos (isSofia=0 mas com alguns itens Sofia), 
+        // contabiliza apenas os itens NÃO-Sofia via JOIN com pdv_order_items
         const [totalRows] = await db.execute(
           `SELECT 
-            COUNT(*) as totalPedidos,
-            COALESCE(SUM(totalAplicado), 0) as faturamento,
-            COALESCE(AVG(totalAplicado), 0) as ticketMedio,
-            COALESCE(SUM(CASE WHEN regime = 'ATACADO' THEN totalAplicado ELSE 0 END), 0) as faturamentoAtacado,
-            COALESCE(SUM(CASE WHEN regime = 'VAREJO' THEN totalAplicado ELSE 0 END), 0) as faturamentoVarejo,
-            COALESCE(SUM(CASE WHEN canal = 'BALCAO' THEN totalAplicado ELSE 0 END), 0) as faturamentoBalcao,
-            COALESCE(SUM(CASE WHEN canal = 'WHATSAPP' THEN totalAplicado ELSE 0 END), 0) as faturamentoWhatsapp
-           FROM pdv_orders ${baseFilter}`,
+            COUNT(DISTINCT o.id) as totalPedidos,
+            COALESCE(SUM(oi.totalItem), 0) as faturamento,
+            COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio,
+            COALESCE(SUM(CASE WHEN o.regime = 'ATACADO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoAtacado,
+            COALESCE(SUM(CASE WHEN o.regime = 'VAREJO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoVarejo,
+            COALESCE(SUM(CASE WHEN o.canal = 'BALCAO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoBalcao,
+            COALESCE(SUM(CASE WHEN o.canal = 'WHATSAPP' THEN oi.totalItem ELSE 0 END), 0) as faturamentoWhatsapp
+           FROM pdv_orders o
+           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+           LEFT JOIN (
+             SELECT pedidoId, SUM(totalItem) as totalNaoSofia
+             FROM pdv_order_items WHERE isSofia = 0
+             GROUP BY pedidoId
+           ) oi_totals ON oi_totals.pedidoId = o.pedidoId
+           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}`,
           params
         );
         
-        // Por vendedor
+        // Por vendedor — apenas itens não-Sofia
         const [sellerRows] = await db.execute(
-          `SELECT sellerName, 
-            COUNT(*) as pedidos,
-            COALESCE(SUM(totalAplicado), 0) as faturamento,
-            COALESCE(AVG(totalAplicado), 0) as ticketMedio
-           FROM pdv_orders ${baseFilter}
-           GROUP BY sellerId, sellerName
+          `SELECT o.sellerName, 
+            COUNT(DISTINCT o.id) as pedidos,
+            COALESCE(SUM(oi.totalItem), 0) as faturamento,
+            COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio
+           FROM pdv_orders o
+           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+           LEFT JOIN (
+             SELECT pedidoId, SUM(totalItem) as totalNaoSofia
+             FROM pdv_order_items WHERE isSofia = 0
+             GROUP BY pedidoId
+           ) oi_totals ON oi_totals.pedidoId = o.pedidoId
+           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
+           GROUP BY o.sellerId, o.sellerName
            ORDER BY faturamento DESC`,
           params
         );
         
-        // Por forma de pagamento — usa o.createdAt para evitar ambiguidade no JOIN
+        // Por forma de pagamento — exclui pedidos 100% Sofia
         const dateFilterQualified = dateFilter
-          .replace(/DATE\(createdAt\)/g, 'DATE(o.createdAt)');
+          .replace(/DATE\(o\.createdAt\)/g, 'DATE(o.createdAt)');
         const [paymentRows] = await db.execute(
           `SELECT p.formaPagamento, 
             COUNT(DISTINCT p.pedidoId) as pedidos,
@@ -87,19 +101,21 @@ export const pdvDashboardRouter = router({
             COALESCE(SUM(p.valorLiquido), 0) as totalLiquido
            FROM pdv_order_payments p
            INNER JOIN pdv_orders o ON p.pedidoId = o.pedidoId
-           WHERE o.status != 'CANCELADO'${dateFilterQualified}
+           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilterQualified}
            GROUP BY p.formaPagamento
            ORDER BY total DESC`,
           params
         );
         
-        // Faturamento por dia (últimos 30 dias ou período)
+        // Faturamento por dia — apenas itens não-Sofia, exclui pedidos 100% Sofia
         const [dailyRows] = await db.execute(
-          `SELECT DATE(createdAt) as dia,
-            COUNT(*) as pedidos,
-            COALESCE(SUM(totalAplicado), 0) as faturamento
-           FROM pdv_orders ${baseFilter}
-           GROUP BY DATE(createdAt)
+          `SELECT DATE(o.createdAt) as dia,
+            COUNT(DISTINCT o.id) as pedidos,
+            COALESCE(SUM(oi.totalItem), 0) as faturamento
+           FROM pdv_orders o
+           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
+           GROUP BY DATE(o.createdAt)
            ORDER BY dia ASC`,
           params
         );

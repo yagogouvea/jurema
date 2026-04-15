@@ -177,35 +177,6 @@ export const pdvOrdersRouter = router({
         // Buscar dados completos do pedido para gravar na planilha
         setImmediate(async () => {
           try {
-            // Calcular totais para a planilha
-            const qtdItens = input.items.reduce((sum, item) => sum + item.quantidade, 0);
-            const comissaoTotal = input.items.reduce((sum, item) => {
-              if (item.isSofia) return sum;
-              return sum + (item.quantidade * comissaoUnitaria);
-            }, 0);
-            
-            // Gravar pedido na aba PEDIDOS
-            await appendOrderToSheet({
-              pedidoId,
-              createdAt: new Date(),
-              sellerName: seller.name,
-              canal: input.canal,
-              clienteNome: input.clienteNome,
-              clienteTelefone: input.clienteTelefone,
-              totalVarejo: input.totalVarejo,
-              totalAtacado: input.totalAtacado,
-              regime: input.regime,
-              services: input.services,
-              totalAplicado: input.totalAplicado,
-              payments: input.payments,
-              totalPendente: input.totalPendente,
-              justificativa: input.justificativa,
-              status: input.status,
-              qtdItens,
-              comissaoTotal,
-            });
-            
-            // Gravar itens na aba pedidos_itens
             // Buscar códigos e preços dos produtos para a descrição completa
             const db3 = await getDb();
             const itemsWithCodigo = await Promise.all(input.items.map(async (item) => {
@@ -225,15 +196,57 @@ export const pdvOrdersRouter = router({
             }));
             if (db3) await db3.end();
 
-            await appendOrderItemsToSheet({
-              pedidoId,
-              regime: input.regime,
-              services: input.services,
-              items: itemsWithCodigo,
-            });
-
-            // Gravar itens Sofia na aba SOFIA_ITENS (se houver)
+            // Separar itens normais e Sofia
+            const normalItems = itemsWithCodigo.filter(item => !item.isSofia);
             const sofiaItems = itemsWithCodigo.filter(item => item.isSofia);
+
+            // ── ABA PEDIDOS (geral) — somente se houver itens NÃO-Sofia ──
+            if (normalItems.length > 0) {
+              const qtdItensNormais = normalItems.reduce((sum, item) => sum + item.quantidade, 0);
+              const comissaoTotal = normalItems.reduce((sum, item) => {
+                return sum + (item.quantidade * comissaoUnitaria);
+              }, 0);
+              // Recalcular totais apenas dos itens não-Sofia
+              const totalAplicadoNormal = normalItems.reduce((sum, item) => sum + item.totalItem, 0);
+              const totalVarejoNormal = normalItems.reduce((sum, item) => {
+                const pv = item.precoVarejo ?? item.precoUnitario;
+                return sum + (pv * item.quantidade);
+              }, 0);
+              const totalAtacadoNormal = normalItems.reduce((sum, item) => {
+                const pa = item.precoAtacado ?? item.precoUnitario;
+                return sum + (pa * item.quantidade);
+              }, 0);
+
+              await appendOrderToSheet({
+                pedidoId,
+                createdAt: new Date(),
+                sellerName: seller.name,
+                canal: input.canal,
+                clienteNome: input.clienteNome,
+                clienteTelefone: input.clienteTelefone,
+                totalVarejo: totalVarejoNormal,
+                totalAtacado: totalAtacadoNormal,
+                regime: input.regime,
+                services: input.services,
+                totalAplicado: totalAplicadoNormal,
+                payments: input.payments,
+                totalPendente: input.totalPendente,
+                justificativa: input.justificativa,
+                status: input.status,
+                qtdItens: qtdItensNormais,
+                comissaoTotal,
+              });
+
+              // ── ABA pedidos_itens (geral) — somente itens NÃO-Sofia ──
+              await appendOrderItemsToSheet({
+                pedidoId,
+                regime: input.regime,
+                services: input.services,
+                items: normalItems,
+              });
+            }
+
+            // ── ABA SOFIA_ITENS — somente itens Sofia ──
             if (sofiaItems.length > 0) {
               await appendSofiaItemsToSheet({
                 pedidoId,
@@ -252,7 +265,7 @@ export const pdvOrdersRouter = router({
               });
             }
 
-            // Deduzir estoque na aba PRODUTOS para cada item com código
+            // Deduzir estoque na aba PRODUTOS para TODOS os itens (Sofia ou não)
             for (const item of itemsWithCodigo) {
               if (item.codigo) {
                 await updateProductStockInSheet(item.codigo, item.quantidade);
@@ -289,7 +302,8 @@ export const pdvOrdersRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       
       try {
-        let query = "SELECT * FROM pdv_orders WHERE 1=1";
+        // Excluir pedidos 100% Sofia da listagem geral (eles aparecem apenas na área Sofia)
+        let query = "SELECT * FROM pdv_orders WHERE isSofia = 0";
         const params: any[] = [];
         
         // Non-admin sellers can only see their own orders

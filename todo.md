@@ -437,3 +437,11 @@
 - [x] Integrar gravação SOFIA_ITENS no fluxo de criação de pedido (pdvOrders.ts)
 - [x] Validar que a contabilidade (dashboard Sofia) contabiliza corretamente com comissão personalizada
 - [x] Atualizar relatório PDF (pdvRelatorio.ts) para usar comissão personalizada por item
+
+## Separação Sofia do Fluxo Geral (v56)
+- [x] Itens Sofia NÃO devem entrar na aba PEDIDOS geral da planilha
+- [x] Itens Sofia NÃO devem entrar na aba pedidos_itens geral da planilha
+- [x] Itens Sofia NÃO devem entrar no dashboard geral do PDV
+- [x] Itens Sofia devem entrar APENAS na aba SOFIA_ITENS e no dashboard Sofia
+- [x] Validar que comissões de vendedores excluem itens Sofia corretamente
+- [x] Listagem geral de pedidos exclui pedidos 100% Sofia (isSofia=0)
