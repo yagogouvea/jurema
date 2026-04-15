@@ -25,7 +25,7 @@ async function requirePdvAdmin(ctx: any) {
 }
 
 export const pdvSofiaRouter = router({
-  // Dashboard Sofia: vendas de itens Sofia (agora por item, não por pedido)
+  // Dashboard Sofia: vendas de itens Sofia com comissão personalizada por item
   dashboard: publicProcedure
     .input(z.object({
       startDate: z.string().optional(),
@@ -42,26 +42,30 @@ export const pdvSofiaRouter = router({
         if (input.startDate) { dateFilter += " AND DATE(o.createdAt) >= ?"; params.push(input.startDate); }
         if (input.endDate) { dateFilter += " AND DATE(o.createdAt) <= ?"; params.push(input.endDate); }
 
-        // Resumo geral de itens Sofia (por item, não por pedido)
+        // Resumo geral de itens Sofia — comissão personalizada por item
+        // comissaoLojaSofia é o valor por peça definido no momento da venda
+        // comissão total do item = comissaoLojaSofia * quantidade
         const [summaryRows] = await db.execute(
           `SELECT 
             COUNT(DISTINCT o.id) as totalPedidos,
             COALESCE(SUM(oi.totalItem), 0) as faturamento,
-            COALESCE(SUM(oi.quantidade), 0) as totalPecas
+            COALESCE(SUM(oi.quantidade), 0) as totalPecas,
+            COALESCE(SUM(COALESCE(oi.comissaoLojaSofia, 0) * oi.quantidade), 0) as comissaoTotal
           FROM pdv_order_items oi
           JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
           WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}`,
           params
         );
 
-        // Por vendedor
+        // Por vendedor — com comissão personalizada
         const [sellerRows] = await db.execute(
           `SELECT 
             o.sellerId,
             o.sellerName,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(oi.totalItem), 0) as faturamento,
-            COALESCE(SUM(oi.quantidade), 0) as pecas
+            COALESCE(SUM(oi.quantidade), 0) as pecas,
+            COALESCE(SUM(COALESCE(oi.comissaoLojaSofia, 0) * oi.quantidade), 0) as comissao
           FROM pdv_order_items oi
           JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
           WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}
@@ -76,7 +80,8 @@ export const pdvSofiaRouter = router({
             DATE(o.createdAt) as dia,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(oi.totalItem), 0) as faturamento,
-            COALESCE(SUM(oi.quantidade), 0) as pecas
+            COALESCE(SUM(oi.quantidade), 0) as pecas,
+            COALESCE(SUM(COALESCE(oi.comissaoLojaSofia, 0) * oi.quantidade), 0) as comissao
           FROM pdv_order_items oi
           JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
           WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}
@@ -85,14 +90,14 @@ export const pdvSofiaRouter = router({
           params
         );
 
-        // Comissão da loja
+        // Comissão padrão da loja (para referência, mas agora cada item tem seu próprio valor)
         const [configRows] = await db.execute("SELECT comissaoLoja FROM pdv_sofia_config LIMIT 1");
-        const comissaoLoja = (configRows as any[])[0]?.comissaoLoja ? parseFloat((configRows as any[])[0].comissaoLoja) : 10;
+        const comissaoLojaPadrao = (configRows as any[])[0]?.comissaoLoja ? parseFloat((configRows as any[])[0].comissaoLoja) : 10;
 
         const summary = (summaryRows as any[])[0];
         const totalPecas = parseInt(summary.totalPecas) || 0;
         const faturamento = parseFloat(summary.faturamento) || 0;
-        const comissaoTotal = totalPecas * comissaoLoja;
+        const comissaoTotal = parseFloat(summary.comissaoTotal) || 0;
         const reembolsoTotal = faturamento - comissaoTotal;
 
         await db.end();
@@ -102,14 +107,14 @@ export const pdvSofiaRouter = router({
             totalPedidos: parseInt(summary.totalPedidos) || 0,
             totalPecas,
             faturamento,
-            comissaoLoja,
+            comissaoLoja: comissaoLojaPadrao, // valor padrão de referência
             comissaoTotal,
             reembolsoTotal: Math.max(0, reembolsoTotal),
           },
           porVendedor: (sellerRows as any[]).map(r => {
             const pecas = parseInt(r.pecas) || 0;
             const fat = parseFloat(r.faturamento) || 0;
-            const comissao = pecas * comissaoLoja;
+            const comissao = parseFloat(r.comissao) || 0;
             return {
               ...r,
               pecas,
@@ -122,6 +127,8 @@ export const pdvSofiaRouter = router({
             ...r,
             faturamento: parseFloat(r.faturamento) || 0,
             pecas: parseInt(r.pecas) || 0,
+            comissao: parseFloat(r.comissao) || 0,
+            reembolso: Math.max(0, parseFloat(r.faturamento) - parseFloat(r.comissao)),
           })),
         };
       } catch (err) {
@@ -179,7 +186,7 @@ export const pdvSofiaRouter = router({
       }
     }),
 
-  // Configuração: obter comissão da loja
+  // Configuração: obter comissão padrão da loja (valor de referência para novos itens)
   getConfig: publicProcedure.query(async ({ ctx }) => {
     await requirePdvAdmin(ctx);
     const db = await getDb();
@@ -193,7 +200,7 @@ export const pdvSofiaRouter = router({
     };
   }),
 
-  // Configuração: atualizar comissão da loja
+  // Configuração: atualizar comissão padrão da loja (afeta apenas novos pedidos)
   updateConfig: publicProcedure
     .input(z.object({
       comissaoLoja: z.number().min(0),

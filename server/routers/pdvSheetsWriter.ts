@@ -16,6 +16,7 @@ const SHEET_ID = '1SGUr5Sh2gZ5nkYg0km-QhllQS4Jm2_aVxy6PuyATsLU';
 const PRODUCTS_RANGE = 'PRODUTOS!A:O';
 const ORDERS_SHEET = 'PEDIDOS';
 const ITEMS_SHEET = 'pedidos_itens';
+const SOFIA_SHEET = 'SOFIA_ITENS';
 
 // ─── JWT para Service Account ───────────────────────────────────────────────
 
@@ -391,6 +392,146 @@ export async function appendOrderItemsToSheet(params: {
     return await appendToSheet(`${ITEMS_SHEET}!A:M`, rows);
   } catch (err) {
     console.error('[SheetsWriter] appendOrderItemsToSheet error:', err);
+    return false;
+  }
+}
+
+/**
+ * Grava itens Sofia de um pedido na aba SOFIA_ITENS da planilha
+ *
+ * Colunas (23 no total):
+ * A: pedido_id
+ * B: data
+ * C: cod (SKU)
+ * D: vendedor
+ * E: canal
+ * F: cliente
+ * G: fone
+ * H: varejo (preço unitário varejo)
+ * I: atacado (preço unitário atacado)
+ * J: atacado/varejo (modalidade usada)
+ * K: serviço extra (tipo)
+ * L: valor serviço extra (R$)
+ * M: valor total sem taxa
+ * N: forma de pagamento
+ * O: taxa
+ * P: total com taxa
+ * Q: pendente
+ * R: justificativa
+ * S: modalidade (Atacado/Varejo)
+ * T: status
+ * U: qtd itens
+ * V: comissao loja sofia (personalizada por item)
+ * W: reembolso (valor total - comissão)
+ */
+export async function appendSofiaItemsToSheet(params: {
+  pedidoId: string;
+  createdAt: Date;
+  sellerName: string;
+  canal: string;
+  clienteNome?: string | null;
+  clienteTelefone?: string | null;
+  regime: string;
+  services: Array<{ tipo: string; valor: number }>;
+  payments: Array<{ formaPagamento: string; taxa: number; valor: number }>;
+  totalPendente: number;
+  justificativa?: string | null;
+  status: string;
+  items: Array<{
+    codigo?: string | null;
+    linha?: string | null;
+    modelo?: string | null;
+    time: string;
+    descricao?: string | null;
+    tamanho: string;
+    tipo?: string | null;
+    quantidade: number;
+    precoUnitario: number;
+    totalItem: number;
+    precoAtacado?: number | null;
+    precoVarejo?: number | null;
+    isSofia?: boolean;
+    comissaoLojaSofia?: number | null;
+  }>;
+}): Promise<boolean> {
+  try {
+    const { pedidoId, createdAt, sellerName, canal, clienteNome, clienteTelefone, regime, services, payments, totalPendente, justificativa, status, items } = params;
+
+    // Formatar data
+    const dataFormatada = new Date(createdAt).toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+
+    // Serviços extras
+    const extraTipos = services.map(s => s.tipo).join(', ') || '';
+    const extraValorTotal = services.reduce((sum, s) => sum + s.valor, 0);
+    const extraPorItem = items.length > 0 ? extraValorTotal / items.length : 0;
+
+    // Pagamentos
+    const formasPagamento = payments.map(p => p.formaPagamento).join(', ');
+    const taxaTotal = payments.reduce((sum, p) => sum + (p.taxa || 0), 0);
+
+    const modalidade = regime === 'ATACADO' ? 'Atacado' : 'Varejo';
+    const canalFormatado = canal === 'WHATSAPP' ? 'WhatsApp' : 'Balcão';
+    const statusFormatado = status === 'CANCELADO' ? 'Cancelado' : status === 'PENDENTE' ? 'Pendente' : 'Pago';
+
+    const rows = items.map(item => {
+      // Preços unitários
+      const precoVarejoUnit = item.precoVarejo ?? item.precoUnitario;
+      const precoAtacadoUnit = item.precoAtacado ?? item.precoUnitario;
+
+      // Valor total do item (preço utilizado na modalidade * quantidade)
+      const valorItemSemTaxa = item.totalItem;
+      const valorItemComExtra = valorItemSemTaxa + extraPorItem;
+
+      // Taxa proporcional por item
+      const totalGeralItens = items.reduce((s, i) => s + i.totalItem, 0);
+      const proporcao = totalGeralItens > 0 ? item.totalItem / totalGeralItens : 0;
+      const taxaProporcional = taxaTotal * proporcao;
+      const totalComTaxa = valorItemComExtra + taxaProporcional;
+
+      // Pendente proporcional
+      const pendenteProporcional = totalPendente * proporcao;
+
+      // Comissão da loja Sofia (personalizada por item)
+      const comissaoLoja = item.comissaoLojaSofia ?? 0;
+      // Comissão total = comissão por peça * quantidade
+      const comissaoTotal = comissaoLoja * item.quantidade;
+      // Reembolso = valor total do item - comissão da loja
+      const reembolso = Math.max(0, valorItemSemTaxa - comissaoTotal);
+
+      return [
+        pedidoId,                                              // A: pedido_id
+        dataFormatada,                                         // B: data
+        item.codigo || '',                                     // C: cod (SKU)
+        sellerName,                                            // D: vendedor
+        canalFormatado,                                        // E: canal
+        clienteNome || '',                                     // F: cliente
+        clienteTelefone || '',                                 // G: fone
+        precoVarejoUnit.toFixed(2),                            // H: varejo (unitário)
+        precoAtacadoUnit.toFixed(2),                           // I: atacado (unitário)
+        modalidade,                                            // J: atacado/varejo
+        extraTipos || '',                                      // K: serviço extra
+        extraPorItem > 0 ? extraPorItem.toFixed(2) : '',       // L: valor serviço extra
+        valorItemSemTaxa.toFixed(2),                           // M: valor total sem taxa
+        formasPagamento,                                       // N: forma de pagamento
+        taxaProporcional > 0 ? taxaProporcional.toFixed(2) : '', // O: taxa
+        totalComTaxa.toFixed(2),                               // P: total com taxa
+        pendenteProporcional > 0 ? pendenteProporcional.toFixed(2) : '', // Q: pendente
+        justificativa || '',                                   // R: justificativa
+        modalidade,                                            // S: modalidade
+        statusFormatado,                                       // T: status
+        item.quantidade,                                       // U: qtd itens
+        comissaoTotal.toFixed(2),                              // V: comissao loja sofia
+        reembolso.toFixed(2),                                  // W: reembolso
+      ];
+    });
+
+    return await appendToSheet(`${SOFIA_SHEET}!A:W`, rows);
+  } catch (err) {
+    console.error('[SheetsWriter] appendSofiaItemsToSheet error:', err);
     return false;
   }
 }

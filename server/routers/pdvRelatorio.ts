@@ -68,14 +68,15 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
   // ===================== SOFIA =====================
   if (sections.sofia) {
     const [configRows] = await db.execute("SELECT comissaoLoja FROM pdv_sofia_config LIMIT 1");
-    const comissaoLoja = (configRows as any[])[0]?.comissaoLoja ? parseFloat((configRows as any[])[0].comissaoLoja) : 10;
+    const comissaoLojaPadrao = (configRows as any[])[0]?.comissaoLoja ? parseFloat((configRows as any[])[0].comissaoLoja) : 10;
 
-    // Agora conta por ITEM Sofia, não por pedido
+    // Comissão personalizada por item (comissaoLojaSofia * quantidade)
     const [summaryRows] = await db.execute(
       `SELECT 
         COUNT(DISTINCT o.id) as totalPedidos,
         COALESCE(SUM(oi.totalItem), 0) as faturamento,
-        COALESCE(SUM(oi.quantidade), 0) as totalPecas
+        COALESCE(SUM(oi.quantidade), 0) as totalPecas,
+        COALESCE(SUM(COALESCE(oi.comissaoLojaSofia, 0) * oi.quantidade), 0) as comissaoTotal
       FROM pdv_order_items oi
       JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
       WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(o.createdAt) >= ? AND DATE(o.createdAt) <= ?`,
@@ -87,7 +88,8 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
         o.sellerName,
         COUNT(DISTINCT o.id) as pedidos,
         COALESCE(SUM(oi.totalItem), 0) as faturamento,
-        COALESCE(SUM(oi.quantidade), 0) as pecas
+        COALESCE(SUM(oi.quantidade), 0) as pecas,
+        COALESCE(SUM(COALESCE(oi.comissaoLojaSofia, 0) * oi.quantidade), 0) as comissao
       FROM pdv_order_items oi
       JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
       WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(o.createdAt) >= ? AND DATE(o.createdAt) <= ?
@@ -99,10 +101,10 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
     const summary = (summaryRows as any[])[0];
     const totalPecas = parseInt(summary.totalPecas) || 0;
     const faturamento = parseFloat(summary.faturamento) || 0;
-    const comissaoTotal = totalPecas * comissaoLoja;
+    const comissaoTotal = parseFloat(summary.comissaoTotal) || 0;
 
     result.sofia = {
-      comissaoLoja,
+      comissaoLoja: comissaoLojaPadrao,
       totalPedidos: parseInt(summary.totalPedidos) || 0,
       totalPecas,
       faturamento,
@@ -111,7 +113,7 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
       porVendedor: (sellerRows as any[]).map(r => {
         const pecas = parseInt(r.pecas) || 0;
         const fat = parseFloat(r.faturamento) || 0;
-        const comissao = pecas * comissaoLoja;
+        const comissao = parseFloat(r.comissao) || 0;
         return {
           sellerName: r.sellerName,
           pedidos: parseInt(r.pedidos) || 0,

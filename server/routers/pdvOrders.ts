@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
-import { appendOrderToSheet, appendOrderItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet } from "./pdvSheetsWriter";
+import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet } from './pdvSheetsWriter';
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -43,6 +43,7 @@ const OrderItemSchema = z.object({
   precoUnitario: z.number().min(0),
   totalItem: z.number().min(0),
   isSofia: z.boolean().default(false),
+  comissaoLojaSofia: z.number().optional(), // comissão personalizada da loja por item Sofia (R$)
 });
 
 const OrderPaymentSchema = z.object({
@@ -113,16 +114,18 @@ export const pdvOrdersRouter = router({
         
         // Insert items (com isSofia por item e comissaoUnitaria vigente no momento da venda)
         for (const item of input.items) {
-          // Itens Sofia não geram comissão — registrar 0 para eles
+          // Itens Sofia não geram comissão de vendedor — registrar 0 para eles
           const comissaoItem = item.isSofia ? 0 : comissaoUnitaria;
+          // Comissão da loja por item Sofia (personalizada no momento da venda)
+          const comissaoLojaSofia = item.isSofia ? (item.comissaoLojaSofia ?? null) : null;
           await db.execute(
             `INSERT INTO pdv_order_items 
-             (pedidoId, productId, linha, modelo, time, descricao, tipo, tamanho, quantidade, precoUnitario, totalItem, isSofia, comissaoUnitaria)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (pedidoId, productId, linha, modelo, time, descricao, tipo, tamanho, quantidade, precoUnitario, totalItem, isSofia, comissaoUnitaria, comissaoLojaSofia)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               pedidoId, item.productId || null, item.linha || null, item.modelo || null,
               item.time, item.descricao || null, item.tipo || null, item.tamanho, item.quantidade,
-              item.precoUnitario, item.totalItem, item.isSofia ? 1 : 0, comissaoItem
+              item.precoUnitario, item.totalItem, item.isSofia ? 1 : 0, comissaoItem, comissaoLojaSofia
             ]
           );
           
@@ -228,6 +231,26 @@ export const pdvOrdersRouter = router({
               services: input.services,
               items: itemsWithCodigo,
             });
+
+            // Gravar itens Sofia na aba SOFIA_ITENS (se houver)
+            const sofiaItems = itemsWithCodigo.filter(item => item.isSofia);
+            if (sofiaItems.length > 0) {
+              await appendSofiaItemsToSheet({
+                pedidoId,
+                createdAt: new Date(),
+                sellerName: seller.name,
+                canal: input.canal,
+                clienteNome: input.clienteNome,
+                clienteTelefone: input.clienteTelefone,
+                regime: input.regime,
+                services: input.services,
+                payments: input.payments,
+                totalPendente: input.totalPendente,
+                justificativa: input.justificativa,
+                status: input.status,
+                items: sofiaItems,
+              });
+            }
 
             // Deduzir estoque na aba PRODUTOS para cada item com código
             for (const item of itemsWithCodigo) {

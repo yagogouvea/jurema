@@ -95,8 +95,17 @@ export default function PdvCheckout({
   const [valorPendenteManual, setValorPendenteManual] = useState("");
   // Sofia por item: mapa de índice do carrinho -> boolean
   const [sofiaItems, setSofiaItems] = useState<Record<number, boolean>>({});
+  // Comissão da loja por item Sofia (personalizada): mapa de índice -> valor string
+  const [sofiaComissao, setSofiaComissao] = useState<Record<number, string>>({});
   const toggleSofiaItem = (idx: number) => {
     setSofiaItems(prev => ({ ...prev, [idx]: !prev[idx] }));
+    // Ao marcar como Sofia, inicializar comissão com valor padrão se não existir
+    if (!sofiaItems[idx] && !sofiaComissao[idx]) {
+      setSofiaComissao(prev => ({ ...prev, [idx]: '10' }));
+    }
+  };
+  const updateSofiaComissao = (idx: number, val: string) => {
+    setSofiaComissao(prev => ({ ...prev, [idx]: val }));
   };
   const hasSofiaItems = Object.values(sofiaItems).some(v => v);
   const sofiaCount = Object.values(sofiaItems).filter(v => v).length;
@@ -246,6 +255,7 @@ export default function PdvCheckout({
         precoUnitario: item.precoUnitario,
         totalItem: item.totalItem,
         isSofia: !!sofiaItems[idx],
+        comissaoLojaSofia: sofiaItems[idx] ? parseFloat((sofiaComissao[idx] || '0').replace(',', '.')) || 0 : undefined,
       })),
       payments,
       services,
@@ -312,6 +322,20 @@ export default function PdvCheckout({
                       >
                         Sofia
                       </button>
+                      {sofiaItems[i] && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-purple-400 text-[10px]">Com.</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={sofiaComissao[i] || ''}
+                            onChange={e => updateSofiaComissao(i, e.target.value)}
+                            placeholder="10"
+                            className="w-14 text-[11px] px-1.5 py-0.5 rounded bg-purple-950/50 border border-purple-800 text-purple-200 text-center placeholder-purple-600 focus:outline-none focus:border-purple-500"
+                            title="Comissão da loja por peça (R$)"
+                          />
+                        </div>
+                      )}
                       <span className="text-white font-medium">R$ {fmt(item.totalItem)}</span>
                     </div>
                   </div>
@@ -321,10 +345,19 @@ export default function PdvCheckout({
                   <span className="text-white">R$ {fmt(totalAplicado)}</span>
                 </div>
                 {hasSofiaItems && (
-                  <div className="bg-purple-950/30 border border-purple-900/50 rounded-xl p-2 mt-2">
-                    <p className="text-purple-300 text-xs">
-                      {sofiaCount} {sofiaCount === 1 ? 'item marcado' : 'itens marcados'} como Sofia (terceirizado). Esses itens não entram na comissão.
+                  <div className="bg-purple-950/30 border border-purple-900/50 rounded-xl p-3 mt-2 space-y-1">
+                    <p className="text-purple-300 text-xs font-semibold">
+                      {sofiaCount} {sofiaCount === 1 ? 'item marcado' : 'itens marcados'} como Sofia (terceirizado)
                     </p>
+                    <p className="text-purple-400/70 text-[10px]">
+                      Esses itens não entram na comissão do vendedor. Informe a comissão da loja (R$/peça) ao lado de cada item Sofia.
+                    </p>
+                    {cart.map((item, i) => sofiaItems[i] ? (
+                      <div key={i} className="flex items-center justify-between text-[11px] text-purple-300">
+                        <span className="truncate">{item.time} ({item.tamanho}) x{item.quantidade}</span>
+                        <span>Com: R$ {(parseFloat((sofiaComissao[i] || '0').replace(',', '.')) || 0).toFixed(2)}/pç → Reemb: R$ {Math.max(0, item.totalItem - ((parseFloat((sofiaComissao[i] || '0').replace(',', '.')) || 0) * item.quantidade)).toFixed(2)}</span>
+                      </div>
+                    ) : null)}
                   </div>
                 )}
               </div>

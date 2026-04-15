@@ -427,3 +427,13 @@
 - [x] BUG 6: appendProductToSheet — coluna J (precoVarejo) corrigida com .toFixed(2)
 - [x] BUG 7: getNewProductsFromSheet e updateProductStockInSheet agora usam A2:O2000 (sem cabeçalho)
 - [x] MELHORIA: pdvOrders.ts — busca campo `tipo` do produto ao montar itemsWithCodigo para a planilha
+
+## Produtos Sofia — Comissão Personalizada + Aba SOFIA_ITENS (v55)
+- [x] Alterar lógica: comissão da loja por produto Sofia é personalizada no momento da venda (campo no checkout)
+- [x] Adicionar campo comissaoLojaSofia no pdv_order_items (banco + schema)
+- [x] Ajustar frontend PdvCheckout para permitir inserir comissão por item Sofia
+- [x] Calcular reembolso Sofia = valor total item - comissão da loja
+- [x] Implementar appendSofiaItemsToSheet() no pdvSheetsWriter.ts para gravar na aba SOFIA_ITENS
+- [x] Integrar gravação SOFIA_ITENS no fluxo de criação de pedido (pdvOrders.ts)
+- [x] Validar que a contabilidade (dashboard Sofia) contabiliza corretamente com comissão personalizada
+- [x] Atualizar relatório PDF (pdvRelatorio.ts) para usar comissão personalizada por item
