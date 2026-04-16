@@ -634,3 +634,11 @@
 - [x] Botões "Exportar Planilha", "Exportar Vendas" e "Importar Planilha" no painel de Caixa do PDV
 - [x] Cor da Sangria corrigida para vermelho no painel de Caixa
 - [x] 198/198 testes passando, zero erros TypeScript
+
+## v81 — Limpeza do histórico e testes de integração planilha
+- [x] Limpar tabelas pdv_order_items, pdv_order_payments, pdv_order_services, pdv_orders do banco
+- [x] Limpar tabela pdv_cash_flow do banco
+- [x] Limpar abas FLUXO_CAIXA e VENDAS_CAIXA na planilha Google Sheets (mantém cabeçalho)
+- [x] 7 testes de integração criados em server/v81cashflow-sheets.test.ts
+- [x] Testa: gravar suprimento, gravar sangria, ler da planilha, exportar em lote, sobrescrever, exportar vendas, limpar
+- [x] 205/205 testes passando, zero erros TypeScript
