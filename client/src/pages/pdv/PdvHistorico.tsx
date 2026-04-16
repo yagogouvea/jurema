@@ -325,46 +325,118 @@ export default function PdvHistorico() {
                   Pagamentos
                 </h4>
                 <div className="space-y-1.5">
-                  {(orderDetail?.payments || []).map((p: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-2">
-                      <div>
-                        <span className="text-white text-sm">{PAYMENT_LABELS[p.formaPagamento] || p.formaPagamento}</span>
-                        {p.nomePix && <span className="text-gray-400 text-xs ml-2">{p.nomePix}</span>}
-                        {parseFloat(p.taxa) > 0 && (
-                          <span className="text-gray-500 text-xs ml-2">taxa: {formatCurrency(p.taxa)}</span>
-                        )}
+                  {(orderDetail?.payments || []).map((p: any, i: number) => {
+                    const taxa = parseFloat(p.taxa || 0);
+                    const valor = parseFloat(p.valor || 0);
+                    // Para débito/crédito: mostrar valor maquininha (valor real + taxa)
+                    const valorExibido = taxa > 0 ? valor + taxa : valor;
+                    const hasTaxa = taxa > 0;
+                    return (
+                      <div key={i} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-2">
+                        <div>
+                          <span className="text-white text-sm">{PAYMENT_LABELS[p.formaPagamento] || p.formaPagamento}</span>
+                          {p.nomePix && <span className="text-gray-400 text-xs ml-2">{p.nomePix}</span>}
+                          {hasTaxa && (
+                            <span className="text-gray-500 text-xs ml-2">taxa: {formatCurrency(taxa)}</span>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className="text-white text-sm font-semibold">{formatCurrency(valorExibido)}</span>
+                          {hasTaxa && (
+                            <div className="text-gray-500 text-[10px]">loja recebe: {formatCurrency(valor)}</div>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-white text-sm font-semibold">{formatCurrency(p.valor)}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Totals */}
-              <div className="bg-gray-800 rounded-xl p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Subtotal</span>
-                  <span className="text-white">{formatCurrency(selectedOrder.totalAplicado)}</span>
-                </div>
-                {parseFloat(selectedOrder.totalPago) !== parseFloat(selectedOrder.totalAplicado) && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Total Pago</span>
-                    <span className="text-green-400">{formatCurrency(selectedOrder.totalPago)}</span>
+              {(() => {
+                // Calcular totais a partir dos dados detalhados do pedido
+                const items = orderDetail?.items || [];
+                const services = orderDetail?.services || [];
+                const payments = orderDetail?.payments || [];
+
+                // Subtotal dos itens (soma de totalItem)
+                const subtotalItens = items.reduce((s: number, i: any) => s + parseFloat(i.totalItem || 0), 0);
+                // Total de serviços extras
+                const totalServicos = services.reduce((s: number, sv: any) => s + parseFloat(sv.valor || 0), 0);
+                // Taxa total de cartão
+                const taxaTotal = payments.reduce((s: number, p: any) => s + parseFloat(p.taxa || 0), 0);
+                // Valor real pago (loja recebe)
+                const totalPagoReal = payments.reduce((s: number, p: any) => s + parseFloat(p.valor || 0), 0);
+                // Valor maquininha (valor real + taxa)
+                const totalMaquininha = payments.reduce((s: number, p: any) => {
+                  const taxa = parseFloat(p.taxa || 0);
+                  const valor = parseFloat(p.valor || 0);
+                  return s + (taxa > 0 ? valor + taxa : valor);
+                }, 0);
+                // Total geral = itens + extras + taxa
+                const totalGeral = subtotalItens + totalServicos + taxaTotal;
+                const pendente = parseFloat(selectedOrder.totalPendente || 0);
+
+                return (
+                  <div className="bg-gray-800 rounded-xl p-4 space-y-2">
+                    {/* Subtotal dos itens */}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Subtotal ({selectedOrder.regime})</span>
+                      <span className="text-white">{formatCurrency(subtotalItens || selectedOrder.totalAplicado)}</span>
+                    </div>
+
+                    {/* Serviços extras */}
+                    {totalServicos > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Serviços extras</span>
+                        <span className="text-white">{formatCurrency(totalServicos)}</span>
+                      </div>
+                    )}
+
+                    {/* Taxa de cartão */}
+                    {taxaTotal > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Taxa de cartão</span>
+                        <span className="text-orange-400">+ {formatCurrency(taxaTotal)}</span>
+                      </div>
+                    )}
+
+                    {/* Total geral */}
+                    <div className="flex justify-between text-sm font-bold border-t border-gray-700 pt-2">
+                      <span className="text-white">Total Geral</span>
+                      <span className="text-white text-base">{formatCurrency(totalGeral || selectedOrder.totalAplicado)}</span>
+                    </div>
+
+                    {/* Valor maquininha (se houver taxa) */}
+                    {taxaTotal > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-yellow-500">Valor maquininha</span>
+                        <span className="text-yellow-400 font-semibold">{formatCurrency(totalMaquininha)}</span>
+                      </div>
+                    )}
+
+                    {/* Pendente */}
+                    {pendente > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Pendente</span>
+                        <span className="text-yellow-400">{formatCurrency(pendente)}</span>
+                      </div>
+                    )}
+
+                    {/* Status */}
+                    <div className="flex justify-between items-center pt-1 border-t border-gray-700">
+                      <span className="text-white font-semibold">Status</span>
+                      <span className={`text-sm px-2.5 py-1 rounded-full border font-medium ${
+                        selectedOrder.status === 'PAGO' ? 'bg-green-950/50 text-green-400 border-green-900/50' :
+                        selectedOrder.status === 'PENDENTE' ? 'bg-yellow-950/50 text-yellow-400 border-yellow-900/50' :
+                        'bg-red-950/50 text-red-400 border-red-900/50'
+                      }`}>
+                        {selectedOrder.status === 'PAGO' ? 'PAGO' : selectedOrder.status === 'PENDENTE' ? 'PENDENTE' : 'CANCELADO'}
+                      </span>
+                    </div>
                   </div>
-                )}
-                {parseFloat(selectedOrder.totalPendente) > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Pendente</span>
-                    <span className="text-yellow-400">{formatCurrency(selectedOrder.totalPendente)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center pt-1 border-t border-gray-700">
-                  <span className="text-white font-semibold">Status</span>
-                  <span className={`text-sm px-2.5 py-1 rounded-full border font-medium ${STATUS_COLORS[selectedOrder.status] || ""}`}>
-                    {selectedOrder.status}
-                  </span>
-                </div>
-              </div>
+                );
+              })()}
 
               {selectedOrder.justificativa && (
                 <div className="bg-gray-800 rounded-xl p-3">

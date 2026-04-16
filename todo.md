@@ -503,3 +503,18 @@
 - [x] extraPorItem obsoleto removido do appendSofiaItemsToSheet
 - [x] UI de pagamento: label claro, total a pagar visivel, preview de taxa sempre visivel para debito/credito
 - [x] 23 novos testes vitest (190/190 total passando)
+
+## Bug: Modal de resumo do pedido no histórico (v62)
+- [ ] Subtotal mostra totalAplicado (que inclui extras) mas deveria mostrar só os itens separado dos extras
+- [ ] Não mostra taxa de cartão no bloco de totais
+- [ ] Não mostra total geral (itens + extras + taxa)
+- [ ] Valor do pagamento mostra p.valor (valor real loja) mas deveria mostrar valorMaquininha para débito/crédito
+- [ ] Linha "Total Pago" some quando totalPago == totalAplicado (mas com taxa eles diferem)
+
+## Bug: Modal de resumo do pedido no histórico (v62) — CONCLUIDO
+- [x] Subtotal mostra apenas os itens; extras aparecem em linha separada
+- [x] Taxa de cartão aparece em linha separada com destaque laranja
+- [x] Total Geral = itens + extras + taxa (linha em negrito)
+- [x] Valor maquininha exibido em amarelo quando há taxa
+- [x] Pagamentos: mostrar valor maquininha como principal, "loja recebe" como detalhe
+- [x] Status CANCELADO com cor vermelha (antes estava verde por erro de CSS)
