@@ -607,3 +607,10 @@
 - [x] Corrigir bug crítico: pdvSiteSync usava adminProcedure (Manus OAuth) em vez de requirePdvAdmin (cookie PDV) — causava lista vazia em produção
 - [x] Migrar todos os 6 endpoints do pdvSiteSync para publicProcedure + requirePdvAdmin(ctx)
 - [x] 198/198 testes passando, zero erros TypeScript
+
+## v75 — Correção do campo de pesquisa na Gestão do Site
+- [x] Adicionar debounce 500ms no campo de busca (igual ao PDV)
+- [x] Separar searchInput (visual) de search (query) — Enter ou espera 500ms para confirmar
+- [x] Botão × para limpar o campo rapidamente
+- [x] Backend: buscar também por pdvCodigoBase (código PDV)
+- [x] 198/198 testes passando, zero erros TypeScript

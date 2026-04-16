@@ -11,7 +11,7 @@
  * - Sincronizar estoque PDV → Site
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import PdvLayout from "./PdvLayout";
 import { toast } from "sonner";
@@ -98,12 +98,19 @@ const GENDERS = [
 
 export default function PdvGestaoSite() {
   // filtros
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(""); // valor confirmado (enviado para query)
+  const [searchInput, setSearchInput] = useState(""); // valor digitado (campo visual)
   const [filterActive, setFilterActive] = useState<boolean | undefined>(undefined);
   const [filterFeatured, setFilterFeatured] = useState<boolean | undefined>(undefined);
   const [filterSection, setFilterSection] = useState<FeaturedSection>(null);
   const [filterNew, setFilterNew] = useState(false);
   const [page, setPage] = useState(1);
+
+  // debounce: confirma busca 500ms após parar de digitar
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 500);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   // modais
   const [importConfirm, setImportConfirm] = useState(false);
@@ -296,11 +303,18 @@ export default function PdvGestaoSite() {
         <div className="relative flex-1 min-w-[200px] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
           <Input
-            placeholder="Buscar por nome, código, time..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Buscar por nome, código PDV, time..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { setSearch(searchInput); setPage(1); } }}
             className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-white/30"
           />
+          {searchInput && (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70"
+              onClick={() => { setSearchInput(""); setSearch(""); setPage(1); }}
+            >×</button>
+          )}
         </div>
         <Select
           value={filterActive === undefined ? "all" : filterActive ? "active" : "inactive"}
@@ -350,7 +364,7 @@ export default function PdvGestaoSite() {
           size="sm"
           variant="outline"
           className="border-white/20 bg-white/5 hover:bg-white/10"
-          onClick={() => { setSearch(""); setFilterActive(undefined); setFilterFeatured(undefined); setFilterSection(null); setFilterNew(false); setPage(1); }}
+          onClick={() => { setSearch(""); setSearchInput(""); setFilterActive(undefined); setFilterFeatured(undefined); setFilterSection(null); setFilterNew(false); setPage(1); }}
         >
           <Filter className="w-4 h-4 mr-1" />
           Limpar
