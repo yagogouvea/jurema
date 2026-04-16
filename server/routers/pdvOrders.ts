@@ -5,6 +5,7 @@ import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
 import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet } from './pdvSheetsWriter';
+import { autoSyncProductToSite } from './pdvSiteSync';
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -172,6 +173,36 @@ export const pdvOrdersRouter = router({
         }
 
         await db.end();
+
+        // ── Auto-sync site: atualizar estoque no catálogo após venda (assíncrono) ──
+        const codigosBaseVendidos = new Set<string>();
+        for (const item of input.items) {
+          if (item.productId) {
+            // Buscar código base do produto vendido
+            setImmediate(async () => {
+              try {
+                const dbSite = await getDb();
+                if (!dbSite) return;
+                const [pRows] = await dbSite.execute(
+                  "SELECT codigo FROM pdv_products WHERE id = ? LIMIT 1",
+                  [item.productId]
+                );
+                const prod = (pRows as any[])[0];
+                if (prod?.codigo) {
+                  const parts = prod.codigo.split("-");
+                  const base = parts.length > 1 ? parts.slice(0, -1).join("-") : prod.codigo;
+                  if (!codigosBaseVendidos.has(base)) {
+                    codigosBaseVendidos.add(base);
+                    await autoSyncProductToSite(base);
+                  }
+                }
+                await dbSite.end();
+              } catch (e) {
+                console.error('[PDV Orders] Erro ao auto-sync site após venda:', e);
+              }
+            });
+          }
+        }
         
         // ── Integração Google Sheets (assíncrona, não bloqueia a resposta) ──
         // Buscar dados completos do pedido para gravar na planilha
@@ -302,7 +333,8 @@ export const pdvOrdersRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       
       try {
-        // Excluir pedidos 100% Sofia da listagem geral (eles aparecem apenas na área Sofia)
+        // Incluir pedidos mistos (que têm itens Sofia E não-Sofia) no histórico geral
+        // Excluir apenas pedidos 100% Sofia (isSofia = 1 = todos os itens são Sofia)
         let query = "SELECT * FROM pdv_orders WHERE isSofia = 0";
         const params: any[] = [];
         

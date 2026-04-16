@@ -5,6 +5,7 @@ import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
 import { appendProductToSheet, updateProductRowInSheet, deleteProductRowFromSheet } from "./pdvSheetsWriter";
+import { autoSyncProductToSite } from "./pdvSiteSync";
 
 // Deleta um produto da planilha de forma assíncrona
 async function deleteProductFromSheetAsync(codigo: string) {
@@ -412,14 +413,22 @@ export const pdvProductsRouter = router({
       params.push(id);
       await db.execute(`UPDATE pdv_products SET ${sets.join(", ")} WHERE id = ?`, params);
 
-      // Buscar produto atualizado para sincronizar planilha
-      if (syncSheet) {
-        const [rows] = await db.execute("SELECT * FROM pdv_products WHERE id = ?", [id]);
-        const prod = (rows as any[])[0];
-        if (prod) {
+      // Buscar produto atualizado para sincronizar planilha e site
+      const [rows] = await db.execute("SELECT * FROM pdv_products WHERE id = ?", [id]);
+      const prod = (rows as any[])[0];
+      if (prod) {
+        if (syncSheet) {
           // Sincronizar planilha de forma assíncrona
           updateProductInSheetAsync(prod).catch(err =>
             console.error('[PDV] Erro ao sincronizar produto na planilha:', err)
+          );
+        }
+        // Auto-sync para o site: atualizar preço/estoque no catálogo
+        if (prod.codigo) {
+          const parts = prod.codigo.split("-");
+          const codigoBase = parts.length > 1 ? parts.slice(0, -1).join("-") : prod.codigo;
+          autoSyncProductToSite(codigoBase).catch(err =>
+            console.error('[PDV] Erro ao auto-sync site após update:', err)
           );
         }
       }
@@ -456,6 +465,42 @@ export const pdvProductsRouter = router({
         deleteProductFromSheetAsync(prod.codigo).catch(err =>
           console.error('[PDV] Erro ao deletar produto da planilha:', err)
         );
+      }
+
+      // Auto-sync para o site: verificar se ainda há variantes do modelo
+      // Se não houver mais variantes ativas, desativar o produto no catálogo
+      if (prod.codigo) {
+        const parts = prod.codigo.split("-");
+        const codigoBase = parts.length > 1 ? parts.slice(0, -1).join("-") : prod.codigo;
+        setImmediate(async () => {
+          try {
+            const db2 = await getDb();
+            if (!db2) return;
+            const [remaining] = await db2.execute(
+              "SELECT COUNT(*) as cnt FROM pdv_products WHERE codigo LIKE ? AND isActive = 1",
+              [`${codigoBase}-%`]
+            );
+            const cnt = (remaining as any[])[0]?.cnt || 0;
+            if (cnt === 0) {
+              // Nenhuma variante ativa restante: desativar produto no site
+              await db2.execute(
+                "UPDATE products SET isActive = 0, updatedAt = NOW() WHERE pdvCodigoBase = ? AND pdvSynced = 1",
+                [codigoBase]
+              );
+              console.log(`[AutoSync] Produto ${codigoBase} desativado no site (sem variantes ativas)`);
+            } else {
+              // Ainda há variantes: atualizar estoque
+              await db2.end();
+              autoSyncProductToSite(codigoBase).catch(err =>
+                console.error('[PDV] Erro ao auto-sync site após delete:', err)
+              );
+              return;
+            }
+            await db2.end();
+          } catch (err) {
+            console.error('[PDV] Erro ao auto-sync site após delete:', err);
+          }
+        });
       }
 
       return { success: true, codigo: prod.codigo };
@@ -540,6 +585,13 @@ export const pdvProductsRouter = router({
         if (input.syncSheet) {
           appendProductsBatchToSheet(input, created).catch(err =>
             console.error('[PDV] Erro ao sincronizar produtos com planilha:', err)
+          );
+        }
+
+        // Auto-sync para o site: criar/atualizar produto no catálogo do site
+        if (input.codigoBase) {
+          autoSyncProductToSite(input.codigoBase).catch(err =>
+            console.error('[PDV] Erro ao sincronizar produto com site:', err)
           );
         }
 

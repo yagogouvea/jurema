@@ -84,6 +84,8 @@ export const products = mysqlTable("products", {
   pdvCodigoBase: varchar("pdvCodigoBase", { length: 100 }),
   // Flag de sincronização com o PDV
   pdvSynced: boolean("pdvSynced").default(false).notNull(),
+  // Flag de produto novo: true até o admin editar/ativar pela primeira vez na Gestão do Site
+  isNewProduct: boolean("isNewProduct").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

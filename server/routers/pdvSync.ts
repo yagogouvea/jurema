@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import { savePdvNotification } from "./pdvNotifications";
+import { autoSyncProductToSite } from "./pdvSiteSync";
 import type { Request } from "express";
 
 async function getDb() {
@@ -370,6 +371,21 @@ export const pdvSyncRouter = router({
             `Sincronização por: ${seller.name}\nData: ${dataHora}\n\nNovos produtos:\n${lista}${sufixo}`
           );
         } catch (e) { console.error("[PDV Sync] Erro notificação novos:", e); }
+
+        // Auto-sync: criar novos produtos no catálogo do site automaticamente
+        const codigosBaseNovos = new Set<string>();
+        for (const p of novosProdutos) {
+          if (p.codigo) {
+            const parts = p.codigo.split("-");
+            const base = parts.length > 1 ? parts.slice(0, -1).join("-") : p.codigo;
+            codigosBaseNovos.add(base);
+          }
+        }
+        for (const base of Array.from(codigosBaseNovos)) {
+          autoSyncProductToSite(base).catch(err =>
+            console.error(`[PDV Sync] Erro ao auto-sync site para ${base}:`, err)
+          );
+        }
       }
 
       if (alteradosProdutos.length > 0) {

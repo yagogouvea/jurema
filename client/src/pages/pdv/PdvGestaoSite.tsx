@@ -69,6 +69,7 @@ interface SiteProduct {
   salesCount: number;
   totalStock: number;
   stockDetails: string;
+  isNewProduct: boolean;
 }
 
 // ─── constantes ───────────────────────────────────────────────────────────────
@@ -100,6 +101,7 @@ export default function PdvGestaoSite() {
   const [filterActive, setFilterActive] = useState<boolean | undefined>(undefined);
   const [filterFeatured, setFilterFeatured] = useState<boolean | undefined>(undefined);
   const [filterSection, setFilterSection] = useState<FeaturedSection>(null);
+  const [filterNew, setFilterNew] = useState(false);
   const [page, setPage] = useState(1);
 
   // modais
@@ -117,6 +119,7 @@ export default function PdvGestaoSite() {
     search: search || undefined,
     isActive: filterActive,
     isFeatured: filterFeatured,
+    isNewProduct: filterNew ? true : undefined,
     featuredSection: filterSection ?? undefined,
     page,
     pageSize: 30,
@@ -330,11 +333,22 @@ export default function PdvGestaoSite() {
             ))}
           </SelectContent>
         </Select>
+        <button
+          onClick={() => { setFilterNew(!filterNew); setPage(1); }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            filterNew
+              ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+              : "bg-white/5 text-white/50 border-white/10 hover:border-white/20"
+          }`}
+        >
+          <span className="text-xs">&#9733;</span>
+          Novos
+        </button>
         <Button
           size="sm"
           variant="outline"
           className="border-white/20 bg-white/5 hover:bg-white/10"
-          onClick={() => { setSearch(""); setFilterActive(undefined); setFilterFeatured(undefined); setFilterSection(null); setPage(1); }}
+          onClick={() => { setSearch(""); setFilterActive(undefined); setFilterFeatured(undefined); setFilterSection(null); setFilterNew(false); setPage(1); }}
         >
           <Filter className="w-4 h-4 mr-1" />
           Limpar
@@ -374,7 +388,11 @@ export default function PdvGestaoSite() {
                 </thead>
                 <tbody>
                   {products.items.map((p) => (
-                    <tr key={p.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
+                    <tr key={p.id} className={`border-b transition-colors ${
+                      (p as SiteProduct).isNewProduct
+                        ? "border-yellow-500/30 bg-yellow-500/5 hover:bg-yellow-500/10"
+                        : "border-white/5 hover:bg-white/3"
+                    }`}>
                       {/* Foto */}
                       <td className="px-4 py-3">
                         <div
@@ -391,7 +409,14 @@ export default function PdvGestaoSite() {
 
                       {/* Nome */}
                       <td className="px-4 py-3">
-                        <p className="font-medium text-white leading-tight">{p.name}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-white leading-tight">{p.name}</p>
+                          {(p as SiteProduct).isNewProduct && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 font-bold animate-pulse">
+                              NOVO
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-white/40 mt-0.5">{p.team || "—"}</p>
                       </td>
 

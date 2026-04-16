@@ -1,0 +1,1 @@
+ALTER TABLE `products` ADD `isNewProduct` boolean DEFAULT true NOT NULL;

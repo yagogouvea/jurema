@@ -3,33 +3,61 @@ import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import PdvLayout from "./PdvLayout";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { Package, DollarSign, Calendar, ArrowDownRight, ArrowUpRight, Settings2, ShoppingBag } from "lucide-react";
+import {
+  Package, DollarSign, Calendar, ArrowDownRight, ArrowUpRight,
+  Settings2, ShoppingBag, ChevronDown, ChevronUp, X, Eye, AlertTriangle
+} from "lucide-react";
 import { toast } from "sonner";
 
 const SELLER_COLORS = ["#16a34a", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7"];
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+function formatCurrency(value: number | string): string {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(parseFloat(String(value)) || 0);
 }
+
+function formatDateTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "2-digit",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  PAGO: "bg-green-950/50 text-green-400 border-green-900/50",
+  PENDENTE: "bg-yellow-950/50 text-yellow-400 border-yellow-900/50",
+  CANCELADO: "bg-red-950/50 text-red-400 border-red-900/50",
+};
 
 export default function PdvSofia() {
   const { isAdmin } = usePdvAuth();
-
+  const [activeTab, setActiveTab] = useState<"dashboard" | "pedidos">("dashboard");
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(); d.setDate(1);
     return d.toISOString().split("T")[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [showConfig, setShowConfig] = useState(false);
+  const [page, setPage] = useState(1);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
 
   const { data, isLoading } = trpc.pdvSofia.dashboard.useQuery(
     { startDate, endDate },
     { enabled: isAdmin }
   );
-
   const { data: configData } = trpc.pdvSofia.getConfig.useQuery(undefined, { enabled: isAdmin });
+  const { data: pedidosData, isLoading: pedidosLoading, refetch: refetchPedidos } = trpc.pdvSofia.pedidos.useQuery(
+    { startDate, endDate, page, limit: 20 },
+    { enabled: isAdmin && activeTab === "pedidos" }
+  );
+  const { data: orderDetail } = trpc.pdvOrders.getById.useQuery(
+    { pedidoId: selectedOrder?.pedidoId || "" },
+    { enabled: !!selectedOrder?.pedidoId }
+  );
+
   const [comissaoInput, setComissaoInput] = useState<number | null>(null);
   const utils = trpc.useUtils();
 
@@ -41,6 +69,17 @@ export default function PdvSofia() {
       setShowConfig(false);
     },
     onError: () => toast.error("Erro ao atualizar"),
+  });
+
+  const cancelMutation = trpc.pdvOrders.updateStatus.useMutation({
+    onSuccess: () => {
+      toast.success("Pedido cancelado — estoque devolvido");
+      refetchPedidos();
+      setSelectedOrder(null);
+      setConfirmCancel(null);
+      utils.pdvSofia.dashboard.invalidate();
+    },
+    onError: (err: any) => toast.error(err.message || "Erro ao cancelar pedido"),
   });
 
   if (!isAdmin) {
@@ -56,6 +95,9 @@ export default function PdvSofia() {
   const summary = data?.summary;
   const porVendedor = data?.porVendedor || [];
   const porDia = data?.porDia || [];
+  const pedidos = pedidosData?.orders || [];
+  const totalPedidos = pedidosData?.total || 0;
+  const totalPagesPedidos = pedidosData?.totalPages || 1;
 
   return (
     <PdvLayout>
@@ -101,120 +143,291 @@ export default function PdvSofia() {
           </div>
         )}
 
+        {/* Tabs */}
+        <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-2xl p-1 w-fit">
+          {(["dashboard", "pedidos"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-5 py-2 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === tab
+                  ? "bg-purple-700 text-white"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              {tab === "dashboard" ? "Dashboard" : "Pedidos"}
+            </button>
+          ))}
+        </div>
+
         {/* Filters */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-gray-500" />
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600" />
+              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-600" />
             <span className="text-gray-600">até</span>
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600" />
+              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-600" />
           </div>
         </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center h-40">
-            <div className="w-8 h-8 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (
-          <>
-            {/* KPIs */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-              {[
-                { label: "Total Peças", value: String(summary?.totalPecas || 0), icon: Package, color: "text-purple-400" },
-                { label: "Faturamento", value: formatCurrency(summary?.faturamento || 0), icon: DollarSign, color: "text-blue-400" },
-                { label: "Pedidos", value: String(summary?.totalPedidos || 0), icon: ShoppingBag, color: "text-gray-300" },
-                { label: "Comissão Loja", value: formatCurrency(summary?.comissaoTotal || 0), icon: ArrowUpRight, color: "text-green-400" },
-                { label: "Reembolso", value: formatCurrency(summary?.reembolsoTotal || 0), icon: ArrowDownRight, color: "text-green-400" },
-              ].map((kpi) => (
-                <div key={kpi.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
-                    <span className="text-gray-400 text-xs">{kpi.label}</span>
-                  </div>
-                  <div className={`text-xl font-bold ${kpi.color}`}>{kpi.value}</div>
-                </div>
-              ))}
+        {/* ── DASHBOARD TAB ── */}
+        {activeTab === "dashboard" && (
+          isLoading ? (
+            <div className="flex items-center justify-center h-40">
+              <div className="w-8 h-8 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
             </div>
+          ) : (
+            <>
+              {/* KPIs */}
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                {[
+                  { label: "Total Peças", value: String(summary?.totalPecas || 0), icon: Package, color: "text-purple-400" },
+                  { label: "Faturamento", value: formatCurrency(summary?.faturamento || 0), icon: DollarSign, color: "text-blue-400" },
+                  { label: "Pedidos", value: String(summary?.totalPedidos || 0), icon: ShoppingBag, color: "text-gray-300" },
+                  { label: "Comissão Loja", value: formatCurrency(summary?.comissaoTotal || 0), icon: ArrowUpRight, color: "text-green-400" },
+                  { label: "Reembolso", value: formatCurrency(summary?.reembolsoTotal || 0), icon: ArrowDownRight, color: "text-green-400" },
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
+                      <span className="text-gray-400 text-xs">{kpi.label}</span>
+                    </div>
+                    <div className={`text-xl font-bold ${kpi.color}`}>{kpi.value}</div>
+                  </div>
+                ))}
+              </div>
 
-            {/* Por vendedor */}
-            {porVendedor.length > 0 && (
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-800">
-                  <h3 className="text-white font-semibold">Reembolso por Vendedor</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-800">
-                        <th className="text-left text-gray-400 text-xs font-semibold px-4 py-3">Vendedor</th>
-                        <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Peças</th>
-                        <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Faturamento</th>
-                        <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Comissão Loja</th>
-                        <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Reembolso</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {porVendedor.map((v: any, i: number) => (
-                        <tr key={v.sellerId} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: SELLER_COLORS[i % SELLER_COLORS.length] }} />
-                              <span className="text-white font-medium text-sm">{v.sellerName}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-right text-purple-400 font-bold text-sm">{v.pecas}</td>
-                          <td className="px-4 py-3 text-right text-white text-sm">{formatCurrency(v.faturamento)}</td>
-                          <td className="px-4 py-3 text-right text-green-400 text-sm">{formatCurrency(v.comissao)}</td>
-                          <td className="px-4 py-3 text-right text-green-400 font-semibold text-sm">{formatCurrency(v.reembolso)}</td>
+              {/* Por vendedor */}
+              {porVendedor.length > 0 && (
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-800">
+                    <h3 className="text-white font-semibold">Reembolso por Vendedor</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-800">
+                          <th className="text-left text-gray-400 text-xs font-semibold px-4 py-3">Vendedor</th>
+                          <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Peças</th>
+                          <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Faturamento</th>
+                          <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Comissão Loja</th>
+                          <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Reembolso</th>
                         </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t border-gray-700 bg-gray-800/30">
-                        <td className="px-4 py-3 text-gray-400 text-sm font-semibold">TOTAL</td>
-                        <td className="px-4 py-3 text-right text-purple-400 font-bold text-sm">{summary?.totalPecas}</td>
-                        <td className="px-4 py-3 text-right text-white font-bold text-sm">{formatCurrency(summary?.faturamento || 0)}</td>
-                        <td className="px-4 py-3 text-right text-green-400 font-bold text-sm">{formatCurrency(summary?.comissaoTotal || 0)}</td>
-                        <td className="px-4 py-3 text-right text-green-400 font-bold text-sm">{formatCurrency(summary?.reembolsoTotal || 0)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {porVendedor.map((v: any, i: number) => (
+                          <tr key={v.sellerId} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: SELLER_COLORS[i % SELLER_COLORS.length] }} />
+                                <span className="text-white font-medium text-sm">{v.sellerName}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right text-purple-400 font-bold text-sm">{v.pecas}</td>
+                            <td className="px-4 py-3 text-right text-white text-sm">{formatCurrency(v.faturamento)}</td>
+                            <td className="px-4 py-3 text-right text-green-400 text-sm">{formatCurrency(v.comissao)}</td>
+                            <td className="px-4 py-3 text-right text-green-400 font-semibold text-sm">{formatCurrency(v.reembolso)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t border-gray-700 bg-gray-800/30">
+                          <td className="px-4 py-3 text-gray-400 text-sm font-semibold">TOTAL</td>
+                          <td className="px-4 py-3 text-right text-purple-400 font-bold text-sm">{summary?.totalPecas}</td>
+                          <td className="px-4 py-3 text-right text-white font-bold text-sm">{formatCurrency(summary?.faturamento || 0)}</td>
+                          <td className="px-4 py-3 text-right text-green-400 font-bold text-sm">{formatCurrency(summary?.comissaoTotal || 0)}</td>
+                          <td className="px-4 py-3 text-right text-green-400 font-bold text-sm">{formatCurrency(summary?.reembolsoTotal || 0)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Por dia */}
-            {porDia.length > 0 && (
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-                <h3 className="text-white font-semibold mb-4">Vendas Sofia por Dia</h3>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={porDia}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                    <XAxis dataKey="dia" tick={{ fill: "#9ca3af", fontSize: 11 }}
-                      tickFormatter={(v) => new Date(v + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} />
-                    <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "12px" }}
-                      labelStyle={{ color: "#fff" }}
-                      labelFormatter={(v) => new Date(v + "T00:00:00").toLocaleDateString("pt-BR")}
-                      formatter={(value: any, name: string) => [name === "pecas" ? value : formatCurrency(value as number), name === "pecas" ? "Peças" : "Faturamento"]}
-                    />
-                    <Bar dataKey="pecas" name="Peças" fill="#a855f7" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
+              {/* Por dia */}
+              {porDia.length > 0 && (
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+                  <h3 className="text-white font-semibold mb-4">Vendas Sofia por Dia</h3>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={porDia}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                      <XAxis dataKey="dia" tick={{ fill: "#9ca3af", fontSize: 11 }}
+                        tickFormatter={(v) => new Date(v + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} />
+                      <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "12px" }}
+                        labelStyle={{ color: "#fff" }}
+                        labelFormatter={(v) => new Date(v + "T00:00:00").toLocaleDateString("pt-BR")}
+                        formatter={(value: any, name: string) => [name === "pecas" ? value : formatCurrency(value as number), name === "pecas" ? "Peças" : "Faturamento"]}
+                      />
+                      <Bar dataKey="pecas" name="Peças" fill="#a855f7" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
 
-            {porVendedor.length === 0 && (
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 text-center">
-                <Package className="w-12 h-12 text-gray-700 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">Nenhuma venda Sofia no período selecionado</p>
-                <p className="text-gray-600 text-xs mt-1">Marque "Venda Sofia" ao registrar um pedido no PDV</p>
+              {porVendedor.length === 0 && (
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 text-center">
+                  <Package className="w-12 h-12 text-gray-700 mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm">Nenhuma venda Sofia no período selecionado</p>
+                  <p className="text-gray-600 text-xs mt-1">Marque "Venda Sofia" ao registrar um pedido no PDV</p>
+                </div>
+              )}
+            </>
+          )
+        )}
+
+        {/* ── PEDIDOS TAB ── */}
+        {activeTab === "pedidos" && (
+          pedidosLoading ? (
+            <div className="flex items-center justify-center h-40">
+              <div className="w-8 h-8 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-gray-400 text-sm">{totalPedidos} pedido(s) com itens Sofia no período</p>
               </div>
-            )}
-          </>
+
+              {pedidos.length === 0 ? (
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 text-center">
+                  <ShoppingBag className="w-12 h-12 text-gray-700 mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm">Nenhum pedido Sofia no período selecionado</p>
+                </div>
+              ) : (
+                <>
+                  {pedidos.map((order: any) => (
+                    <div key={order.pedidoId} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                      {/* Order header */}
+                      <div
+                        className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-800/30 transition-colors"
+                        onClick={() => setExpandedOrder(expandedOrder === order.pedidoId ? null : order.pedidoId)}
+                      >
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-white font-mono font-semibold text-sm">{order.pedidoId}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[order.status] || "text-gray-400"}`}>
+                            {order.status}
+                          </span>
+                          {order.isSofia === 1 && (
+                            <span className="text-xs px-2 py-0.5 rounded-full border bg-purple-950/50 text-purple-400 border-purple-900/50 font-medium">
+                              100% Sofia
+                            </span>
+                          )}
+                          {order.isSofia === 0 && (
+                            <span className="text-xs px-2 py-0.5 rounded-full border bg-blue-950/50 text-blue-400 border-blue-900/50 font-medium">
+                              Misto
+                            </span>
+                          )}
+                          <span className="text-gray-400 text-sm">{order.clienteNome || "—"}</span>
+                          <span className="text-gray-500 text-xs">{formatDateTime(order.createdAt)}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-white font-semibold text-sm">{formatCurrency(order.totalAplicado)}</span>
+                          {expandedOrder === order.pedidoId
+                            ? <ChevronUp className="w-4 h-4 text-gray-500" />
+                            : <ChevronDown className="w-4 h-4 text-gray-500" />
+                          }
+                        </div>
+                      </div>
+
+                      {/* Order detail */}
+                      {expandedOrder === order.pedidoId && (
+                        <div className="border-t border-gray-800 px-5 py-4 space-y-4">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            <div><span className="text-gray-500">Vendedor:</span> <span className="text-white ml-1">{order.sellerName}</span></div>
+                            <div><span className="text-gray-500">Canal:</span> <span className="text-white ml-1">{order.canal}</span></div>
+                            <div><span className="text-gray-500">Regime:</span> <span className="text-white ml-1">{order.regime}</span></div>
+                            <div><span className="text-gray-500">Telefone:</span> <span className="text-white ml-1">{order.clienteTelefone || "—"}</span></div>
+                          </div>
+
+                          {/* Items */}
+                          <div>
+                            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2">Itens Sofia</p>
+                            <div className="space-y-1">
+                              {(orderDetail?.items || [])
+                                .filter((item: any) => item.isSofia)
+                                .map((item: any, idx: number) => (
+                                  <div key={idx} className="flex items-center justify-between bg-gray-800/50 rounded-xl px-3 py-2 text-sm">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-purple-400 font-medium">{item.time}</span>
+                                      <span className="text-white">{item.modelo} {item.descricao}</span>
+                                      <span className="text-gray-500">Tam: {item.tamanho}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-right">
+                                      <span className="text-gray-400">×{item.quantidade}</span>
+                                      <span className="text-white font-medium">{formatCurrency(item.totalItem)}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              {!orderDetail && (
+                                <div className="text-gray-500 text-xs italic px-2">Carregando itens...</div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          {order.status !== "CANCELADO" && (
+                            <div className="flex justify-end pt-2">
+                              {confirmCancel === order.pedidoId ? (
+                                <div className="flex items-center gap-3 bg-red-950/30 border border-red-900/50 rounded-xl px-4 py-2">
+                                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                                  <span className="text-red-300 text-sm">Confirmar cancelamento? Estoque será devolvido.</span>
+                                  <button
+                                    onClick={() => cancelMutation.mutate({ pedidoId: order.pedidoId, status: "CANCELADO" })}
+                                    disabled={cancelMutation.isPending}
+                                    className="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded-lg text-white text-xs font-medium transition-colors disabled:opacity-50"
+                                  >
+                                    {cancelMutation.isPending ? "..." : "Confirmar"}
+                                  </button>
+                                  <button
+                                    onClick={() => setConfirmCancel(null)}
+                                    className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-300 text-xs font-medium transition-colors"
+                                  >
+                                    Voltar
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => { setSelectedOrder(order); setConfirmCancel(order.pedidoId); }}
+                                  className="flex items-center gap-2 px-4 py-2 bg-red-950/30 border border-red-900/50 hover:border-red-700 rounded-xl text-red-400 hover:text-red-300 text-sm transition-colors"
+                                >
+                                  <X className="w-4 h-4" />
+                                  Cancelar Pedido
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Pagination */}
+                  {totalPagesPedidos > 1 && (
+                    <div className="flex items-center justify-center gap-3 pt-2">
+                      <button
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-xl text-gray-400 text-sm disabled:opacity-40 hover:border-gray-700 transition-colors"
+                      >
+                        Anterior
+                      </button>
+                      <span className="text-gray-500 text-sm">{page} / {totalPagesPedidos}</span>
+                      <button
+                        onClick={() => setPage(p => Math.min(totalPagesPedidos, p + 1))}
+                        disabled={page === totalPagesPedidos}
+                        className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-xl text-gray-400 text-sm disabled:opacity-40 hover:border-gray-700 transition-colors"
+                      >
+                        Próxima
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )
         )}
       </div>
     </PdvLayout>

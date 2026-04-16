@@ -566,3 +566,30 @@
 - [x] Corrigir importSiteProducts: clearExisting agora deleta TODOS os produtos (não apenas pdvSynced=1)
 - [x] Corrigir botão "Importar" no PdvGestaoSite para usar clearExisting: true
 - [x] Catálogo público agora está vazio até a próxima importação do PDV
+
+## v71 — Sincronização automática PDV → Site (auto-sync)
+- [ ] Adicionar campo isNewProduct (boolean, default true) na tabela products do site
+- [ ] Migration SQL aplicada
+- [ ] Auto-sync no createBatch (PDV): ao cadastrar produto, criar/atualizar entrada na tabela products com isNewProduct=true, isActive=false
+- [ ] Auto-sync no syncFromSheet (planilha): ao importar novos produtos da planilha, criar entrada na tabela products com isNewProduct=true, isActive=false
+- [ ] Badge "NOVO" na tabela da PdvGestaoSite para produtos com isNewProduct=true
+- [ ] Ordenação: produtos novos aparecem primeiro na lista
+- [ ] Badge some ao usuário editar (ativar/desativar, mudar seção, fazer upload de foto) — isNewProduct=false
+- [ ] Testes e checkpoint
+
+## v71 — Integração completa PDV ↔ Site (auto-sync bidirecional)
+- [x] Badge NOVO na PdvGestaoSite (isNewProduct=true), produtos novos aparecem primeiro
+- [x] Filtro "Novos" na Gestão do Site para ver apenas produtos novos
+- [x] autoSyncProductToSite: implementado para createBatch e sync planilha
+- [x] updateProduct (PDV): ao editar produto, atualizar nome/preço/estoque no site automaticamente
+- [x] deleteProduct (PDV): ao excluir produto, desativar no catálogo do site automaticamente
+- [x] Venda PDV: ao fechar pedido, deduzir estoque do catálogo do site automaticamente
+- [x] listSiteProducts: campo isNewProduct no SELECT e filtro por isNewProduct
+- [x] 198/198 testes passando
+
+## v72 — Pedidos Sofia no histórico
+- [x] Aba "Pedidos" adicionada na página PdvSofia com listagem completa
+- [x] Pedidos 100% Sofia e pedidos mistos aparecem na aba Pedidos Sofia
+- [x] Cancelamento de pedidos Sofia funciona com confirmação e devolução de estoque
+- [x] Pedidos mistos (isSofia=0 com itens Sofia) já aparecem no histórico geral (isSofia=0)
+- [x] 198/198 testes passando

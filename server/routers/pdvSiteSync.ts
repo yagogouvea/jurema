@@ -257,6 +257,7 @@ export const pdvSiteSyncRouter = router({
       search: z.string().optional(),
       isActive: z.boolean().optional(),
       isFeatured: z.boolean().optional(),
+      isNewProduct: z.boolean().optional(),
       featuredSection: z.enum(["destaque", "mais-vendidos", "nova-colecao"]).optional(),
       page: z.number().int().min(1).default(1),
       pageSize: z.number().int().min(1).max(100).default(30),
@@ -279,6 +280,10 @@ export const pdvSiteSyncRouter = router({
         conditions.push("p.isFeatured = ?");
         params.push(input.isFeatured ? 1 : 0);
       }
+      if (input.isNewProduct !== undefined) {
+        conditions.push("p.isNewProduct = ?");
+        params.push(input.isNewProduct ? 1 : 0);
+      }
       if (input.featuredSection) {
         conditions.push("p.featuredSection = ?");
         params.push(input.featuredSection);
@@ -295,12 +300,12 @@ export const pdvSiteSyncRouter = router({
       const rows = await dbExecute(
         `SELECT p.id, p.name, p.slug, p.price, p.originalPrice, p.images,
                 p.team, p.category, p.gender, p.isActive, p.isFeatured, p.featuredSection,
-                p.reference, p.pdvCodigoBase, p.salesCount,
+                p.reference, p.pdvCodigoBase, p.salesCount, p.isNewProduct,
                 (SELECT SUM(ps.quantity) FROM product_stock ps WHERE ps.productId = p.id) as totalStock,
                 (SELECT GROUP_CONCAT(CONCAT(ps.size, ':', ps.quantity) ORDER BY ps.size SEPARATOR ',')
                  FROM product_stock ps WHERE ps.productId = p.id) as stockDetails
          FROM products p ${where}
-         ORDER BY p.updatedAt DESC
+         ORDER BY p.isNewProduct DESC, p.createdAt DESC
          LIMIT ${input.pageSize} OFFSET ${offset}`,
         params
       );
@@ -311,6 +316,7 @@ export const pdvSiteSyncRouter = router({
           images: typeof r.images === "string" ? JSON.parse(r.images) : (r.images || []),
           isActive: Boolean(r.isActive),
           isFeatured: Boolean(r.isFeatured),
+          isNewProduct: Boolean(r.isNewProduct),
           totalStock: r.totalStock || 0,
           stockDetails: r.stockDetails || "",
         })),
@@ -345,11 +351,13 @@ export const pdvSiteSyncRouter = router({
 
       if (!sets.length) return { success: true };
 
+      // Limpa o badge "NOVO" ao editar pela primeira vez
+      sets.push("isNewProduct = 0");
       sets.push("updatedAt = NOW()");
       params.push(input.productId);
 
       await dbRun(
-        `UPDATE products SET ${sets.join(", ")} WHERE id = ? AND pdvSynced = 1`,
+        `UPDATE products SET ${sets.join(", ")} WHERE id = ?`,
         params
       );
 
@@ -384,8 +392,9 @@ export const pdvSiteSyncRouter = router({
         [url, `${input.codigoBase}%`]
       );
 
+      // Limpa badge "NOVO" e atualiza imagem
       await dbRun(
-        `UPDATE products SET images = ?, updatedAt = NOW() WHERE pdvCodigoBase = ? AND pdvSynced = 1`,
+        `UPDATE products SET images = ?, isNewProduct = 0, updatedAt = NOW() WHERE pdvCodigoBase = ? AND pdvSynced = 1`,
         [JSON.stringify([url]), input.codigoBase]
       );
 
@@ -454,3 +463,106 @@ export const pdvSiteSyncRouter = router({
       };
     }),
 });
+
+// ─── Auto-sync: chamado automaticamente ao criar/atualizar produto no PDV ────
+
+/**
+ * Sincroniza um grupo de produtos PDV (mesmo código base) para o catálogo do site.
+ * Cria o produto se não existir (isActive=false, isNewProduct=true).
+ * Atualiza nome/preço/estoque se já existir, mas preserva isActive e isNewProduct.
+ */
+export async function autoSyncProductToSite(codigoBase: string): Promise<void> {
+  try {
+    // Buscar todas as variantes do produto no PDV
+    const variants = await dbExecute(
+      `SELECT codigo, linha, modelo, time, descricao, tamanho, tipo,
+              estoque, precoAtacado, precoVarejo, fotoUrl
+       FROM pdv_products
+       WHERE codigo LIKE ? AND isActive = 1
+       ORDER BY tamanho`,
+      [`${codigoBase}-%`]
+    );
+
+    // Tentar também códigos exatos (sem hífen no final, ex: produto sem tamanho)
+    const variantsExact = await dbExecute(
+      `SELECT codigo, linha, modelo, time, descricao, tamanho, tipo,
+              estoque, precoAtacado, precoVarejo, fotoUrl
+       FROM pdv_products
+       WHERE codigo = ? AND isActive = 1`,
+      [codigoBase]
+    );
+
+    const allVariants = [...variants, ...variantsExact];
+    if (allVariants.length === 0) return;
+
+    const first = allVariants[0] as any;
+    const productName = [first.time, first.modelo, first.descricao]
+      .filter(Boolean).join(" - ") || codigoBase;
+    const precoVarejo = Math.max(...allVariants.map((v: any) => parseFloat(v.precoVarejo) || 0));
+    const precoAtacado = Math.max(...allVariants.map((v: any) => parseFloat(v.precoAtacado) || 0));
+    const fotoUrl = allVariants.find((v: any) => v.fotoUrl)?.fotoUrl || null;
+    const images = fotoUrl ? JSON.stringify([fotoUrl]) : JSON.stringify([]);
+
+    // Verificar se já existe no site
+    const existing = await dbExecute(
+      `SELECT id FROM products WHERE pdvCodigoBase = ? AND pdvSynced = 1`,
+      [codigoBase]
+    );
+
+    if (existing.length > 0) {
+      // Atualiza nome, preço e imagem — preserva isActive e isNewProduct
+      const productId = (existing[0] as any).id;
+      await dbRun(
+        `UPDATE products SET
+           name = ?, price = ?, originalPrice = ?, images = ?,
+           team = ?, updatedAt = NOW()
+         WHERE id = ?`,
+        [productName, precoVarejo, precoAtacado, images, first.time || null, productId]
+      );
+
+      // Atualizar estoque
+      for (const v of allVariants as any[]) {
+        await dbRun(
+          `INSERT INTO product_stock (productId, size, quantity)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE quantity = VALUES(quantity)`,
+          [productId, v.tamanho, v.estoque]
+        );
+      }
+    } else {
+      // Criar novo produto no site (inativo, marcado como novo)
+      const baseSlug = generateSlug(productName);
+      const slug = await ensureUniqueSlug(baseSlug);
+
+      const result = await dbRun(
+        `INSERT INTO products
+           (name, slug, description, price, originalPrice, images, team,
+            category, gender, subcategory, isActive, isFeatured,
+            reference, salesCount, pdvCodigoBase, pdvSynced, isNewProduct, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'tailandesa', 'masculino', ?, 0, 0, ?, 0, ?, 1, 1, NOW(), NOW())`,
+        [
+          productName, slug,
+          [first.linha, first.modelo, first.descricao, first.tipo].filter(Boolean).join(" | "),
+          precoVarejo, precoAtacado, images,
+          first.time || null,
+          first.time || null,
+          codigoBase, codigoBase,
+        ]
+      );
+
+      const productId = (result as any).insertId;
+
+      // Inserir estoque
+      for (const v of allVariants as any[]) {
+        await dbRun(
+          `INSERT INTO product_stock (productId, size, quantity) VALUES (?, ?, ?)`,
+          [productId, v.tamanho, v.estoque]
+        );
+      }
+
+      console.log(`[AutoSync] Novo produto criado no site: ${codigoBase} → id=${productId}`);
+    }
+  } catch (err) {
+    console.error(`[AutoSync] Erro ao sincronizar ${codigoBase}:`, err);
+  }
+}
