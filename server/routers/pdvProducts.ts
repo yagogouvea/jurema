@@ -264,7 +264,7 @@ export const pdvProductsRouter = router({
 
         // Fetch ALL matching products (no pagination here — we group in JS)
         const [rows] = await db.execute(
-          `SELECT id, codigo, linha, modelo, time, descricao, tipo, tamanho, estoque, precoAtacado, precoVarejo
+          `SELECT id, codigo, linha, modelo, time, descricao, tipo, tamanho, estoque, precoAtacado, precoVarejo, fotoUrl
            FROM pdv_products ${where}
            ORDER BY time ASC, codigo ASC`,
           params
@@ -293,7 +293,11 @@ export const pdvProductsRouter = router({
               precoVarejo: parseFloat(p.precoVarejo) || 0,
               estoqueTotal: 0,
               variantes: [],
+              fotoUrl: p.fotoUrl || null,
             });
+          } else if (p.fotoUrl && !groupMap.get(baseCode).fotoUrl) {
+            // Se o grupo ainda não tem foto, usar a foto do primeiro produto que tiver
+            groupMap.get(baseCode).fotoUrl = p.fotoUrl;
           }
 
           const group = groupMap.get(baseCode)!;

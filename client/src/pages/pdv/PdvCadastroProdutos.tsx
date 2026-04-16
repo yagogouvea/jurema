@@ -774,11 +774,21 @@ export default function PdvCadastroProdutos() {
                           {/* Mobile layout */}
                           <div className="md:hidden px-4 py-3 space-y-2">
                             <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-white truncate">
-                                  {prod.time} {prod.modelo && `· ${prod.modelo}`}
-                                </p>
-                                <p className="text-xs text-gray-500 font-mono mt-0.5">{prod.codigo}</p>
+                              <div className="flex items-start gap-2 min-w-0 flex-1">
+                                <div className="shrink-0 mt-0.5">
+                                  <ProductPhotoAvatar
+                                    fotoUrl={prod.fotoUrl}
+                                    productName={`${prod.time}${prod.modelo ? ` ${prod.modelo}` : ""}`}
+                                    size={28}
+                                    onOpenLightbox={(src, name) => setLightbox({ src, name })}
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-white truncate">
+                                    {prod.time} {prod.modelo && `· ${prod.modelo}`}
+                                  </p>
+                                  <p className="text-xs text-gray-500 font-mono mt-0.5">{prod.codigo}</p>
+                                </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
                                 {!prod.isActive && (

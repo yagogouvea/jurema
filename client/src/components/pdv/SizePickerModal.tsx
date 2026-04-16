@@ -22,6 +22,7 @@ export interface GroupedProduct {
   precoVarejo: number;
   estoqueTotal: number;
   variantes: ProductVariant[];
+  fotoUrl?: string | null;
 }
 
 export interface CartItem {
@@ -142,6 +143,16 @@ export default function SizePickerModal({
       <div className="relative bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-start justify-between p-4 border-b border-gray-800 shrink-0">
+          {/* Mini foto do produto no modal */}
+          {product.fotoUrl && (
+            <div className="shrink-0 mr-3">
+              <img
+                src={product.fotoUrl}
+                alt={product.time}
+                className="w-14 h-14 object-cover rounded-xl border border-white/10"
+              />
+            </div>
+          )}
           <div className="min-w-0 flex-1 pr-3">
             <h2 className="text-white font-bold text-base leading-tight">{product.time}</h2>
             <p className="text-gray-400 text-xs mt-0.5">

@@ -11,6 +11,7 @@ import PdvLayout from "./PdvLayout";
 import PdvCheckout from "./PdvCheckout";
 import SizePickerModal from "@/components/pdv/SizePickerModal";
 import type { GroupedProduct } from "@/components/pdv/SizePickerModal";
+import { ProductPhotoAvatar, ProductPhotoLightbox } from "@/components/ProductPhotoLightbox";
 
 // Re-export CartItem type used throughout this file
 interface CartItem {
@@ -94,6 +95,8 @@ export default function PdvMain() {
 
   // Size picker modal state
   const [selectedGroup, setSelectedGroup] = useState<GroupedProduct | null>(null);
+  // Lightbox state
+  const [lightbox, setLightbox] = useState<{ src: string; name: string } | null>(null);
 
   // Fetch grouped products
   const safePage = Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1;
@@ -435,6 +438,7 @@ export default function PdvMain() {
                           group={group}
                           regime={regime}
                           onSelect={setSelectedGroup}
+                          onOpenLightbox={(src, name) => setLightbox({ src, name })}
                         />
                       ))}
                     </div>
@@ -547,6 +551,14 @@ export default function PdvMain() {
           regime={regime}
           onClose={() => setSelectedGroup(null)}
           onAddToCart={addItemsToCart}
+        />
+      )}
+      {/* Lightbox de foto */}
+      {lightbox && (
+        <ProductPhotoLightbox
+          src={lightbox.src}
+          productName={lightbox.name}
+          onClose={() => setLightbox(null)}
         />
       )}
 
@@ -689,10 +701,12 @@ function GroupedProductCard({
   group,
   regime,
   onSelect,
+  onOpenLightbox,
 }: {
   group: GroupedProduct;
   regime: "ATACADO" | "VAREJO";
   onSelect: (g: GroupedProduct) => void;
+  onOpenLightbox: (src: string, name: string) => void;
 }) {
   const precoAtual = regime === "ATACADO" ? group.precoAtacado : group.precoVarejo;
   const semEstoque = group.estoqueTotal <= 0;
@@ -718,11 +732,22 @@ function GroupedProductCard({
       }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="min-w-0">
-          <div className="text-white font-semibold text-sm truncate">{group.time}</div>
-          <div className="text-gray-400 text-xs">
-            {group.linha} · {group.modelo}
-            {group.descricao ? ` · ${group.descricao}` : ""}
+        <div className="flex items-start gap-2 min-w-0 flex-1">
+          {/* Avatar foto — clique abre lightbox sem selecionar o produto */}
+          <div onClick={(e) => { e.stopPropagation(); if (group.fotoUrl) onOpenLightbox(group.fotoUrl, group.time); }} className="shrink-0 mt-0.5">
+            <ProductPhotoAvatar
+              fotoUrl={group.fotoUrl}
+              productName={group.time}
+              size={28}
+              onOpenLightbox={onOpenLightbox}
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="text-white font-semibold text-sm truncate">{group.time}</div>
+            <div className="text-gray-400 text-xs">
+              {group.linha} · {group.modelo}
+              {group.descricao ? ` · ${group.descricao}` : ""}
+            </div>
           </div>
         </div>
         <div className="text-right flex-shrink-0">

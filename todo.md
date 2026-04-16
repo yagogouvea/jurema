@@ -614,3 +614,11 @@
 - [x] Botão × para limpar o campo rapidamente
 - [x] Backend: buscar também por pdvCodigoBase (código PDV)
 - [x] 198/198 testes passando, zero erros TypeScript
+
+## v78 — Mini foto (avatar) no PDV completo
+- [x] fotoUrl adicionado ao listGrouped do backend (SELECT + propagado no groupMap)
+- [x] fotoUrl adicionado à interface GroupedProduct (SizePickerModal)
+- [x] Avatar 28px nos cards de produto do PdvMain (tela de venda) com lightbox ao clicar
+- [x] Foto 56px exibida no header do SizePickerModal (modal de seleção de tamanho)
+- [x] Avatar 28px no layout mobile do PdvCadastroProdutos (aba Produtos Cadastrados)
+- [x] 198/198 testes passando, zero erros TypeScript
