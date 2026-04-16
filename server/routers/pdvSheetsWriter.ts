@@ -185,8 +185,8 @@ export async function appendOrderToSheet(order: {
       order.clienteTelefone || '',                       // F: telefone
       parseFloat(order.totalVarejo.toFixed(2)),          // G: varejo (número)
       parseFloat(order.totalAtacado.toFixed(2)),         // H: atacado (número)
-      order.regime === 'ATACADO' ? 'Atacado' : 'Varejo', // I: atacado/varejo
-      extraTipos,                                        // J: extra
+      order.regime === 'ATACADO' ? 'Atacado' : 'Varejo', // I: atacado/varejo (mantido para compatibilidade)
+      extraTipos,                                        // J: extra (serviço extra)
       extraValor > 0 ? parseFloat(extraValor.toFixed(2)) : '', // K: valor_adicional (número)
       parseFloat(valorSemTaxaFinal.toFixed(2)),          // L: valor_sem_taxa (subtotal + extras, número)
       formasPagamento,                                   // M: forma_pagamento
@@ -194,12 +194,13 @@ export async function appendOrderToSheet(order: {
       parseFloat(totalComTaxaFinal.toFixed(2)),          // O: total_com_taxa (número)
       order.totalPendente > 0 ? parseFloat(order.totalPendente.toFixed(2)) : '', // P: pendente (número)
       order.justificativa || '',                         // Q: justificativa
-      order.status === 'CANCELADO' ? 'Cancelado' : order.status === 'PENDENTE' ? 'Pendente' : 'Pago', // R: status
-      order.qtdItens,                                    // S: qtd_itens (número)
-      parseFloat(order.comissaoTotal.toFixed(2)),        // T: comissao (número)
+      order.regime === 'ATACADO' ? 'Atacado' : 'Varejo',  // R: modalidade (atacado/varejo)
+      order.status === 'CANCELADO' ? 'Cancelado' : order.status === 'PENDENTE' ? 'Pendente' : 'Pago', // S: status
+      order.qtdItens,                                    // T: qtd_itens (número)
+      parseFloat(order.comissaoTotal.toFixed(2)),        // U: comissao (número)
     ];
     
-    return await appendToSheet(`${ORDERS_SHEET}!A:T`, [row]);
+    return await appendToSheet(`${ORDERS_SHEET}!A:U`, [row]);
   } catch (err) {
     console.error('[SheetsWriter] appendOrderToSheet error:', err);
     return false;
