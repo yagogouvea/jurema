@@ -119,14 +119,29 @@ export const pdvOrdersRouter = router({
           const comissaoItem = item.isSofia ? 0 : comissaoUnitaria;
           // Comissão da loja por item Sofia (personalizada no momento da venda)
           const comissaoLojaSofia = item.isSofia ? (item.comissaoLojaSofia ?? null) : null;
+          // Buscar pontuação do produto no momento da venda (snapshot)
+          let ptAtacado = 0;
+          let ptVarejo = 0;
+          if (item.productId) {
+            const [ptRows] = await db.execute(
+              "SELECT ptAtacado, ptVarejo FROM pdv_products WHERE id = ? LIMIT 1",
+              [item.productId]
+            );
+            const ptRow = (ptRows as any[])[0];
+            if (ptRow) {
+              ptAtacado = parseFloat(ptRow.ptAtacado || '0');
+              ptVarejo = parseFloat(ptRow.ptVarejo || '0');
+            }
+          }
           await db.execute(
             `INSERT INTO pdv_order_items 
-             (pedidoId, productId, linha, modelo, time, descricao, tipo, tamanho, quantidade, precoUnitario, totalItem, isSofia, comissaoUnitaria, comissaoLojaSofia)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (pedidoId, productId, linha, modelo, time, descricao, tipo, tamanho, quantidade, precoUnitario, totalItem, isSofia, comissaoUnitaria, comissaoLojaSofia, ptAtacado, ptVarejo)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               pedidoId, item.productId || null, item.linha || null, item.modelo || null,
               item.time, item.descricao || null, item.tipo || null, item.tamanho, item.quantidade,
-              item.precoUnitario, item.totalItem, item.isSofia ? 1 : 0, comissaoItem, comissaoLojaSofia
+              item.precoUnitario, item.totalItem, item.isSofia ? 1 : 0, comissaoItem, comissaoLojaSofia,
+              ptAtacado, ptVarejo
             ]
           );
           

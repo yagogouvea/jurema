@@ -642,3 +642,13 @@
 - [x] 7 testes de integração criados em server/v81cashflow-sheets.test.ts
 - [x] Testa: gravar suprimento, gravar sangria, ler da planilha, exportar em lote, sobrescrever, exportar vendas, limpar
 - [x] 205/205 testes passando, zero erros TypeScript
+
+## v82 — Metas por Pontuação (PT_ATAC / PT_VAR)
+- [x] Adicionar campos ptAtacado e ptVarejo na tabela pdv_order_items (schema + migration 0012)
+- [x] Gravar ptAtacado/ptVarejo do produto no momento de fechar o pedido (fecharPedido)
+- [x] Backend: calcular pontuacao por vendedor = SUM(CASE WHEN regime='ATACADO' THEN ptAtacado*qty ELSE ptVarejo*qty END)
+- [x] Frontend: pontuacaoLoja = soma de pontuação de todos os vendedores
+- [x] Frontend: helper formatPontos exibe "1.500 PT" em vez de "R$ 1.500"
+- [x] Frontend: progress bars de metas usam pontos (PT) em vez de R$
+- [x] Metas Bronze/Prata/Ouro/Meta Loja exibem valores em PT
+- [x] 205/205 testes passando, zero erros TypeScript

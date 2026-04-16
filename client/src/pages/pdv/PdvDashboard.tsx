@@ -96,6 +96,15 @@ export default function PdvDashboard() {
   const faturamentoBalcao = parseFloat(summary?.faturamentoBalcao || "0");
   const faturamentoWhatsapp = parseFloat(summary?.faturamentoWhatsapp || "0");
 
+  // Pontuação total da loja = soma de todos os vendedores
+  const pontuacaoLoja = (data?.bySeller || []).reduce(
+    (acc: number, s: any) => acc + parseFloat(s.pontuacao || "0"), 0
+  );
+
+  // Formatar pontos: ex. 1500 → "1.500 PT"
+  const formatPontos = (v: number) =>
+    `${Math.round(v).toLocaleString("pt-BR")} PT`;
+
   // Goals
   const bronze = parseFloat(goals.find(g => g.key === "BRONZE")?.value || "14000");
   const prata = parseFloat(goals.find(g => g.key === "PRATA")?.value || "23000");
@@ -275,19 +284,19 @@ export default function PdvDashboard() {
                     <Bar dataKey="faturamento" fill="#16a34a" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-                {/* Metas por vendedor */}
+                {/* Metas por vendedor — em PONTOS */}
                 <div className="mt-4 space-y-2">
                   {bySeller.map(s => {
-                    const fat = parseFloat(s.faturamento || "0");
-                    const goal = getGoalLevel(fat);
-                    const pct = Math.min(100, (fat / ouro) * 100);
+                    const pt = parseFloat(s.pontuacao || "0");
+                    const goal = getGoalLevel(pt);
+                    const pct = Math.min(100, (pt / ouro) * 100);
                     return (
                       <div key={s.sellerName}>
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-gray-300 font-medium">{s.sellerName}</span>
                           <div className="flex items-center gap-2">
                             <span className={`font-semibold ${goal.color}`}>{goal.label}</span>
-                            <span className="text-gray-400">{formatCurrency(fat)}</span>
+                            <span className="text-gray-400">{formatPontos(pt)}</span>
                           </div>
                         </div>
                         <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
@@ -402,12 +411,12 @@ export default function PdvDashboard() {
               <Target className="w-5 h-5 text-green-500" />
               Meta da Loja
             </h3>
-            <span className="text-gray-400 text-sm">{formatCurrency(faturamento)} / {formatCurrency(metaLoja)}</span>
+            <span className="text-gray-400 text-sm">{formatPontos(pontuacaoLoja)} / {formatPontos(metaLoja)}</span>
           </div>
           <div className="h-4 bg-gray-800 rounded-full overflow-hidden mb-3">
             <div
               className="h-full bg-gradient-to-r from-green-700 to-green-500 rounded-full transition-all"
-              style={{ width: `${Math.min(100, (faturamento / metaLoja) * 100)}%` }}
+              style={{ width: `${Math.min(100, (pontuacaoLoja / metaLoja) * 100)}%` }}
             />
           </div>
           <div className="grid grid-cols-4 gap-3">
@@ -417,11 +426,11 @@ export default function PdvDashboard() {
               { key: "OURO", label: "Ouro", value: ouro, color: "text-yellow-400", bg: "bg-yellow-950/30 border-yellow-900/50" },
               { key: "META_LOJA", label: "Meta Loja", value: metaLoja, color: "text-green-500", bg: "bg-green-950/30 border-green-900/50" },
             ].map(goal => {
-              const reached = faturamento >= goal.value;
+              const reached = pontuacaoLoja >= goal.value;
               return (
                 <div key={goal.key} className={`border rounded-xl p-3 ${goal.bg}`}>
                   <div className={`text-xs font-semibold ${goal.color}`}>{goal.label}</div>
-                  <div className="text-white text-sm font-bold mt-0.5">{formatCurrency(goal.value)}</div>
+                  <div className="text-white text-sm font-bold mt-0.5">{formatPontos(goal.value)}</div>
                   {reached && (
                     <div className="text-green-400 text-xs mt-1 flex items-center gap-1">
                       <ArrowUpRight className="w-3 h-3" />

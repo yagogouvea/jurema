@@ -77,12 +77,16 @@ export const pdvDashboardRouter = router({
           params
         );
         
-        // Por vendedor — apenas itens não-Sofia
+        // Por vendedor — apenas itens não-Sofia, com pontuação por regime
         const [sellerRows] = await db.execute(
           `SELECT o.sellerName, 
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(oi.totalItem), 0) as faturamento,
-            COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio
+            COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio,
+            COALESCE(SUM(
+              CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
+                   ELSE oi.ptVarejo * oi.quantidade END
+            ), 0) as pontuacao
            FROM pdv_orders o
            JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
            LEFT JOIN (
@@ -92,7 +96,7 @@ export const pdvDashboardRouter = router({
            ) oi_totals ON oi_totals.pedidoId = o.pedidoId
            WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
            GROUP BY o.sellerId, o.sellerName
-           ORDER BY faturamento DESC`,
+           ORDER BY pontuacao DESC`,
           params
         );
         

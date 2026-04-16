@@ -281,6 +281,8 @@ export const pdvOrderItems = mysqlTable("pdv_order_items", {
   isSofia: boolean("isSofia").default(false).notNull(),
   comissaoUnitaria: decimal("comissaoUnitaria", { precision: 10, scale: 2 }).notNull().default("0.50"),
   comissaoLojaSofia: decimal("comissaoLojaSofia", { precision: 10, scale: 2 }),
+  ptAtacado: decimal("ptAtacado", { precision: 10, scale: 2 }).default("0").notNull(),
+  ptVarejo: decimal("ptVarejo", { precision: 10, scale: 2 }).default("0").notNull(),
 });
 
 export type PdvOrderItem = typeof pdvOrderItems.$inferSelect;
