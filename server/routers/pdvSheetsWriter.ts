@@ -579,3 +579,165 @@ export async function getNewProductsFromSheet(existingCodigos: Set<string>): Pro
     return [];
   }
 }
+
+// ─── Deleção física de linhas (sem deixar linhas em branco) ──────────────────
+
+/**
+ * Obtém o sheetId numérico de uma aba pelo nome.
+ * Necessário para o batchUpdate que deleta linhas fisicamente.
+ */
+async function getSheetId(sheetName: string): Promise<number | null> {
+  const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
+  if (!apiKey) return null;
+
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties&key=${apiKey}`;
+  const res = await fetch(url);
+  const data = await res.json() as any;
+  const sheet = (data.sheets || []).find(
+    (s: any) => s.properties?.title === sheetName
+  );
+  return sheet?.properties?.sheetId ?? null;
+}
+
+/**
+ * Deleta fisicamente um conjunto de linhas de uma aba da planilha.
+ * Usa batchUpdate deleteRange com shiftDimension=ROWS para que as linhas
+ * abaixo subam automaticamente — sem deixar linhas em branco.
+ *
+ * @param sheetId   ID numérico da aba (não o nome)
+ * @param rowIndexes Índices 0-based das linhas a deletar (em ordem decrescente para evitar deslocamento)
+ */
+async function deleteRowsFromSheet(sheetId: number, rowIndexes: number[]): Promise<boolean> {
+  const token = await getServiceAccountToken();
+  if (!token) {
+    console.warn('[SheetsWriter] No service account token — skipping row delete');
+    return false;
+  }
+
+  // Ordenar em ordem DECRESCENTE para que a deleção de linhas de baixo
+  // não desloque os índices das linhas de cima
+  const sorted = [...rowIndexes].sort((a, b) => b - a);
+
+  const requests = sorted.map(rowIndex => ({
+    deleteDimension: {
+      range: {
+        sheetId,
+        dimension: 'ROWS',
+        startIndex: rowIndex,
+        endIndex: rowIndex + 1,
+      },
+    },
+  }));
+
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ requests }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error('[SheetsWriter] deleteRows failed:', err);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Remove a linha de um pedido da aba PEDIDOS da planilha.
+ * Localiza pelo pedidoId (coluna A) e deleta fisicamente — sem linha em branco.
+ */
+export async function deleteOrderFromSheet(pedidoId: string): Promise<boolean> {
+  try {
+    // Ler a partir da linha 2 (linha 1 = cabeçalho)
+    const rows = await readSheet(`${ORDERS_SHEET}!A2:A5000`);
+    const rowIndex = rows.findIndex(row => row[0]?.toString().trim() === pedidoId.trim());
+    if (rowIndex === -1) {
+      console.warn(`[SheetsWriter] Pedido ${pedidoId} não encontrado na aba PEDIDOS`);
+      return false;
+    }
+
+    const sheetId = await getSheetId(ORDERS_SHEET);
+    if (sheetId === null) {
+      console.warn(`[SheetsWriter] Aba ${ORDERS_SHEET} não encontrada`);
+      return false;
+    }
+
+    // rowIndex 0 = linha 2 da planilha (linha 1 é cabeçalho)
+    const sheetRowIndex = rowIndex + 1; // +1 porque pulamos o cabeçalho (linha 0-based)
+    console.log(`[SheetsWriter] Deletando pedido ${pedidoId} da aba PEDIDOS (linha ${sheetRowIndex + 1})`);
+    return await deleteRowsFromSheet(sheetId, [sheetRowIndex]);
+  } catch (err) {
+    console.error('[SheetsWriter] deleteOrderFromSheet error:', err);
+    return false;
+  }
+}
+
+/**
+ * Remove todas as linhas de itens de um pedido da aba pedidos_itens.
+ * Um pedido pode ter múltiplas linhas (uma por item) — todas são deletadas.
+ */
+export async function deleteOrderItemsFromSheet(pedidoId: string): Promise<boolean> {
+  try {
+    const rows = await readSheet(`${ITEMS_SHEET}!A2:A5000`);
+    const rowIndexes: number[] = [];
+    rows.forEach((row, idx) => {
+      if (row[0]?.toString().trim() === pedidoId.trim()) {
+        rowIndexes.push(idx + 1); // +1 para pular cabeçalho
+      }
+    });
+
+    if (rowIndexes.length === 0) {
+      console.warn(`[SheetsWriter] Nenhum item do pedido ${pedidoId} encontrado na aba pedidos_itens`);
+      return false;
+    }
+
+    const sheetId = await getSheetId(ITEMS_SHEET);
+    if (sheetId === null) {
+      console.warn(`[SheetsWriter] Aba ${ITEMS_SHEET} não encontrada`);
+      return false;
+    }
+
+    console.log(`[SheetsWriter] Deletando ${rowIndexes.length} item(ns) do pedido ${pedidoId} da aba pedidos_itens`);
+    return await deleteRowsFromSheet(sheetId, rowIndexes);
+  } catch (err) {
+    console.error('[SheetsWriter] deleteOrderItemsFromSheet error:', err);
+    return false;
+  }
+}
+
+/**
+ * Remove todas as linhas de itens Sofia de um pedido da aba SOFIA_ITENS.
+ */
+export async function deleteSofiaItemsFromSheet(pedidoId: string): Promise<boolean> {
+  try {
+    const rows = await readSheet(`${SOFIA_SHEET}!A2:A5000`);
+    const rowIndexes: number[] = [];
+    rows.forEach((row, idx) => {
+      if (row[0]?.toString().trim() === pedidoId.trim()) {
+        rowIndexes.push(idx + 1); // +1 para pular cabeçalho
+      }
+    });
+
+    if (rowIndexes.length === 0) {
+      // Pedido pode não ter itens Sofia — não é erro
+      return true;
+    }
+
+    const sheetId = await getSheetId(SOFIA_SHEET);
+    if (sheetId === null) {
+      console.warn(`[SheetsWriter] Aba ${SOFIA_SHEET} não encontrada`);
+      return false;
+    }
+
+    console.log(`[SheetsWriter] Deletando ${rowIndexes.length} item(ns) Sofia do pedido ${pedidoId}`);
+    return await deleteRowsFromSheet(sheetId, rowIndexes);
+  } catch (err) {
+    console.error('[SheetsWriter] deleteSofiaItemsFromSheet error:', err);
+    return false;
+  }
+}

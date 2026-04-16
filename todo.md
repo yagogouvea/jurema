@@ -466,3 +466,19 @@
 - [x] Corrigir: planilha PEDIDOS coluna L usa totalAplicado diretamente (ja inclui extras)
 - [x] Corrigir: planilha pedidos_itens distribui extra proporcional ao valor do item
 - [x] 14 novos testes vitest (154/154 total passando)
+
+## Cancelamento: deletar linha da planilha (v60)
+- [ ] Adicionar funcao deleteRowFromSheet (usa batchUpdate deleteRows — remove linha fisicamente sem deixar branco)
+- [ ] Adicionar funcao deleteOrderFromSheet: localiza pedidoId na aba PEDIDOS e deleta a linha
+- [ ] Adicionar funcao deleteOrderItemsFromSheet: localiza todas as linhas com pedidoId na aba pedidos_itens e deleta
+- [ ] Adicionar funcao deleteSofiaItemsFromSheet: mesma logica para aba SOFIA_ITENS
+- [ ] Integrar as funcoes no updateStatus ao cancelar pedido (pdvOrders.ts)
+- [ ] Escrever testes para as novas funcoes
+
+## Cancelamento: deletar linha da planilha (v60) — CONCLUIDO
+- [x] Funcao deleteRowsFromSheet (batchUpdate deleteRows — remove linha fisicamente sem deixar branco)
+- [x] Funcao deleteOrderFromSheet: localiza pedidoId na aba PEDIDOS e deleta a linha
+- [x] Funcao deleteOrderItemsFromSheet: localiza todas as linhas com pedidoId na aba pedidos_itens e deleta
+- [x] Funcao deleteSofiaItemsFromSheet: mesma logica para aba SOFIA_ITENS
+- [x] Integrado no updateStatus ao cancelar pedido (pdvOrders.ts)
+- [x] 13 novos testes vitest (167/167 total passando)

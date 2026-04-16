@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
-import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet } from './pdvSheetsWriter';
+import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet } from './pdvSheetsWriter';
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -447,13 +447,20 @@ export const pdvOrdersRouter = router({
           }
           await db.end();
           console.log(`[PDV Orders] Pedido ${input.pedidoId} cancelado — estoque devolvido para ${items.length} produto(s)`);
-          // Devolver estoque também na planilha (assíncrono)
+          // Devolver estoque e deletar linhas da planilha (assíncrono, não bloqueia resposta)
           setImmediate(async () => {
+            // 1. Devolver estoque na aba PRODUTOS
             for (const item of items) {
               if (item.codigo) {
                 await restoreProductStockInSheet(item.codigo, item.quantidade);
               }
             }
+            // 2. Deletar linha do pedido da aba PEDIDOS (sem deixar linha em branco)
+            await deleteOrderFromSheet(input.pedidoId);
+            // 3. Deletar itens da aba pedidos_itens
+            await deleteOrderItemsFromSheet(input.pedidoId);
+            // 4. Deletar itens Sofia da aba SOFIA_ITENS (se houver)
+            await deleteSofiaItemsFromSheet(input.pedidoId);
           });
         } else if (statusAtual === "CANCELADO" && input.status !== "CANCELADO") {
           // Pedido sendo reativado (cancelado -> pago/pendente): DESCONTAR estoque novamente
