@@ -518,3 +518,7 @@
 - [x] Valor maquininha exibido em amarelo quando há taxa
 - [x] Pagamentos: mostrar valor maquininha como principal, "loja recebe" como detalhe
 - [x] Status CANCELADO com cor vermelha (antes estava verde por erro de CSS)
+
+## Limpeza de pedidos e sincronização de estoque (v64)
+- [x] Deletar todos os pedidos, itens e pagamentos do banco sem afetar estoque (16 pedidos, 63 itens, 16 pagamentos, 12 serviços)
+- [x] Sincronizar estoque do banco com valores reais da planilha PRODUTOS (807 linhas → 660 produtos atualizados)
