@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import PdvLayout from "./PdvLayout";
+import { ProductPhotoAvatar, ProductPhotoLightbox } from "@/components/ProductPhotoLightbox";
 import {
   Plus,
   Trash2,
@@ -118,6 +119,9 @@ export default function PdvCadastroProdutos() {
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null); // id sendo deletado
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null); // id aguardando confirm
+
+  // ── Lightbox de foto ──
+  const [lightbox, setLightbox] = useState<{ src: string; name: string } | null>(null);
 
   const set = useCallback(<K extends keyof FormState>(k: K, v: FormState[K]) => {
     setForm(prev => ({ ...prev, [k]: v }));
@@ -626,85 +630,24 @@ export default function PdvCadastroProdutos() {
                 )}
               </section>
 
-              {/* ── SEÇÃO 3 — FOTO (compacta) ── */}
+              {/* ── SEÇÃO 3 — FOTO (informativo) ── */}
               <section className="bg-[#141414] border border-[#252525] rounded-2xl overflow-hidden mb-4">
-                <button
-                  onClick={() => setShowFoto(!showFoto)}
-                  className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-[#1a1a1a] transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <ImageIcon className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm font-semibold text-gray-100">Foto do Produto</span>
-                    {form.fotoUrl && (
-                      <Badge variant="outline" className="text-xs border-green-700/60 text-green-400">
-                        Selecionada
-                      </Badge>
-                    )}
+                <div className="flex items-center gap-3 px-5 py-4">
+                  <ImageIcon className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-100">Foto do Produto</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Adicione a foto após o cadastro em{" "}
+                      <a href="/pdv/gestao-site" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
+                        Gestão do Site
+                      </a>
+                      {" "}— ela ficará disponível no site e no PDV automaticamente.
+                    </p>
                   </div>
-                  {showFoto ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-                </button>
-
-                {showFoto && (
-                  <div className="px-5 pb-5 border-t border-[#1e1e1e] pt-4">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handlePhotoUpload}
-                    />
-                    {form.fotoUrl ? (
-                      <div className="flex items-center gap-4">
-                        <img
-                          src={form.fotoUrl}
-                          alt="Preview"
-                          className="w-20 h-20 object-cover rounded-xl border border-[#2e2e2e]"
-                        />
-                        <div className="flex-1">
-                          <p className="text-sm text-gray-300 mb-2">Foto selecionada</p>
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => fileInputRef.current?.click()}
-                              className="border-[#2e2e2e] text-gray-300 hover:bg-[#1a1a1a] text-xs"
-                            >
-                              Trocar
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => set("fotoUrl", "")}
-                              className="border-red-800/50 text-red-400 hover:bg-red-950/20 text-xs"
-                            >
-                              <X className="w-3 h-3 mr-1" /> Remover
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={uploadingPhoto}
-                        className="w-full py-8 border-2 border-dashed border-[#2e2e2e] rounded-xl flex flex-col items-center gap-2 text-gray-500 hover:text-gray-300 hover:border-green-800/50 transition-all"
-                      >
-                        {uploadingPhoto ? (
-                          <span className="w-5 h-5 border-2 border-gray-500 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          <Upload className="w-6 h-6" />
-                        )}
-                        <span className="text-sm">{uploadingPhoto ? "Carregando..." : "Clique para selecionar foto"}</span>
-                        <span className="text-xs">JPG, PNG ou WEBP · Máx. 5MB</span>
-                      </button>
-                    )}
-                  </div>
-                )}
+                </div>
               </section>
 
-              {/* ── SEÇÃO 4 — CAMPOS ADICIONAIS ── */}
+                            {/* ── SEÇÃO 4 — CAMPOS ADICIONAIS ── */}
               <section className="bg-[#141414] border border-[#252525] rounded-2xl overflow-hidden mb-6">
                 <button
                   onClick={() => setShowExtra(!showExtra)}
@@ -805,7 +748,8 @@ export default function PdvCadastroProdutos() {
                 ) : (
                   <>
                     {/* Cabeçalho */}
-                    <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_0.8fr_0.8fr_0.8fr_auto] gap-3 px-4 py-3 border-b border-[#1e1e1e] text-xs text-gray-500 font-medium uppercase tracking-wide">
+                    <div className="hidden md:grid grid-cols-[24px_2fr_1fr_1fr_0.8fr_0.8fr_0.8fr_auto] gap-3 px-4 py-3 border-b border-[#1e1e1e] text-xs text-gray-500 font-medium uppercase tracking-wide">
+                      <span />
                       <span>Produto</span>
                       <span>Código</span>
                       <span>Tam</span>
@@ -916,7 +860,14 @@ export default function PdvCadastroProdutos() {
                           </div>
 
                           {/* Desktop layout */}
-                          <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_0.8fr_0.8fr_0.8fr_auto] gap-3 px-4 py-3 items-center">
+                          <div className="hidden md:grid grid-cols-[24px_2fr_1fr_1fr_0.8fr_0.8fr_0.8fr_auto] gap-3 px-4 py-3 items-center">
+                            {/* Avatar foto */}
+                            <ProductPhotoAvatar
+                              fotoUrl={prod.fotoUrl}
+                              productName={`${prod.time}${prod.modelo ? ` ${prod.modelo}` : ""}`}
+                              size={24}
+                              onOpenLightbox={(src, name) => setLightbox({ src, name })}
+                            />
                             <div className="min-w-0">
                               <p className="text-sm text-white truncate">
                                 {prod.time}{prod.modelo ? ` · ${prod.modelo}` : ""}
@@ -1039,6 +990,15 @@ export default function PdvCadastroProdutos() {
 
         </div>
       </div>
+
+      {/* Lightbox de foto */}
+      {lightbox && (
+        <ProductPhotoLightbox
+          src={lightbox.src}
+          productName={lightbox.name}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </PdvLayout>
   );
 }

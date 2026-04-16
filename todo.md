@@ -593,3 +593,11 @@
 - [x] Cancelamento de pedidos Sofia funciona com confirmação e devolução de estoque
 - [x] Pedidos mistos (isSofia=0 com itens Sofia) já aparecem no histórico geral (isSofia=0)
 - [x] 198/198 testes passando
+
+## v73 — Unificação do fluxo de foto de produto
+- [x] Remover campo de foto do Cadastro de Produtos (PDV) — substituir por aviso com link para Gestão do Site
+- [x] Avatar minúsculo (24px) com fotoUrl na listagem de produtos do PDV (desktop)
+- [x] Lightbox ao clicar no avatar: abre foto em tamanho grande, fecha com ESC, botão X ou clique fora
+- [x] Componente reutilizável ProductPhotoLightbox + ProductPhotoAvatar criado
+- [x] Upload de foto unificado apenas na Gestão do Site (sincroniza PDV + site automaticamente)
+- [x] 198/198 testes passando, zero erros TypeScript
