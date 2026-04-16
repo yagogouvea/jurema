@@ -536,12 +536,27 @@
 - [x] 8 novos testes (198/198 total)
 
 ## v66 — Produtos Cadastrados + validação de código duplicado
-- [ ] Endpoint checkCodeExists: verificar se código base já existe no banco
-- [ ] Endpoint updateProduct: atualizar estoque/preço/ativo e sincronizar planilha
-- [ ] Aba "Produtos Cadastrados" com tabela paginada, busca e edição inline
-- [ ] Validação em tempo real de código duplicado no formulário de cadastro
+- [x] Endpoint checkCodeExists: verificar se código base já existe no banco
+- [x] Endpoint updateProduct: atualizar estoque/preço/ativo e sincronizar planilha
+- [x] Aba "Produtos Cadastrados" com tabela paginada, busca e edição inline
+- [x] Validação em tempo real de código duplicado no formulário de cadastro
 
 ## v68 — Deduplicação da planilha + Deletar produto
-- [ ] Script de deduplicação da aba PRODUTOS (mantém última ocorrência por código, deleta duplicatas)
-- [ ] Endpoint tRPC deleteProduct (admin): remove do banco e da planilha
-- [ ] Botão deletar com modal de confirmação na tela Produtos Cadastrados
+- [x] Script de deduplicação da aba PRODUTOS (mantém última ocorrência por código, deleta duplicatas)
+- [x] Endpoint tRPC deleteProduct (admin): remove do banco e da planilha
+- [x] Botão deletar com modal de confirmação na tela Produtos Cadastrados
+
+## v69 — Integração PDV ↔ Site (catálogo unificado)
+- [x] Adicionar campo pdvCodigoBase e pdvSynced na tabela products do site
+- [x] Adicionar campo size como varchar livre na tabela product_stock do site (remover enum rígido)
+- [x] Migration SQL aplicada
+- [x] Endpoint importSiteProducts: limpar produtos do site e importar do PDV agrupado por modelo
+- [x] Endpoint syncStockFromPdv: sincronizar estoque do PDV para o site
+- [x] Endpoint uploadProductPhoto: upload S3 + sync fotoUrl no banco PDV + products do site
+- [x] Endpoint updateSiteProduct: ativar/desativar, seção destaque, categoria
+- [x] Endpoint listSiteProducts: listagem com filtros (busca, ativo, destaque, seção)
+- [x] Endpoint getSiteStats: estatísticas do catálogo do site
+- [x] Painel admin PDV /pdv/gestao-site: ativar/desativar, foto, destaque (3 seções), categoria
+- [x] Link "Gestão Site" adicionado ao menu admin do PdvLayout
+- [x] CartDrawer: mensagem WhatsApp atualizada com time, referência, tamanho e preço corretos
+- [x] 198/198 testes passando, zero erros TypeScript

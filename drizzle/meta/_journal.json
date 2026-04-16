@@ -71,6 +71,13 @@
       "when": 1776300595889,
       "tag": "0009_loose_arachne",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1776346577829,
+      "tag": "0010_shallow_lord_hawal",
+      "breakpoints": true
     }
   ]
 }

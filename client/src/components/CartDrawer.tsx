@@ -25,27 +25,30 @@ function maskCEP(value: string) {
 
 function buildWhatsAppMessage(
   customer: { name: string; phone: string; cep: string },
-  items: Array<{ productName: string; size: string; quantity: number; unitPrice: number; reference?: string }>,
+  items: Array<{ productName: string; size: string; quantity: number; unitPrice: number; reference?: string; team?: string }>,
   subtotal: number
 ): string {
   const lines: string[] = [];
 
   lines.push("NOVO PEDIDO - JUREMA SPORT");
-  lines.push("=============================\n");
+  lines.push("=============================");
+  lines.push("");
   lines.push("DADOS DO CLIENTE:");
   lines.push(`Nome: ${customer.name}`);
   lines.push(`Telefone: ${customer.phone}`);
-  lines.push(`CEP: ${customer.cep}\n`);
-  lines.push("=============================\n");
+  lines.push(`CEP: ${customer.cep}`);
+  lines.push("");
+  lines.push("=============================");
   lines.push("ITENS DO PEDIDO:");
   lines.push("");
 
   items.forEach((item, i) => {
     const itemTotal = (item.unitPrice * item.quantity).toFixed(2).replace(".", ",");
     const unitFmt = item.unitPrice.toFixed(2).replace(".", ",");
+    const teamLine = item.team ? ` (${item.team})` : "";
     const refLine = item.reference ? `\n   Ref: ${item.reference}` : "";
     lines.push(
-      `${i + 1}. ${item.productName}${refLine}\n   Tamanho: ${item.size} | Qtd: ${item.quantity} | R$ ${unitFmt} cada\n   Subtotal: R$ ${itemTotal}`
+      `${i + 1}. ${item.productName}${teamLine}${refLine}\n   Tamanho: ${item.size} | Qtd: ${item.quantity} | R$ ${unitFmt} cada\n   Subtotal: R$ ${itemTotal}`
     );
   });
 

@@ -80,6 +80,10 @@ export const products = mysqlTable("products", {
   featuredSection: mysqlEnum("featuredSection", ["destaque", "mais-vendidos", "nova-colecao"]),
   reference: varchar("reference", { length: 100 }),
   salesCount: int("salesCount").default(0).notNull(),
+  // Integração PDV: código base do produto no sistema PDV (ex: CA-T-TO-ALH-VERM)
+  pdvCodigoBase: varchar("pdvCodigoBase", { length: 100 }),
+  // Flag de sincronização com o PDV
+  pdvSynced: boolean("pdvSynced").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -91,7 +95,8 @@ export type InsertProduct = typeof products.$inferInsert;
 export const productStock = mysqlTable("product_stock", {
   id: int("id").autoincrement().primaryKey(),
   productId: int("productId").notNull(),
-  size: mysqlEnum("size", ["PP", "P", "M", "G", "GG", "XGG"]).notNull(),
+  // size como varchar livre para aceitar qualquer tamanho do PDV (PP, P, M, G, GG, XGG, XL, 2XL, 3XL, 4XL, 5XL, etc.)
+  size: varchar("size", { length: 20 }).notNull(),
   quantity: int("quantity").default(0).notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
