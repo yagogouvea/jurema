@@ -151,12 +151,9 @@ export const pdvSiteSyncRouter = router({
       }
 
       if (input.clearExisting) {
-        await dbRun(
-          `DELETE ps FROM product_stock ps
-           INNER JOIN products p ON ps.productId = p.id
-           WHERE p.pdvSynced = 1`
-        );
-        await dbRun(`DELETE FROM products WHERE pdvSynced = 1`);
+        // Limpa todos os produtos do site (tanto pdvSynced=1 quanto antigos fictícios pdvSynced=0)
+        await dbRun(`DELETE FROM product_stock`);
+        await dbRun(`DELETE FROM products`);
       }
 
       const existingRows = await dbExecute(

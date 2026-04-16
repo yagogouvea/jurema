@@ -505,7 +505,7 @@ export default function PdvGestaoSite() {
             </AlertDialogCancel>
             <AlertDialogAction
               className="bg-blue-600 hover:bg-blue-700"
-              onClick={() => importMutation.mutate({ clearExisting: false })}
+              onClick={() => importMutation.mutate({ clearExisting: true })}
               disabled={importMutation.isPending}
             >
               {importMutation.isPending ? (

@@ -560,3 +560,9 @@
 - [x] Link "Gestão Site" adicionado ao menu admin do PdvLayout
 - [x] CartDrawer: mensagem WhatsApp atualizada com time, referência, tamanho e preço corretos
 - [x] 198/198 testes passando, zero erros TypeScript
+
+## v70 — Remoção de produtos antigos fictícios do site
+- [x] Remover os 33 produtos antigos (pdvSynced=0, fictícios) do banco de dados e seus estoques
+- [x] Corrigir importSiteProducts: clearExisting agora deleta TODOS os produtos (não apenas pdvSynced=1)
+- [x] Corrigir botão "Importar" no PdvGestaoSite para usar clearExisting: true
+- [x] Catálogo público agora está vazio até a próxima importação do PDV
