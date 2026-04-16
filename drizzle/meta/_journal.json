@@ -64,6 +64,13 @@
       "when": 1775749380251,
       "tag": "0008_lowly_thaddeus_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1776300595889,
+      "tag": "0009_loose_arachne",
+      "breakpoints": true
     }
   ]
 }

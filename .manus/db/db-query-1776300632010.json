@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `pdv_products` MODIFY COLUMN `linha` varchar(100) NOT NULL DEFAULT ''; ALTER TABLE `pdv_products` MODIFY COLUMN `modelo` varchar(100) NOT NULL DEFAULT ''; ALTER TABLE `pdv_products` MODIFY COLUMN `tipo` varchar(100) NOT NULL DEFAULT 'CAMISETA';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 36pMafMrnyn32yD.root --database 9BCf3HWTZf6aELg8wntRub --execute ALTER TABLE `pdv_products` MODIFY COLUMN `linha` varchar(100) NOT NULL DEFAULT ''; ALTER TABLE `pdv_products` MODIFY COLUMN `modelo` varchar(100) NOT NULL DEFAULT ''; ALTER TABLE `pdv_products` MODIFY COLUMN `tipo` varchar(100) NOT NULL DEFAULT 'CAMISETA';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 473
+}

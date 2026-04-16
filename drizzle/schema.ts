@@ -219,6 +219,12 @@ export const pdvProducts = mysqlTable("pdv_products", {
   precoAtacado: decimal("precoAtacado", { precision: 10, scale: 2 }).default("0").notNull(),
   precoVarejo: decimal("precoVarejo", { precision: 10, scale: 2 }).default("0").notNull(),
   isActive: boolean("isActive").default(true).notNull(),
+  // Campos adicionais sincronizados com a planilha
+  isSofia: boolean("isSofia").default(false).notNull(),
+  fotoUrl: varchar("fotoUrl", { length: 1000 }),          // URL CDN da foto do produto
+  temporada: varchar("temporada", { length: 100 }),       // ex: 2024/25
+  ptAtacado: decimal("ptAtacado", { precision: 10, scale: 2 }).default("0").notNull(),  // ponto de atacado
+  ptVarejo: decimal("ptVarejo", { precision: 10, scale: 2 }).default("0").notNull(),    // ponto de varejo
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

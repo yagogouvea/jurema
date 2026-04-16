@@ -275,6 +275,11 @@ export async function appendProductToSheet(product: {
   precoAtacado: number;
   precoVarejo: number;
   isActive: boolean;
+  // Campos novos (opcionais para compatibilidade)
+  fotoUrl?: string;
+  temporada?: string;
+  ptAtacado?: number;
+  ptVarejo?: number;
 }): Promise<boolean> {
   try {
     const row = [
@@ -289,10 +294,10 @@ export async function appendProductToSheet(product: {
       product.precoAtacado.toFixed(2),                   // I: ATC
       product.precoVarejo.toFixed(2),                    // J: VAR
       product.isActive ? 'SIM' : 'NAO',                  // K: ATIVO
-      '',                                                // L: (vazio)
-      '',                                                // M: (vazio)
-      '',                                                // N: (vazio)
-      '',                                                // O: (vazio)
+      product.fotoUrl || '',                             // L: FOTO
+      product.temporada || '',                           // M: TEMPORADA
+      (product.ptAtacado ?? 0).toFixed(2),               // N: PT ATAC
+      (product.ptVarejo ?? 0).toFixed(2),                // O: PT VAR
     ];
     return await appendToSheet(`PRODUTOS!A:O`, [row]);
   } catch (err) {

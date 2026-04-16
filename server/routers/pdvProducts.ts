@@ -342,4 +342,172 @@ export const pdvProductsRouter = router({
       await db.end();
       return (rows as any[]).map(r => r.time);
     }),
+
+  // Cadastro em lote: recebe dados base + array de tamanhos, cria um produto por tamanho
+  createBatch: publicProcedure
+    .input(z.object({
+      // Campos base do produto (compartilhados por todos os tamanhos)
+      linha: z.string().min(1),
+      modelo: z.string().min(1),
+      time: z.string().min(1),
+      descricao: z.string().optional(),
+      tipo: z.string().default("CAMISETA"),
+      precoAtacado: z.number().min(0).default(0),
+      precoVarejo: z.number().min(0).default(0),
+      isSofia: z.boolean().default(false),
+      temporada: z.string().optional(),
+      ptAtacado: z.number().min(0).default(0),
+      ptVarejo: z.number().min(0).default(0),
+      fotoUrl: z.string().optional(),
+      // Prefixo do código (ex: "CA-T-TO-ALH-VERM") — o sistema completa com "-{TAM}"
+      codigoBase: z.string().optional(),
+      // Array de tamanhos com estoque individual
+      tamanhos: z.array(z.object({
+        tamanho: z.string().min(1),
+        estoque: z.number().int().min(0).default(0),
+        // Permite sobrescrever preços por tamanho (ex: 2XL mais caro)
+        precoAtacado: z.number().optional(),
+        precoVarejo: z.number().optional(),
+      })).min(1),
+      // Sincronizar com planilha?
+      syncSheet: z.boolean().default(true),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      const created: { id: number; tamanho: string; codigo: string }[] = [];
+
+      try {
+        for (const tam of input.tamanhos) {
+          // Gerar código completo: codigoBase + "-" + tamanho (uppercase)
+          const tamUp = tam.tamanho.toUpperCase();
+          const codigo = input.codigoBase
+            ? `${input.codigoBase}-${tamUp}`
+            : null;
+
+          const precoAtacado = tam.precoAtacado ?? input.precoAtacado;
+          const precoVarejo = tam.precoVarejo ?? input.precoVarejo;
+
+          const [result] = await db.execute(
+            `INSERT INTO pdv_products
+              (codigo, linha, modelo, time, descricao, tamanho, tipo, estoque,
+               precoAtacado, precoVarejo, isSofia, temporada, ptAtacado, ptVarejo, fotoUrl)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              codigo,
+              input.linha,
+              input.modelo,
+              input.time,
+              input.descricao || null,
+              tam.tamanho,
+              input.tipo,
+              tam.estoque,
+              precoAtacado,
+              precoVarejo,
+              input.isSofia ? 1 : 0,
+              input.temporada || null,
+              input.ptAtacado,
+              input.ptVarejo,
+              input.fotoUrl || null,
+            ]
+          );
+          created.push({ id: (result as any).insertId, tamanho: tam.tamanho, codigo: codigo || '' });
+        }
+
+        await db.end();
+
+        // Sincronizar com planilha (assíncrono, não bloqueia resposta)
+        if (input.syncSheet) {
+          appendProductsBatchToSheet(input, created).catch(err =>
+            console.error('[PDV] Erro ao sincronizar produtos com planilha:', err)
+          );
+        }
+
+        return { success: true, created };
+      } catch (err) {
+        await db.end().catch(() => {});
+        if (err instanceof TRPCError) throw err;
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao criar produtos" });
+      }
+    }),
+
+  // Upload de foto de produto para S3
+  uploadProductPhoto: publicProcedure
+    .input(z.object({
+      productId: z.number(),
+      // base64 da imagem
+      base64: z.string().min(1),
+      mimeType: z.string().default("image/jpeg"),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const { storagePut } = await import("../storage");
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      const buffer = Buffer.from(input.base64, "base64");
+      const ext = input.mimeType.split("/")[1] || "jpg";
+      const key = `pdv-products/${input.productId}-${Date.now()}.${ext}`;
+      const { url } = await storagePut(key, buffer, input.mimeType);
+
+      // Atualizar fotoUrl em todos os produtos do mesmo modelo (mesmo baseCode)
+      // Primeiro buscar o produto para pegar o código base
+      const [rows] = await db.execute("SELECT codigo FROM pdv_products WHERE id = ?", [input.productId]);
+      const prod = (rows as any[])[0];
+      if (prod?.codigo) {
+        const parts = prod.codigo.split("-");
+        const baseCode = parts.length > 1 ? parts.slice(0, -1).join("-") : prod.codigo;
+        await db.execute(
+          "UPDATE pdv_products SET fotoUrl = ? WHERE codigo LIKE ?",
+          [url, `${baseCode}-%`]
+        );
+      } else {
+        await db.execute("UPDATE pdv_products SET fotoUrl = ? WHERE id = ?", [url, input.productId]);
+      }
+
+      await db.end();
+      return { success: true, url };
+    }),
 });
+
+// ─── Sincronização com planilha ───────────────────────────────────────────────
+async function appendProductsBatchToSheet(
+  input: {
+    linha: string; modelo: string; time: string; descricao?: string;
+    tipo: string; precoAtacado: number; precoVarejo: number;
+    isSofia: boolean; temporada?: string; ptAtacado: number; ptVarejo: number;
+    fotoUrl?: string; codigoBase?: string;
+    tamanhos: { tamanho: string; estoque: number; precoAtacado?: number; precoVarejo?: number }[];
+  },
+  _created: { id: number; tamanho: string; codigo: string }[]
+) {
+  const { appendProductToSheet } = await import("./pdvSheetsWriter");
+
+  // Envia uma linha por tamanho usando a função já existente
+  for (const tam of input.tamanhos) {
+    const tamUp = tam.tamanho.toUpperCase();
+    const codigo = input.codigoBase ? `${input.codigoBase}-${tamUp}` : '';
+    const precoAtacado = tam.precoAtacado ?? input.precoAtacado;
+    const precoVarejo = tam.precoVarejo ?? input.precoVarejo;
+
+    await appendProductToSheet({
+      codigo,
+      linha: input.linha,
+      modelo: input.modelo,
+      time: input.time,
+      descricao: input.descricao || '',
+      tamanho: tam.tamanho,
+      tipo: input.tipo,
+      estoque: tam.estoque,
+      precoAtacado,
+      precoVarejo,
+      isActive: true,
+      fotoUrl: input.fotoUrl,
+      temporada: input.temporada,
+      ptAtacado: input.ptAtacado,
+      ptVarejo: input.ptVarejo,
+    });
+  }
+}

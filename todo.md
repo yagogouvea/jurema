@@ -522,3 +522,15 @@
 ## Limpeza de pedidos e sincronização de estoque (v64)
 - [x] Deletar todos os pedidos, itens e pagamentos do banco sem afetar estoque (16 pedidos, 63 itens, 16 pagamentos, 12 serviços)
 - [x] Sincronizar estoque do banco com valores reais da planilha PRODUTOS (807 linhas → 660 produtos atualizados)
+
+## Cadastro de produtos com sincronização (v65) — CONCLUÍDO
+- [x] Analisar colunas reais da planilha PRODUTOS (15 colunas A-O)
+- [x] Adicionar campos isSofia, fotoUrl, temporada, ptAtacado, ptVarejo ao schema pdv_products
+- [x] Migration SQL aplicada com sucesso
+- [x] Endpoint tRPC createBatch (admin): gera código por tamanho, suporte a preço customizado por tamanho
+- [x] Endpoint tRPC uploadProductPhoto (S3): atualiza fotoUrl em cascata para todas as variantes do modelo
+- [x] appendProductToSheet atualizado para incluir todos os 15 campos (foto, temporada, ptAtacado, ptVarejo)
+- [x] Página PdvCadastroProdutos: seleção rápida de tamanhos, estoque por tamanho, preço customizado por tamanho, flag Sofia, campos avançados (código, foto, temporada, pontos)
+- [x] Rota /pdv/cadastro-produtos adicionada ao App.tsx
+- [x] Link "Cadastrar Produtos" adicionado ao menu admin do PdvLayout
+- [x] 8 novos testes (198/198 total)
