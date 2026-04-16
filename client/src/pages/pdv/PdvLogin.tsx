@@ -111,7 +111,7 @@ export default function PdvLogin() {
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-6">
-          Jurema Sport &copy; {new Date().getFullYear()} — Sistema PDV v1.0
+          Jurema Sport &copy; {new Date().getFullYear()} — Sistema PDV v1.1
         </p>
       </div>
     </div>
