@@ -4,6 +4,29 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
+import { appendProductToSheet } from "./pdvSheetsWriter";
+
+// Sincroniza um produto atualizado na planilha (assíncrono, não bloqueia a resposta)
+async function updateProductInSheetAsync(prod: any) {
+  // Usa appendProductToSheet para gravar os dados atualizados do produto
+  await appendProductToSheet({
+    codigo: prod.codigo,
+    linha: prod.linha || '',
+    modelo: prod.modelo || '',
+    time: prod.time || '',
+    descricao: prod.descricao || '',
+    tamanho: prod.tamanho || '',
+    tipo: prod.tipo || '',
+    estoque: prod.estoque ?? 0,
+    precoAtacado: prod.precoAtacado ?? 0,
+    precoVarejo: prod.precoVarejo ?? 0,
+    isActive: prod.isActive === 1 || prod.isActive === true,
+    fotoUrl: prod.fotoUrl || '',
+    temporada: prod.temporada || '',
+    ptAtacado: prod.ptAtacado ?? 0,
+    ptVarejo: prod.ptVarejo ?? 0,
+  });
+}
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -341,6 +364,71 @@ export const pdvProductsRouter = router({
       const [rows] = await db.execute(query, params);
       await db.end();
       return (rows as any[]).map(r => r.time);
+    }),
+
+  // Verificar se código base já existe no banco (para validação em tempo real)
+  checkCodeExists: publicProcedure
+    .input(z.object({ codigoBase: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      await requirePdvAuth(ctx);
+      const db = await getDb();
+      if (!db) return { exists: false, count: 0, tamanhos: [] };
+      const base = input.codigoBase.trim().toUpperCase();
+      const [rows] = await db.execute(
+        "SELECT tamanho, codigo FROM pdv_products WHERE codigo LIKE ? AND isActive = 1 ORDER BY tamanho",
+        [`${base}-%`]
+      );
+      await db.end();
+      const found = rows as any[];
+      return { exists: found.length > 0, count: found.length, tamanhos: found.map(r => r.tamanho) };
+    }),
+
+  // Atualizar produto (estoque, preço, ativo) e sincronizar planilha
+  updateProduct: publicProcedure
+    .input(z.object({
+      id: z.number(),
+      estoque: z.number().int().min(0).optional(),
+      precoAtacado: z.number().min(0).optional(),
+      precoVarejo: z.number().min(0).optional(),
+      ptAtacado: z.number().min(0).optional(),
+      ptVarejo: z.number().min(0).optional(),
+      isActive: z.boolean().optional(),
+      syncSheet: z.boolean().default(true),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      const { id, syncSheet, ...fields } = input;
+      const sets: string[] = [];
+      const params: any[] = [];
+
+      if (fields.estoque !== undefined) { sets.push("estoque = ?"); params.push(fields.estoque); }
+      if (fields.precoAtacado !== undefined) { sets.push("precoAtacado = ?"); params.push(fields.precoAtacado); }
+      if (fields.precoVarejo !== undefined) { sets.push("precoVarejo = ?"); params.push(fields.precoVarejo); }
+      if (fields.ptAtacado !== undefined) { sets.push("ptAtacado = ?"); params.push(fields.ptAtacado); }
+      if (fields.ptVarejo !== undefined) { sets.push("ptVarejo = ?"); params.push(fields.ptVarejo); }
+      if (fields.isActive !== undefined) { sets.push("isActive = ?"); params.push(fields.isActive ? 1 : 0); }
+
+      if (sets.length === 0) return { success: true };
+      params.push(id);
+      await db.execute(`UPDATE pdv_products SET ${sets.join(", ")} WHERE id = ?`, params);
+
+      // Buscar produto atualizado para sincronizar planilha
+      if (syncSheet) {
+        const [rows] = await db.execute("SELECT * FROM pdv_products WHERE id = ?", [id]);
+        const prod = (rows as any[])[0];
+        if (prod) {
+          // Sincronizar planilha de forma assíncrona
+          updateProductInSheetAsync(prod).catch(err =>
+            console.error('[PDV] Erro ao sincronizar produto na planilha:', err)
+          );
+        }
+      }
+
+      await db.end();
+      return { success: true };
     }),
 
   // Cadastro em lote: recebe dados base + array de tamanhos, cria um produto por tamanho

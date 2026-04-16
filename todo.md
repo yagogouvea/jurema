@@ -534,3 +534,9 @@
 - [x] Rota /pdv/cadastro-produtos adicionada ao App.tsx
 - [x] Link "Cadastrar Produtos" adicionado ao menu admin do PdvLayout
 - [x] 8 novos testes (198/198 total)
+
+## v66 — Produtos Cadastrados + validação de código duplicado
+- [ ] Endpoint checkCodeExists: verificar se código base já existe no banco
+- [ ] Endpoint updateProduct: atualizar estoque/preço/ativo e sincronizar planilha
+- [ ] Aba "Produtos Cadastrados" com tabela paginada, busca e edição inline
+- [ ] Validação em tempo real de código duplicado no formulário de cadastro
