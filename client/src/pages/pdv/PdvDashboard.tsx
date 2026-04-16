@@ -55,10 +55,28 @@ export default function PdvDashboard() {
 
   const addCashFlowMutation = trpc.pdvDashboard.addCashFlow.useMutation({
     onSuccess: () => {
-      toast.success("Movimentação registrada");
+      toast.success("Movimentação registrada e sincronizada com a planilha");
       setCashDesc("");
       setCashValor("");
       setShowCashModal(null);
+      refetchCash();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const syncCashFlowToSheetMutation = trpc.pdvDashboard.syncCashFlowToSheet.useMutation({
+    onSuccess: (res) => toast.success(`${res.count} movimentações exportadas para a planilha`),
+    onError: (err) => toast.error(err.message),
+  });
+
+  const syncSalesToSheetMutation = trpc.pdvDashboard.syncSalesToSheet.useMutation({
+    onSuccess: (res) => toast.success(`${res.count} vendas exportadas para VENDAS_CAIXA`),
+    onError: (err) => toast.error(err.message),
+  });
+
+  const syncCashFlowFromSheetMutation = trpc.pdvDashboard.syncCashFlowFromSheet.useMutation({
+    onSuccess: (res) => {
+      toast.success(`${res.inseridos} novas movimentações importadas da planilha`);
       refetchCash();
     },
     onError: (err) => toast.error(err.message),
@@ -418,14 +436,16 @@ export default function PdvDashboard() {
 
         {/* Caixa */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-white font-semibold">Fluxo de Caixa</h3>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-semibold">Fluxo de Caixa</h3>
               <span className="text-gray-400 text-sm">
-                Saldo: <span className={`font-bold ${parseFloat(cashData?.saldo || "0") >= 0 ? "text-green-400" : "text-green-500"}`}>
+                Saldo: <span className={`font-bold ${parseFloat(cashData?.saldo || "0") >= 0 ? "text-green-400" : "text-red-400"}`}>
                   {formatCurrency(parseFloat(cashData?.saldo || "0"))}
                 </span>
               </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setShowCashModal("SUPRIMENTO")}
                 className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
@@ -435,10 +455,38 @@ export default function PdvDashboard() {
               </button>
               <button
                 onClick={() => setShowCashModal("SANGRIA")}
-                className="bg-green-700 hover:bg-green-800 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+                className="bg-red-700 hover:bg-red-800 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
               >
                 <Minus className="w-3.5 h-3.5" />
                 Sangria
+              </button>
+              <div className="flex-1" />
+              <button
+                onClick={() => syncCashFlowFromSheetMutation.mutate()}
+                disabled={syncCashFlowFromSheetMutation.isPending}
+                title="Importar movimentações novas da planilha para o sistema"
+                className="bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncCashFlowFromSheetMutation.isPending ? 'animate-spin' : ''}`} />
+                Importar Planilha
+              </button>
+              <button
+                onClick={() => syncCashFlowToSheetMutation.mutate()}
+                disabled={syncCashFlowToSheetMutation.isPending}
+                title="Exportar todo o histórico de suprimentos/sangrias para a planilha"
+                className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncCashFlowToSheetMutation.isPending ? 'animate-spin' : ''}`} />
+                Exportar Planilha
+              </button>
+              <button
+                onClick={() => syncSalesToSheetMutation.mutate()}
+                disabled={syncSalesToSheetMutation.isPending}
+                title="Exportar todas as vendas para a aba VENDAS_CAIXA da planilha"
+                className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncSalesToSheetMutation.isPending ? 'animate-spin' : ''}`} />
+                Exportar Vendas
               </button>
             </div>
           </div>

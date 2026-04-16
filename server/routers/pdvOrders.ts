@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
-import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet } from './pdvSheetsWriter';
+import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet } from './pdvSheetsWriter';
 import { autoSyncProductToSite } from './pdvSiteSync';
 
 async function getDb() {
@@ -301,6 +301,24 @@ export const pdvOrdersRouter = router({
               if (item.codigo) {
                 await updateProductStockInSheet(item.codigo, item.quantidade);
               }
+            }
+
+            // ── Gravar na aba VENDAS_CAIXA (apenas pedidos não-Sofia) ──
+            if (normalItems.length > 0) {
+              const qtdItensNormaisVendas = normalItems.reduce((sum, item) => sum + item.quantidade, 0);
+              const totalComTaxaFinal = input.payments.reduce((s: number, p: any) => s + (parseFloat(p.valor) || 0), 0);
+              await appendSaleToCashFlowSheet({
+                id: parseInt(pedidoId.replace(/\D/g, '')) || 0,
+                createdAt: new Date(),
+                sellerName: seller.name,
+                canal: input.canal,
+                clienteNome: input.clienteNome,
+                regime: input.regime,
+                totalComTaxa: totalComTaxaFinal,
+                formaPagamento: input.payments.map((p: any) => p.formaPagamento || p.forma || '').join(', '),
+                status: input.status,
+                qtdItens: qtdItensNormaisVendas,
+              });
             }
           } catch (sheetErr) {
             console.error('[PDV Orders] Sheet sync error (non-blocking):', sheetErr);

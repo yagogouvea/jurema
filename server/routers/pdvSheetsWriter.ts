@@ -870,3 +870,255 @@ export async function deleteSofiaItemsFromSheet(pedidoId: string): Promise<boole
     return false;
   }
 }
+
+// ─── Fluxo de Caixa (FLUXO_CAIXA e VENDAS_CAIXA) ────────────────────────────
+
+const CASHFLOW_SHEET = 'FLUXO_CAIXA';
+const SALES_CASHFLOW_SHEET = 'VENDAS_CAIXA';
+
+/**
+ * Grava um suprimento ou sangria na aba FLUXO_CAIXA da planilha.
+ * Colunas: ID | DATA | TIPO | DESCRIÇÃO | VALOR (R$) | RESPONSÁVEL | SALDO ACUMULADO (R$)
+ * O saldo acumulado é calculado via fórmula do Sheets para ser dinâmico.
+ */
+export async function appendCashFlowToSheet(entry: {
+  id: number;
+  tipo: 'SUPRIMENTO' | 'SANGRIA';
+  descricao: string;
+  valor: number;
+  usuario: string;
+  createdAt: Date | string;
+}): Promise<boolean> {
+  try {
+    const data = new Date(entry.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const valorFormatado = entry.tipo === 'SUPRIMENTO' ? entry.valor : -entry.valor;
+
+    // Para saldo acumulado, usamos fórmula que soma todos os valores acima
+    // Primeiro descobrimos em qual linha vai ser inserida
+    const rows = await readSheet(`${CASHFLOW_SHEET}!A2:A5000`);
+    const nextRow = rows.length + 2; // +2 porque começa na linha 2 (linha 1 é cabeçalho)
+    const saldoFormula = nextRow === 2
+      ? `=E2`
+      : `=G${nextRow - 1}+E${nextRow}`;
+
+    const row = [
+      entry.id,
+      data,
+      entry.tipo,
+      entry.descricao,
+      valorFormatado,
+      entry.usuario,
+      saldoFormula,
+    ];
+
+    const ok = await appendToSheet(`${CASHFLOW_SHEET}!A:G`, [row]);
+    if (ok) console.log(`[SheetsWriter] CashFlow #${entry.id} (${entry.tipo}) gravado na planilha`);
+    return ok;
+  } catch (err) {
+    console.error('[SheetsWriter] appendCashFlowToSheet error:', err);
+    return false;
+  }
+}
+
+/**
+ * Grava um pedido fechado na aba VENDAS_CAIXA da planilha.
+ * Colunas: ID PEDIDO | DATA | VENDEDOR | CANAL | CLIENTE | REGIME | TOTAL (R$) | FORMA PAGAMENTO | STATUS | QTD ITENS
+ */
+export async function appendSaleToCashFlowSheet(pedido: {
+  id: number;
+  createdAt: Date | string;
+  sellerName: string;
+  canal: string;
+  clienteNome?: string;
+  regime: string;
+  totalComTaxa: number;
+  formaPagamento: string;
+  status: string;
+  qtdItens: number;
+}): Promise<boolean> {
+  try {
+    const data = new Date(pedido.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const row = [
+      pedido.id,
+      data,
+      pedido.sellerName,
+      pedido.canal,
+      pedido.clienteNome || '',
+      pedido.regime,
+      pedido.totalComTaxa,
+      pedido.formaPagamento,
+      pedido.status,
+      pedido.qtdItens,
+    ];
+    const ok = await appendToSheet(`${SALES_CASHFLOW_SHEET}!A:J`, [row]);
+    if (ok) console.log(`[SheetsWriter] Pedido #${pedido.id} gravado em VENDAS_CAIXA`);
+    return ok;
+  } catch (err) {
+    console.error('[SheetsWriter] appendSaleToCashFlowSheet error:', err);
+    return false;
+  }
+}
+
+/**
+ * Lê todas as entradas da aba FLUXO_CAIXA da planilha e retorna como array de objetos.
+ * Usado para importar movimentações registradas diretamente na planilha para o banco.
+ */
+export async function readCashFlowFromSheet(): Promise<Array<{
+  id: string;
+  data: string;
+  tipo: string;
+  descricao: string;
+  valor: number;
+  usuario: string;
+}>> {
+  try {
+    const rows = await readSheet(`${CASHFLOW_SHEET}!A2:F5000`);
+    return rows
+      .filter(r => r[0] && r[2] && r[4]) // ID, TIPO e VALOR obrigatórios
+      .map(r => ({
+        id: r[0]?.toString() || '',
+        data: r[1]?.toString() || '',
+        tipo: r[2]?.toString().toUpperCase() || '',
+        descricao: r[3]?.toString() || '',
+        valor: Math.abs(parseFloat(r[4]?.toString().replace(',', '.') || '0')),
+        usuario: r[5]?.toString() || '',
+      }))
+      .filter(r => r.tipo === 'SUPRIMENTO' || r.tipo === 'SANGRIA');
+  } catch (err) {
+    console.error('[SheetsWriter] readCashFlowFromSheet error:', err);
+    return [];
+  }
+}
+
+/**
+ * Exporta todo o histórico de suprimentos/sangrias do banco para a planilha FLUXO_CAIXA.
+ * Limpa a aba (mantém cabeçalho) e reescreve todos os dados.
+ */
+export async function syncAllCashFlowToSheet(entries: Array<{
+  id: number;
+  tipo: 'SUPRIMENTO' | 'SANGRIA';
+  descricao: string;
+  valor: number;
+  usuario: string;
+  createdAt: Date | string;
+}>): Promise<boolean> {
+  try {
+    const token = await getServiceAccountToken();
+    if (!token) {
+      console.warn('[SheetsWriter] No service account token — skipping cash flow sync');
+      return false;
+    }
+
+    if (entries.length === 0) {
+      console.log('[SheetsWriter] Nenhuma movimentação para exportar');
+      return true;
+    }
+
+    // Calcular saldo acumulado
+    let saldoAcumulado = 0;
+    const rows = entries.map(entry => {
+      const data = new Date(entry.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      const valorSinal = entry.tipo === 'SUPRIMENTO' ? entry.valor : -entry.valor;
+      saldoAcumulado += valorSinal;
+      return [
+        entry.id,
+        data,
+        entry.tipo,
+        entry.descricao,
+        valorSinal,
+        entry.usuario || '',
+        parseFloat(saldoAcumulado.toFixed(2)),
+      ];
+    });
+
+    // Limpar dados existentes (linha 2 em diante) e reescrever
+    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${CASHFLOW_SHEET}!A2:G5000`)}:clear`;
+    await fetch(clearUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+
+    // Escrever todos os dados
+    const writeUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${CASHFLOW_SHEET}!A2:G${rows.length + 1}`)}?valueInputOption=USER_ENTERED`;
+    const res = await fetch(writeUrl, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: rows }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('[SheetsWriter] syncAllCashFlowToSheet failed:', err);
+      return false;
+    }
+
+    console.log(`[SheetsWriter] ${rows.length} movimentações exportadas para FLUXO_CAIXA`);
+    return true;
+  } catch (err) {
+    console.error('[SheetsWriter] syncAllCashFlowToSheet error:', err);
+    return false;
+  }
+}
+
+/**
+ * Exporta pedidos fechados para a aba VENDAS_CAIXA.
+ * Limpa a aba (mantém cabeçalho) e reescreve todos os dados.
+ */
+export async function syncAllSalesToCashFlowSheet(pedidos: Array<{
+  id: number;
+  createdAt: Date | string;
+  sellerName: string;
+  canal: string;
+  clienteNome?: string;
+  regime: string;
+  totalComTaxa: number;
+  formaPagamento: string;
+  status: string;
+  qtdItens: number;
+}>): Promise<boolean> {
+  try {
+    const token = await getServiceAccountToken();
+    if (!token) return false;
+
+    const rows = pedidos.map(p => [
+      p.id,
+      new Date(p.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      p.sellerName,
+      p.canal,
+      p.clienteNome || '',
+      p.regime,
+      p.totalComTaxa,
+      p.formaPagamento,
+      p.status,
+      p.qtdItens,
+    ]);
+
+    // Limpar e reescrever
+    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A2:J5000`)}:clear`;
+    await fetch(clearUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+
+    if (rows.length === 0) return true;
+
+    const writeUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A2:J${rows.length + 1}`)}?valueInputOption=USER_ENTERED`;
+    const res = await fetch(writeUrl, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: rows }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('[SheetsWriter] syncAllSalesToCashFlowSheet failed:', err);
+      return false;
+    }
+
+    console.log(`[SheetsWriter] ${rows.length} pedidos exportados para VENDAS_CAIXA`);
+    return true;
+  } catch (err) {
+    console.error('[SheetsWriter] syncAllSalesToCashFlowSheet error:', err);
+    return false;
+  }
+}

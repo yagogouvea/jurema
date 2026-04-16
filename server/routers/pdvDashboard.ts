@@ -3,6 +3,12 @@ import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
+import {
+  appendCashFlowToSheet,
+  syncAllCashFlowToSheet,
+  syncAllSalesToCashFlowSheet,
+  readCashFlowFromSheet,
+} from "./pdvSheetsWriter";
 import type { Request } from "express";
 
 async function getDb() {
@@ -199,11 +205,23 @@ export const pdvDashboardRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       
-      await db.execute(
+      const [result] = await db.execute(
         "INSERT INTO pdv_cash_flow (tipo, descricao, valor, usuario) VALUES (?, ?, ?, ?)",
         [input.tipo, input.descricao, input.valor, seller.name]
-      );
+      ) as any;
+      const newId = result.insertId;
       await db.end();
+
+      // Sync automático para a planilha (fire-and-forget)
+      appendCashFlowToSheet({
+        id: newId,
+        tipo: input.tipo,
+        descricao: input.descricao,
+        valor: input.valor,
+        usuario: seller.name,
+        createdAt: new Date(),
+      }).catch(err => console.error('[CashFlow] Erro ao sincronizar com planilha:', err));
+
       return { success: true };
     }),
 
@@ -235,5 +253,98 @@ export const pdvDashboardRouter = router({
     const [rows] = await db.execute("SELECT * FROM pdv_goals ORDER BY value ASC");
     await db.end();
     return rows as any[];
+  }),
+
+  // ─── Sync Fluxo de Caixa ↔ Planilha ────────────────────────────────────────
+
+  /** Exporta TODOS os suprimentos/sangrias do banco para a aba FLUXO_CAIXA da planilha */
+  syncCashFlowToSheet: publicProcedure.mutation(async ({ ctx }) => {
+    await requirePdvAdmin(ctx);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    try {
+      const [rows] = await db.execute(
+        "SELECT id, tipo, descricao, valor, usuario, createdAt FROM pdv_cash_flow ORDER BY createdAt ASC"
+      );
+      await db.end();
+      const entries = (rows as any[]).map(r => ({
+        id: r.id,
+        tipo: r.tipo as 'SUPRIMENTO' | 'SANGRIA',
+        descricao: r.descricao,
+        valor: parseFloat(r.valor),
+        usuario: r.usuario || '',
+        createdAt: r.createdAt,
+      }));
+      const ok = await syncAllCashFlowToSheet(entries);
+      return { success: ok, count: entries.length };
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    }
+  }),
+
+  /** Exporta TODOS os pedidos fechados para a aba VENDAS_CAIXA da planilha */
+  syncSalesToSheet: publicProcedure.mutation(async ({ ctx }) => {
+    await requirePdvAdmin(ctx);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    try {
+      const [rows] = await db.execute(`
+        SELECT o.id, o.createdAt, s.name as sellerName, o.canal, o.clienteNome,
+               o.atacadoVarejo as regime, o.totalComTaxa, o.formaPagamento, o.status,
+               COUNT(oi.id) as qtdItens
+        FROM pdv_orders o
+        LEFT JOIN pdv_sellers s ON o.sellerId = s.id
+        LEFT JOIN pdv_order_items oi ON oi.orderId = o.id
+        WHERE o.isSofia = 0
+        GROUP BY o.id
+        ORDER BY o.createdAt ASC
+      `);
+      await db.end();
+      const pedidos = (rows as any[]).map(r => ({
+        id: r.id,
+        createdAt: r.createdAt,
+        sellerName: r.sellerName || '',
+        canal: r.canal || '',
+        clienteNome: r.clienteNome || '',
+        regime: r.regime || '',
+        totalComTaxa: parseFloat(r.totalComTaxa || '0'),
+        formaPagamento: r.formaPagamento || '',
+        status: r.status || '',
+        qtdItens: parseInt(r.qtdItens || '0'),
+      }));
+      const ok = await syncAllSalesToCashFlowSheet(pedidos);
+      return { success: ok, count: pedidos.length };
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    }
+  }),
+
+  /** Importa movimentações da planilha FLUXO_CAIXA para o banco (apenas novas, por ID) */
+  syncCashFlowFromSheet: publicProcedure.mutation(async ({ ctx }) => {
+    await requirePdvAdmin(ctx);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    try {
+      const sheetEntries = await readCashFlowFromSheet();
+      // Filtrar apenas entradas sem ID (criadas diretamente na planilha)
+      const novasEntradas = sheetEntries.filter(e => !e.id || isNaN(parseInt(e.id)));
+      let inseridos = 0;
+      for (const entry of novasEntradas) {
+        if (!entry.tipo || !entry.descricao || !entry.valor) continue;
+        const tipo = entry.tipo === 'SUPRIMENTO' ? 'SUPRIMENTO' : 'SANGRIA';
+        await db.execute(
+          "INSERT INTO pdv_cash_flow (tipo, descricao, valor, usuario) VALUES (?, ?, ?, ?)",
+          [tipo, entry.descricao, entry.valor, entry.usuario || 'Planilha']
+        );
+        inseridos++;
+      }
+      await db.end();
+      return { success: true, inseridos };
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    }
   }),
 });

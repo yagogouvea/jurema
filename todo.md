@@ -622,3 +622,15 @@
 - [x] Foto 56px exibida no header do SizePickerModal (modal de seleção de tamanho)
 - [x] Avatar 28px no layout mobile do PdvCadastroProdutos (aba Produtos Cadastrados)
 - [x] 198/198 testes passando, zero erros TypeScript
+
+## v80 — Fluxo de Caixa na Planilha Google Sheets
+- [x] Criar aba FLUXO_CAIXA na planilha (ID | DATA | TIPO | DESCRIÇÃO | VALOR | RESPONSÁVEL | SALDO ACUMULADO)
+- [x] Criar aba VENDAS_CAIXA na planilha (ID PEDIDO | DATA | VENDEDOR | CANAL | CLIENTE | REGIME | TOTAL | FORMA PAGAMENTO | STATUS | QTD ITENS)
+- [x] Sync automático: registrar suprimento/sangria no sistema → grava na planilha (fire-and-forget)
+- [x] Sync automático: fechar pedido no sistema → grava na aba VENDAS_CAIXA
+- [x] Endpoint syncCashFlowToSheet: exportar todo o histórico de suprimentos/sangrias para FLUXO_CAIXA
+- [x] Endpoint syncSalesToSheet: exportar todos os pedidos para VENDAS_CAIXA
+- [x] Endpoint syncCashFlowFromSheet: importar movimentações novas da planilha para o banco
+- [x] Botões "Exportar Planilha", "Exportar Vendas" e "Importar Planilha" no painel de Caixa do PDV
+- [x] Cor da Sangria corrigida para vermelho no painel de Caixa
+- [x] 198/198 testes passando, zero erros TypeScript
