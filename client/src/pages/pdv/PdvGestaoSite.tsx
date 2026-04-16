@@ -13,6 +13,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
+import PdvLayout from "./PdvLayout";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -233,6 +234,7 @@ export default function PdvGestaoSite() {
   const products = productsQuery.data;
 
   return (
+    <PdvLayout>
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       {/* Header */}
       <div className="border-b border-white/10 bg-[#111] px-6 py-4">
@@ -738,5 +740,6 @@ export default function PdvGestaoSite() {
         </DialogContent>
       </Dialog>
     </div>
+    </PdvLayout>
   );
 }

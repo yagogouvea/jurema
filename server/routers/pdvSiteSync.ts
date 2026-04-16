@@ -6,10 +6,26 @@
  */
 
 import { z } from "zod";
-import { adminProcedure, router } from "../_core/trpc";
+import { publicProcedure, router } from "../_core/trpc";
 import mysql from "mysql2/promise";
 import { storagePut } from "../storage";
 import { TRPCError } from "@trpc/server";
+import { verifyPdvToken } from "./pdvAuth";
+
+// ─── helpers de autenticação PDV ─────────────────────────────────────
+
+async function requirePdvAuth(ctx: any) {
+  const req = ctx.req as import("express").Request;
+  const seller = await verifyPdvToken(req);
+  if (!seller) throw new TRPCError({ code: "UNAUTHORIZED", message: "Faça login no PDV" });
+  return seller;
+}
+
+async function requirePdvAdmin(ctx: any) {
+  const seller = await requirePdvAuth(ctx);
+  if (seller.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Acesso restrito ao administrador" });
+  return seller;
+}
 
 // ─── helpers de banco ────────────────────────────────────────────────────────
 
@@ -80,11 +96,12 @@ export const pdvSiteSyncRouter = router({
    * com variantes de tamanho em product_stock.
    * Produtos importados ficam DESATIVADOS por padrão.
    */
-  importSiteProducts: adminProcedure
+  importSiteProducts: publicProcedure
     .input(z.object({
       clearExisting: z.boolean().default(false),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
       const pdvRows = await dbExecute(
         `SELECT codigo, linha, modelo, time, descricao, tamanho, tipo,
                 estoque, precoAtacado, precoVarejo, isActive, fotoUrl, temporada,
@@ -252,7 +269,7 @@ export const pdvSiteSyncRouter = router({
   /**
    * Lista produtos do site (apenas os sincronizados do PDV)
    */
-  listSiteProducts: adminProcedure
+  listSiteProducts: publicProcedure
     .input(z.object({
       search: z.string().optional(),
       isActive: z.boolean().optional(),
@@ -262,7 +279,8 @@ export const pdvSiteSyncRouter = router({
       page: z.number().int().min(1).default(1),
       pageSize: z.number().int().min(1).max(100).default(30),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
       const offset = (input.page - 1) * input.pageSize;
       const conditions: string[] = ["p.pdvSynced = 1"];
       const params: any[] = [];
@@ -330,7 +348,7 @@ export const pdvSiteSyncRouter = router({
   /**
    * Atualiza campos do produto no site
    */
-  updateSiteProduct: adminProcedure
+  updateSiteProduct: publicProcedure
     .input(z.object({
       productId: z.number().int(),
       isActive: z.boolean().optional(),
@@ -339,7 +357,8 @@ export const pdvSiteSyncRouter = router({
       category: z.string().optional(),
       gender: z.enum(["masculino", "feminino", "infantil"]).optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
       const sets: string[] = [];
       const params: any[] = [];
 
@@ -367,13 +386,14 @@ export const pdvSiteSyncRouter = router({
   /**
    * Upload de foto via S3 — atualiza fotoUrl no PDV e no site
    */
-  uploadProductPhoto: adminProcedure
+  uploadProductPhoto: publicProcedure
     .input(z.object({
       codigoBase: z.string(),
       imageBase64: z.string(),
       fileName: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
       const matches = input.imageBase64.match(/^data:([^;]+);base64,(.+)$/);
       if (!matches) throw new TRPCError({ code: "BAD_REQUEST", message: "Formato de imagem inválido" });
 
@@ -404,8 +424,9 @@ export const pdvSiteSyncRouter = router({
   /**
    * Sincroniza estoque do PDV para o site
    */
-  syncStockFromPdv: adminProcedure
-    .mutation(async () => {
+  syncStockFromPdv: publicProcedure
+    .mutation(async ({ ctx }) => {
+      await requirePdvAdmin(ctx);
       const siteProducts = await dbExecute(
         `SELECT id, pdvCodigoBase FROM products WHERE pdvSynced = 1 AND pdvCodigoBase IS NOT NULL`
       );
@@ -435,8 +456,9 @@ export const pdvSiteSyncRouter = router({
   /**
    * Estatísticas para o painel
    */
-  getSiteStats: adminProcedure
-    .query(async () => {
+  getSiteStats: publicProcedure
+    .query(async ({ ctx }) => {
+      await requirePdvAdmin(ctx);
       const rows = await dbExecute(
         `SELECT
           COUNT(*) as total,

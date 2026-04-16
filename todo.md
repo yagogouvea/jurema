@@ -601,3 +601,9 @@
 - [x] Componente reutilizável ProductPhotoLightbox + ProductPhotoAvatar criado
 - [x] Upload de foto unificado apenas na Gestão do Site (sincroniza PDV + site automaticamente)
 - [x] 198/198 testes passando, zero erros TypeScript
+
+## v74 — Correções Gestão do Site
+- [x] Adicionar PdvLayout (menu lateral/barra) na página PdvGestaoSite
+- [x] Corrigir bug crítico: pdvSiteSync usava adminProcedure (Manus OAuth) em vez de requirePdvAdmin (cookie PDV) — causava lista vazia em produção
+- [x] Migrar todos os 6 endpoints do pdvSiteSync para publicProcedure + requirePdvAdmin(ctx)
+- [x] 198/198 testes passando, zero erros TypeScript
