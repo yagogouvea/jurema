@@ -332,6 +332,32 @@ export default function PdvCadastroProdutos() {
                 </div>
               </div>
 
+              {/* PONTOS ATACADO + VAREJO */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-gray-300 text-sm font-medium">PT Atacado</Label>
+                  <Input
+                    type="number"
+                    value={form.ptAtacado}
+                    onChange={e => set("ptAtacado", e.target.value)}
+                    placeholder="0"
+                    className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600"
+                    inputMode="numeric"
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-300 text-sm font-medium">PT Varejo</Label>
+                  <Input
+                    type="number"
+                    value={form.ptVarejo}
+                    onChange={e => set("ptVarejo", e.target.value)}
+                    placeholder="0"
+                    className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600"
+                    inputMode="numeric"
+                  />
+                </div>
+              </div>
+
               {/* ATIVO + SOFIA */}
               <div className="flex gap-3">
                 {/* Ativo */}
@@ -572,7 +598,7 @@ export default function PdvCadastroProdutos() {
             >
               <span className="text-sm font-semibold text-gray-100">Campos Adicionais</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Temporada · Pontos</span>
+                <span className="text-xs text-gray-500">Temporada</span>
                 {showExtra ? (
                   <ChevronUp className="w-4 h-4 text-gray-400" />
                 ) : (
@@ -591,28 +617,6 @@ export default function PdvCadastroProdutos() {
                     placeholder="Ex: 2024/25"
                     className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600"
                   />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-gray-300 text-sm font-medium">PT Atacado</Label>
-                    <Input
-                      type="number"
-                      value={form.ptAtacado}
-                      onChange={e => set("ptAtacado", e.target.value)}
-                      placeholder="0"
-                      className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-gray-300 text-sm font-medium">PT Varejo</Label>
-                    <Input
-                      type="number"
-                      value={form.ptVarejo}
-                      onChange={e => set("ptVarejo", e.target.value)}
-                      placeholder="0"
-                      className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600"
-                    />
-                  </div>
                 </div>
               </div>
             )}
