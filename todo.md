@@ -540,3 +540,8 @@
 - [ ] Endpoint updateProduct: atualizar estoque/preço/ativo e sincronizar planilha
 - [ ] Aba "Produtos Cadastrados" com tabela paginada, busca e edição inline
 - [ ] Validação em tempo real de código duplicado no formulário de cadastro
+
+## v68 — Deduplicação da planilha + Deletar produto
+- [ ] Script de deduplicação da aba PRODUTOS (mantém última ocorrência por código, deleta duplicatas)
+- [ ] Endpoint tRPC deleteProduct (admin): remove do banco e da planilha
+- [ ] Botão deletar com modal de confirmação na tela Produtos Cadastrados

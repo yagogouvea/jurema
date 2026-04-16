@@ -116,6 +116,8 @@ export default function PdvCadastroProdutos() {
   const [page, setPage] = useState(1);
   const [editingRow, setEditingRow] = useState<EditingRow | null>(null);
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null); // id sendo deletado
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null); // id aguardando confirm
 
   const set = useCallback(<K extends keyof FormState>(k: K, v: FormState[K]) => {
     setForm(prev => ({ ...prev, [k]: v }));
@@ -153,6 +155,20 @@ export default function PdvCadastroProdutos() {
     },
     onError: (err) => {
       toast.error(err.message || "Erro ao cadastrar produtos");
+    },
+  });
+
+  const deleteProduct = trpc.pdvProducts.deleteProduct.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Produto ${data.codigo} removido do sistema e da planilha`);
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+      productsQuery.refetch();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Erro ao deletar produto");
+      setDeletingId(null);
+      setConfirmDeleteId(null);
     },
   });
 
@@ -866,7 +882,7 @@ export default function PdvCadastroProdutos() {
                                 <span className="text-gray-400">ATC: <span className="text-white">R$ {Number(prod.precoAtacado).toFixed(2)}</span></span>
                               </div>
                             )}
-                            <div className="flex gap-2 justify-end">
+                            <div className="flex gap-2 justify-end flex-wrap">
                               {isEditing ? (
                                 <>
                                   <Button size="sm" variant="outline" onClick={() => setEditingRow(null)} className="h-7 text-xs border-[#2e2e2e] text-gray-400">
@@ -876,10 +892,25 @@ export default function PdvCadastroProdutos() {
                                     {isSaving ? <span className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" /> : <><Save className="w-3 h-3 mr-1" />Salvar</>}
                                   </Button>
                                 </>
+                              ) : confirmDeleteId === prod.id ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-red-400">Confirmar?</span>
+                                  <Button size="sm" onClick={() => { setDeletingId(prod.id); deleteProduct.mutate({ id: prod.id }); }} disabled={deletingId === prod.id} className="h-7 text-xs bg-red-800 hover:bg-red-700 text-white">
+                                    {deletingId === prod.id ? <span className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" /> : <><Trash2 className="w-3 h-3 mr-1" />Sim</>}
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => setConfirmDeleteId(null)} className="h-7 text-xs border-[#2e2e2e] text-gray-400">
+                                    Não
+                                  </Button>
+                                </div>
                               ) : (
-                                <Button size="sm" variant="outline" onClick={() => startEdit(prod)} className="h-7 text-xs border-[#2e2e2e] text-gray-400 hover:text-white hover:border-green-700/50">
-                                  <Edit2 className="w-3 h-3 mr-1" /> Editar
-                                </Button>
+                                <>
+                                  <Button size="sm" variant="outline" onClick={() => startEdit(prod)} className="h-7 text-xs border-[#2e2e2e] text-gray-400 hover:text-white hover:border-green-700/50">
+                                    <Edit2 className="w-3 h-3 mr-1" /> Editar
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => setConfirmDeleteId(prod.id)} className="h-7 text-xs border-[#2e2e2e] text-gray-600 hover:text-red-400 hover:border-red-800/50">
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </>
                               )}
                             </div>
                           </div>
@@ -928,7 +959,7 @@ export default function PdvCadastroProdutos() {
                               </>
                             )}
 
-                            <div className="flex gap-1 w-16 justify-end">
+                            <div className="flex gap-1 justify-end">
                               {isEditing ? (
                                 <>
                                   <button onClick={() => setEditingRow(null)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-gray-300 rounded-lg hover:bg-[#252525]">
@@ -938,10 +969,30 @@ export default function PdvCadastroProdutos() {
                                     {isSaving ? <span className="w-3 h-3 border border-green-400/30 border-t-green-400 rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                                   </button>
                                 </>
+                              ) : confirmDeleteId === prod.id ? (
+                                // Confirmação de deleção inline
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-red-400 whitespace-nowrap">Confirmar?</span>
+                                  <button
+                                    onClick={() => { setDeletingId(prod.id); deleteProduct.mutate({ id: prod.id }); }}
+                                    disabled={deletingId === prod.id}
+                                    className="w-7 h-7 flex items-center justify-center text-red-400 hover:text-red-300 rounded-lg hover:bg-red-950/30"
+                                  >
+                                    {deletingId === prod.id ? <span className="w-3 h-3 border border-red-400/30 border-t-red-400 rounded-full animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                  </button>
+                                  <button onClick={() => setConfirmDeleteId(null)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-gray-300 rounded-lg hover:bg-[#252525]">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               ) : (
-                                <button onClick={() => startEdit(prod)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-green-400 rounded-lg hover:bg-green-950/20 transition-colors">
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
+                                <>
+                                  <button onClick={() => startEdit(prod)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-green-400 rounded-lg hover:bg-green-950/20 transition-colors">
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={() => setConfirmDeleteId(prod.id)} className="w-7 h-7 flex items-center justify-center text-gray-600 hover:text-red-400 rounded-lg hover:bg-red-950/20 transition-colors">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
                               )}
                             </div>
                           </div>

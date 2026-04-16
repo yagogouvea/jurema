@@ -307,6 +307,65 @@ export async function appendProductToSheet(product: {
 }
 
 /**
+ * Deleta a linha de um produto da aba PRODUTOS pelo CODIGO (coluna A)
+ * Remove a linha fisicamente (sem deixar linha em branco)
+ */
+export async function deleteProductRowFromSheet(codigo: string): Promise<boolean> {
+  try {
+    const rows = await readSheet('PRODUTOS!A2:O2000');
+    const rowIndex = rows.findIndex(row => row[0]?.toString().trim() === codigo.trim());
+    if (rowIndex === -1) {
+      console.warn(`[SheetsWriter] deleteProductRowFromSheet: produto ${codigo} não encontrado na planilha`);
+      return false;
+    }
+    const sheetRowIndex = rowIndex + 1; // +1 para o cabeçalho (linha 1)
+
+    const token = await getServiceAccountToken();
+    if (!token) {
+      console.warn('[SheetsWriter] No service account token — skipping product row delete');
+      return false;
+    }
+
+    // Buscar sheetId numérico da aba PRODUTOS
+    const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
+    const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties&key=${apiKey}`;
+    const metaRes = await fetch(metaUrl);
+    const metaData = await metaRes.json() as any;
+    const sheet = metaData.sheets?.find((s: any) => s.properties.title === 'PRODUTOS');
+    const sheetNumericId = sheet?.properties?.sheetId ?? 0;
+
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: sheetNumericId,
+              dimension: 'ROWS',
+              startIndex: sheetRowIndex,
+              endIndex: sheetRowIndex + 1,
+            }
+          }
+        }]
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('[SheetsWriter] deleteProductRowFromSheet failed:', err);
+      return false;
+    }
+    console.log(`[SheetsWriter] Produto ${codigo} deletado da planilha (linha ${sheetRowIndex + 1})`);
+    return true;
+  } catch (err) {
+    console.error('[SheetsWriter] deleteProductRowFromSheet error:', err);
+    return false;
+  }
+}
+
+/**
  * Atualiza QTD (H), ATC (I) e VAR (J) de um produto existente na aba PRODUTOS
  * Localiza pelo CODIGO (coluna A) e atualiza as colunas individualmente
  */

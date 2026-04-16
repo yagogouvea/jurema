@@ -4,7 +4,12 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
-import { appendProductToSheet, updateProductRowInSheet } from "./pdvSheetsWriter";
+import { appendProductToSheet, updateProductRowInSheet, deleteProductRowFromSheet } from "./pdvSheetsWriter";
+
+// Deleta um produto da planilha de forma assíncrona
+async function deleteProductFromSheetAsync(codigo: string) {
+  await deleteProductRowFromSheet(codigo);
+}
 
 // Sincroniza um produto atualizado na planilha (assíncrono, não bloqueia a resposta)
 // Usa updateProductRowInSheet para ATUALIZAR a linha existente (não adicionar nova linha)
@@ -421,6 +426,39 @@ export const pdvProductsRouter = router({
 
       await db.end();
       return { success: true };
+    }),
+
+  // Deletar produto do banco e da planilha
+  deleteProduct: publicProcedure
+    .input(z.object({
+      id: z.number(),
+      syncSheet: z.boolean().default(true),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      // Buscar o produto antes de deletar para ter o código para a planilha
+      const [rows] = await db.execute("SELECT * FROM pdv_products WHERE id = ?", [input.id]);
+      const prod = (rows as any[])[0];
+      if (!prod) {
+        await db.end();
+        throw new TRPCError({ code: "NOT_FOUND", message: "Produto não encontrado" });
+      }
+
+      // Deletar do banco
+      await db.execute("DELETE FROM pdv_products WHERE id = ?", [input.id]);
+      await db.end();
+
+      // Deletar da planilha de forma assíncrona
+      if (input.syncSheet && prod.codigo) {
+        deleteProductFromSheetAsync(prod.codigo).catch(err =>
+          console.error('[PDV] Erro ao deletar produto da planilha:', err)
+        );
+      }
+
+      return { success: true, codigo: prod.codigo };
     }),
 
   // Cadastro em lote: recebe dados base + array de tamanhos, cria um produto por tamanho
