@@ -722,9 +722,12 @@ function GroupedProductCard({
   const precoVaria = Math.abs(maxPreco - minPreco) > 0.01;
 
   return (
-    <button
-      onClick={() => onSelect(group)}
-      disabled={semEstoque}
+    <div
+      role="button"
+      tabIndex={semEstoque ? -1 : 0}
+      aria-disabled={semEstoque}
+      onClick={() => !semEstoque && onSelect(group)}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !semEstoque) onSelect(group); }}
       className={`w-full text-left bg-gray-800 border rounded-xl p-3 transition-all group ${
         semEstoque
           ? "border-gray-700 opacity-60 cursor-not-allowed"
@@ -799,11 +802,10 @@ function GroupedProductCard({
           {group.variantes.length} tam.
         </div>
       </div>
-    </button>
+    </div>
   );
 }
-
-// Cart Panel Component
+// Cart Panel Componentt
 function CartPanel({ cart, regime, totalPecas, totalAplicado, onUpdateQuantity, onRemove, onClear, onCheckout }: {
   cart: CartItem[];
   regime: "ATACADO" | "VAREJO";
