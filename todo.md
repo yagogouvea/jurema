@@ -482,3 +482,24 @@
 - [x] Funcao deleteSofiaItemsFromSheet: mesma logica para aba SOFIA_ITENS
 - [x] Integrado no updateStatus ao cancelar pedido (pdvOrders.ts)
 - [x] 13 novos testes vitest (167/167 total passando)
+
+## Correções de cálculo e planilha (v61)
+- [ ] Bug taxa frontend: label do campo de valor deve ser "Valor que o cliente paga (com taxa)" para debito/credito — o vendedor digita o valor da maquininha e o sistema calcula o liquido
+- [ ] Bug comissao planilha: comissaoTotal calculado com comissaoUnitaria mas sem considerar itens Sofia (que tem comissao 0) — ja esta correto, verificar se o valor chega na coluna T
+- [ ] Bug formatacao planilha: data como string (toLocaleString) em vez de formato que o Sheets reconhece como data
+- [ ] Bug formatacao planilha: quantidade como numero (nao string) para o Sheets reconhecer como numero
+- [ ] Bug formatacao planilha: status como texto formatado (Pago/Pendente/Cancelado) — ja esta correto
+- [ ] Bug valor_sem_taxa (col L): totalAplicadoNormal nao inclui servicos extras — deve ser totalAplicadoNormal + extraValor
+- [ ] Bug SOFIA_ITENS col M (valor total sem taxa): valorItemSemTaxa nao inclui extra proporcional — deve ser valorItemSemTaxa + extraProporcional
+- [ ] Revisar logica de taxa: vendedor digita valor real (loja recebe) e sistema calcula maquininha — ou vendedor digita maquininha e sistema calcula liquido? Definir padrao unico
+
+## Correções de cálculo e planilha (v61) — CONCLUIDO
+- [x] Col L (valor_sem_taxa) = subtotalItens + extraValor (nao apenas subtotal)
+- [x] Col O (total_com_taxa) = valorSemTaxa + taxaCartao
+- [x] Col T (comissao) como numero (nao string), calculado corretamente excluindo Sofia
+- [x] Data formatada como DD/MM/YYYY HH:MM (UTC-3 Brasilia) — Sheets reconhece como data
+- [x] Quantidades e valores como numeros (nao strings) em todas as colunas
+- [x] SOFIA_ITENS col M = valorItem + extraProporcional (nao apenas valorItem)
+- [x] extraPorItem obsoleto removido do appendSofiaItemsToSheet
+- [x] UI de pagamento: label claro, total a pagar visivel, preview de taxa sempre visivel para debito/credito
+- [x] 23 novos testes vitest (190/190 total passando)

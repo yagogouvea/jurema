@@ -507,6 +507,12 @@ export default function PdvCheckout({
 
             {showAddPayment && (
               <div className="bg-gray-800 rounded-xl p-3 mb-3 space-y-3">
+                {/* Dica de referência: total geral */}
+                <div className="bg-gray-900/60 rounded-lg px-3 py-2 flex justify-between items-center border border-gray-700">
+                  <span className="text-xs text-gray-400">Total a pagar</span>
+                  <span className="text-white font-bold text-sm">R$ {fmt(totalGeral)}</span>
+                </div>
+
                 {/* Method selector */}
                 <div className="grid grid-cols-3 gap-1.5">
                   {PAYMENT_METHODS.map(method => (
@@ -528,13 +534,15 @@ export default function PdvCheckout({
                 {/* Valor input */}
                 <div>
                   <label className="text-xs text-gray-400 mb-1 block">
-                    {previewMethod.taxa > 0 ? "Valor real (o que a loja recebe)" : "Valor"}
+                    {previewMethod.taxa > 0
+                      ? `Valor recebido pela loja (sem taxa ${previewMethod.label} ${previewMethod.taxa}%)`
+                      : "Valor"}
                   </label>
                   <input
                     type="text"
                     value={newPaymentValor}
                     onChange={(e) => setNewPaymentValor(e.target.value)}
-                    placeholder="0,00"
+                    placeholder={fmt(totalGeral - payments.reduce((s,p)=>s+p.valor,0))}
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
                   />
                 </div>
@@ -550,22 +558,30 @@ export default function PdvCheckout({
                   />
                 )}
 
-                {/* Taxa preview — only for credit/debit */}
-                {!isNaN(previewVal) && previewVal > 0 && previewMethod.taxa > 0 && (
-                  <div className="bg-gray-900 rounded-xl p-3 space-y-1.5 border border-gray-700">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Valor real (loja recebe)</span>
-                      <span className="text-white font-semibold">R$ {fmt(previewVal)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Taxa {previewMethod.label} ({previewMethod.taxa}%)</span>
-                      <span className="text-green-500">+ R$ {fmt(previewTaxa)}</span>
-                    </div>
-                    <div className="border-t border-gray-700 pt-1.5 flex justify-between text-sm font-bold">
-                      <span className="text-yellow-400">Valor maquininha</span>
-                      <span className="text-yellow-400">R$ {fmt(previewMaquininha)}</span>
-                    </div>
-                    <p className="text-[10px] text-gray-500 mt-1">
+                {/* Taxa preview — sempre visível para débito/crédito */}
+                {previewMethod.taxa > 0 && (
+                  <div className="bg-gray-900 rounded-xl p-3 space-y-1.5 border border-yellow-900/40">
+                    {!isNaN(previewVal) && previewVal > 0 ? (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">Loja recebe (você digitou)</span>
+                          <span className="text-white font-semibold">R$ {fmt(previewVal)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-500">Taxa {previewMethod.label} ({previewMethod.taxa}%)</span>
+                          <span className="text-orange-400">+ R$ {fmt(previewTaxa)}</span>
+                        </div>
+                        <div className="border-t border-gray-700 pt-1.5 flex justify-between text-sm font-bold">
+                          <span className="text-yellow-400">Passar na maquininha</span>
+                          <span className="text-yellow-300 text-base">R$ {fmt(previewMaquininha)}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-yellow-600">
+                        {previewMethod.label} tem taxa de {previewMethod.taxa}%. Digite o valor que a loja recebe — o sistema calcula o valor da maquininha automaticamente.
+                      </p>
+                    )}
+                    <p className="text-[10px] text-gray-500">
                       Você pode editar o valor da maquininha após adicionar.
                     </p>
                   </div>

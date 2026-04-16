@@ -165,44 +165,38 @@ export async function appendOrderToSheet(order: {
     // Pagamentos
     const formasPagamento = order.payments.map(p => p.formaPagamento).join(', ');
     const taxaTotal = order.payments.reduce((sum, p) => sum + (p.taxa || 0), 0);
-    // valor_sem_taxa = subtotal dos produtos + extras (sem taxa de cartão)
-    // Nota: a partir da v59, totalAplicado já inclui extras (enviado como totalGeral do frontend)
-    // Mantemos o cálculo compatível: se totalAplicado já inclui extras, extraValor seria duplo.
-    // Por isso usamos totalAplicado diretamente como valor_sem_taxa.
-    const valorSemTaxa = order.totalAplicado; // já inclui extras
-    const totalComTaxa = valorSemTaxa + taxaTotal;
-    
-    // Formatar data
-    const dataFormatada = new Date(order.createdAt).toLocaleString('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    
+    // Formatar data no padrão DD/MM/YYYY HH:MM que o Google Sheets reconhece como data
+    const dt = new Date(order.createdAt);
+    // Converter para horário de Brasília (UTC-3)
+    const dtBR = new Date(dt.getTime() - 3 * 60 * 60 * 1000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dataFormatada = `${pad(dtBR.getUTCDate())}/${pad(dtBR.getUTCMonth() + 1)}/${dtBR.getUTCFullYear()} ${pad(dtBR.getUTCHours())}:${pad(dtBR.getUTCMinutes())}`;
+
+    // valor_sem_taxa = subtotal dos itens normais + extras (o que a loja recebe sem taxa de cartão)
+    const valorSemTaxaFinal = order.totalAplicado + extraValor;
+    const totalComTaxaFinal = valorSemTaxaFinal + taxaTotal;
+
     const row = [
       order.pedidoId,                                    // A: pedido_id
-      dataFormatada,                                     // B: data
+      dataFormatada,                                     // B: data (DD/MM/YYYY HH:MM)
       order.sellerName,                                  // C: vendedor
       order.canal === 'WHATSAPP' ? 'WhatsApp' : 'Balcão', // D: canal
       order.clienteNome || '',                           // E: cliente
       order.clienteTelefone || '',                       // F: telefone
-      order.totalVarejo.toFixed(2),                      // G: varejo
-      order.totalAtacado.toFixed(2),                     // H: atacado
+      parseFloat(order.totalVarejo.toFixed(2)),          // G: varejo (número)
+      parseFloat(order.totalAtacado.toFixed(2)),         // H: atacado (número)
       order.regime === 'ATACADO' ? 'Atacado' : 'Varejo', // I: atacado/varejo
       extraTipos,                                        // J: extra
-      extraValor > 0 ? extraValor.toFixed(2) : '',       // K: valor_adicional
-      valorSemTaxa.toFixed(2),                           // L: valor_sem_taxa (subtotal + extras)
+      extraValor > 0 ? parseFloat(extraValor.toFixed(2)) : '', // K: valor_adicional (número)
+      parseFloat(valorSemTaxaFinal.toFixed(2)),          // L: valor_sem_taxa (subtotal + extras, número)
       formasPagamento,                                   // M: forma_pagamento
-      taxaTotal > 0 ? taxaTotal.toFixed(2) : '',         // N: taxa
-      totalComTaxa.toFixed(2),                           // O: total_com_taxa
-      order.totalPendente > 0 ? order.totalPendente.toFixed(2) : '', // P: pendente
+      taxaTotal > 0 ? parseFloat(taxaTotal.toFixed(2)) : '', // N: taxa (número)
+      parseFloat(totalComTaxaFinal.toFixed(2)),          // O: total_com_taxa (número)
+      order.totalPendente > 0 ? parseFloat(order.totalPendente.toFixed(2)) : '', // P: pendente (número)
       order.justificativa || '',                         // Q: justificativa
       order.status === 'CANCELADO' ? 'Cancelado' : order.status === 'PENDENTE' ? 'Pendente' : 'Pago', // R: status
-      order.qtdItens,                                    // S: qtd_itens
-      order.comissaoTotal.toFixed(2),                    // T: comissao
+      order.qtdItens,                                    // S: qtd_itens (número)
+      parseFloat(order.comissaoTotal.toFixed(2)),        // T: comissao (número)
     ];
     
     return await appendToSheet(`${ORDERS_SHEET}!A:T`, [row]);
@@ -381,19 +375,19 @@ export async function appendOrderItemsToSheet(params: {
       const totalComExtra = precoUtilizado + extraProporcional;
 
       return [
-        pedidoId,                          // A: pedido_id
-        item.codigo || '',                 // B: cod (SKU)
-        produtoDesc,                       // C: produto
-        item.quantidade,                   // D: quantidade
-        precoAtacadoUnit.toFixed(2),       // E: preco_atacado (unitário)
-        precoVarejoUnit.toFixed(2),        // F: preco_varejo (unitário)
-        subtotalAtacado.toFixed(2),        // G: subtotal_atacado
-        subtotalVarejo.toFixed(2),         // H: subtotal_varejo
-        modalidade,                        // I: modalidade usada
-        precoUtilizado.toFixed(2),         // J: preco_utilizado
-        extraTipos || '',                  // K: serviço extra
-        extraProporcional > 0 ? extraProporcional.toFixed(2) : '', // L: valor serviço extra
-        totalComExtra.toFixed(2),          // M: TOTAL
+        pedidoId,                                                    // A: pedido_id
+        item.codigo || '',                                           // B: cod (SKU)
+        produtoDesc,                                                 // C: produto
+        item.quantidade,                                             // D: quantidade (número)
+        parseFloat(precoAtacadoUnit.toFixed(2)),                     // E: preco_atacado (número)
+        parseFloat(precoVarejoUnit.toFixed(2)),                      // F: preco_varejo (número)
+        parseFloat(subtotalAtacado.toFixed(2)),                      // G: subtotal_atacado (número)
+        parseFloat(subtotalVarejo.toFixed(2)),                       // H: subtotal_varejo (número)
+        modalidade,                                                  // I: modalidade usada
+        parseFloat(precoUtilizado.toFixed(2)),                       // J: preco_utilizado (número)
+        extraTipos || '',                                            // K: serviço extra
+        extraProporcional > 0 ? parseFloat(extraProporcional.toFixed(2)) : '', // L: valor serviço extra (número)
+        parseFloat(totalComExtra.toFixed(2)),                        // M: TOTAL (número)
       ];
     });
 
@@ -465,17 +459,15 @@ export async function appendSofiaItemsToSheet(params: {
   try {
     const { pedidoId, createdAt, sellerName, canal, clienteNome, clienteTelefone, regime, services, payments, totalPendente, justificativa, status, items } = params;
 
-    // Formatar data
-    const dataFormatada = new Date(createdAt).toLocaleString('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
+    // Formatar data no padrão DD/MM/YYYY HH:MM que o Google Sheets reconhece como data
+    const dtSofia = new Date(createdAt);
+    const dtSofiaBR = new Date(dtSofia.getTime() - 3 * 60 * 60 * 1000);
+    const padS = (n: number) => String(n).padStart(2, '0');
+    const dataFormatada = `${padS(dtSofiaBR.getUTCDate())}/${padS(dtSofiaBR.getUTCMonth() + 1)}/${dtSofiaBR.getUTCFullYear()} ${padS(dtSofiaBR.getUTCHours())}:${padS(dtSofiaBR.getUTCMinutes())}`;
 
     // Serviços extras
     const extraTipos = services.map(s => s.tipo).join(', ') || '';
     const extraValorTotal = services.reduce((sum, s) => sum + s.valor, 0);
-    const extraPorItem = items.length > 0 ? extraValorTotal / items.length : 0;
 
     // Pagamentos
     const formasPagamento = payments.map(p => p.formaPagamento).join(', ');
@@ -490,18 +482,21 @@ export async function appendSofiaItemsToSheet(params: {
       const precoVarejoUnit = item.precoVarejo ?? item.precoUnitario;
       const precoAtacadoUnit = item.precoAtacado ?? item.precoUnitario;
 
+      // Distribuir extra proporcionalmente ao valor do item (não dividir igualmente)
+      const totalGeralItensSofia = items.reduce((s, i) => s + i.totalItem, 0);
+      const proporcaoSofia = totalGeralItensSofia > 0 ? item.totalItem / totalGeralItensSofia : 0;
+      const extraProporcionalSofia = extraValorTotal * proporcaoSofia;
       // Valor total do item (preço utilizado na modalidade * quantidade)
       const valorItemSemTaxa = item.totalItem;
-      const valorItemComExtra = valorItemSemTaxa + extraPorItem;
+      // col M = valor sem taxa + extra proporcional (o que a loja recebe por este item)
+      const valorItemComExtra = valorItemSemTaxa + extraProporcionalSofia;
 
       // Taxa proporcional por item
-      const totalGeralItens = items.reduce((s, i) => s + i.totalItem, 0);
-      const proporcao = totalGeralItens > 0 ? item.totalItem / totalGeralItens : 0;
-      const taxaProporcional = taxaTotal * proporcao;
+      const taxaProporcional = taxaTotal * proporcaoSofia;
       const totalComTaxa = valorItemComExtra + taxaProporcional;
 
       // Pendente proporcional
-      const pendenteProporcional = totalPendente * proporcao;
+      const pendenteProporcional = totalPendente * proporcaoSofia;
 
       // Comissão da loja Sofia (personalizada por item)
       const comissaoLoja = item.comissaoLojaSofia ?? 0;
@@ -511,29 +506,29 @@ export async function appendSofiaItemsToSheet(params: {
       const reembolso = Math.max(0, valorItemSemTaxa - comissaoTotal);
 
       return [
-        pedidoId,                                              // A: pedido_id
-        dataFormatada,                                         // B: data
-        item.codigo || '',                                     // C: cod (SKU)
-        sellerName,                                            // D: vendedor
-        canalFormatado,                                        // E: canal
-        clienteNome || '',                                     // F: cliente
-        clienteTelefone || '',                                 // G: fone
-        precoVarejoUnit.toFixed(2),                            // H: varejo (unitário)
-        precoAtacadoUnit.toFixed(2),                           // I: atacado (unitário)
-        modalidade,                                            // J: atacado/varejo
-        extraTipos || '',                                      // K: serviço extra
-        extraPorItem > 0 ? extraPorItem.toFixed(2) : '',       // L: valor serviço extra
-        valorItemSemTaxa.toFixed(2),                           // M: valor total sem taxa
-        formasPagamento,                                       // N: forma de pagamento
-        taxaProporcional > 0 ? taxaProporcional.toFixed(2) : '', // O: taxa
-        totalComTaxa.toFixed(2),                               // P: total com taxa
-        pendenteProporcional > 0 ? pendenteProporcional.toFixed(2) : '', // Q: pendente
-        justificativa || '',                                   // R: justificativa
-        modalidade,                                            // S: modalidade
-        statusFormatado,                                       // T: status
-        item.quantidade,                                       // U: qtd itens
-        comissaoTotal.toFixed(2),                              // V: comissao loja sofia
-        reembolso.toFixed(2),                                  // W: reembolso
+        pedidoId,                                                              // A: pedido_id
+        dataFormatada,                                                         // B: data (DD/MM/YYYY HH:MM)
+        item.codigo || '',                                                     // C: cod (SKU)
+        sellerName,                                                            // D: vendedor
+        canalFormatado,                                                        // E: canal
+        clienteNome || '',                                                     // F: cliente
+        clienteTelefone || '',                                                 // G: fone
+        parseFloat(precoVarejoUnit.toFixed(2)),                                // H: varejo (número)
+        parseFloat(precoAtacadoUnit.toFixed(2)),                               // I: atacado (número)
+        modalidade,                                                            // J: atacado/varejo
+        extraTipos || '',                                                      // K: serviço extra
+        extraProporcionalSofia > 0 ? parseFloat(extraProporcionalSofia.toFixed(2)) : '', // L: valor serviço extra (número)
+        parseFloat(valorItemComExtra.toFixed(2)),                              // M: valor total sem taxa (item + extra proporcional)
+        formasPagamento,                                                       // N: forma de pagamento
+        taxaProporcional > 0 ? parseFloat(taxaProporcional.toFixed(2)) : '',  // O: taxa (número)
+        parseFloat(totalComTaxa.toFixed(2)),                                   // P: total com taxa (número)
+        pendenteProporcional > 0 ? parseFloat(pendenteProporcional.toFixed(2)) : '', // Q: pendente (número)
+        justificativa || '',                                                   // R: justificativa
+        modalidade,                                                            // S: modalidade
+        statusFormatado,                                                       // T: status
+        item.quantidade,                                                       // U: qtd itens (número)
+        parseFloat(comissaoTotal.toFixed(2)),                                  // V: comissao loja sofia (número)
+        parseFloat(reembolso.toFixed(2)),                                      // W: reembolso (número)
       ];
     });
 

@@ -206,7 +206,7 @@ export const pdvOrdersRouter = router({
               const comissaoTotal = normalItems.reduce((sum, item) => {
                 return sum + (item.quantidade * comissaoUnitaria);
               }, 0);
-              // Recalcular totais apenas dos itens não-Sofia
+              // Recalcular totais apenas dos itens não-Sofia (sem extras — extras são passados separadamente)
               const totalAplicadoNormal = normalItems.reduce((sum, item) => sum + item.totalItem, 0);
               const totalVarejoNormal = normalItems.reduce((sum, item) => {
                 const pv = item.precoVarejo ?? item.precoUnitario;
