@@ -307,6 +307,75 @@ export async function appendProductToSheet(product: {
 }
 
 /**
+ * Atualiza QTD (H), ATC (I) e VAR (J) de um produto existente na aba PRODUTOS
+ * Localiza pelo CODIGO (coluna A) e atualiza as colunas individualmente
+ */
+export async function updateProductRowInSheet(product: {
+  codigo: string;
+  estoque?: number;
+  precoAtacado?: number;
+  precoVarejo?: number;
+  ptAtacado?: number;
+  ptVarejo?: number;
+  isActive?: boolean;
+}): Promise<boolean> {
+  try {
+    const rows = await readSheet('PRODUTOS!A2:O2000');
+    const rowIndex = rows.findIndex(row => row[0]?.toString().trim() === product.codigo.trim());
+    if (rowIndex === -1) {
+      console.warn(`[SheetsWriter] updateProductRowInSheet: produto ${product.codigo} não encontrado na planilha`);
+      return false;
+    }
+    const sheetRow = rowIndex + 2; // rows[0] = linha 2 da planilha
+
+    const token = await getServiceAccountToken();
+    if (!token) {
+      console.warn('[SheetsWriter] No service account token — skipping product row update');
+      return false;
+    }
+
+    // Monta o array completo da linha preservando valores existentes e substituindo os alterados
+    const existing = rows[rowIndex];
+    const updatedRow = [
+      existing[0] ?? '',                                                          // A: CODIGO
+      existing[1] ?? '',                                                          // B: LINHA
+      existing[2] ?? '',                                                          // C: MODELO
+      existing[3] ?? '',                                                          // D: TIME
+      existing[4] ?? '',                                                          // E: DESCRICAO
+      existing[5] ?? '',                                                          // F: TAM
+      existing[6] ?? '',                                                          // G: TIPO
+      product.estoque !== undefined ? product.estoque : (parseInt(existing[7] || '0', 10)),  // H: QTD
+      product.precoAtacado !== undefined ? parseFloat(product.precoAtacado.toFixed(2)) : (parseFloat(existing[8] || '0')), // I: ATC
+      product.precoVarejo !== undefined ? parseFloat(product.precoVarejo.toFixed(2)) : (parseFloat(existing[9] || '0')),  // J: VAR
+      product.isActive !== undefined ? (product.isActive ? 'SIM' : 'NAO') : (existing[10] ?? 'SIM'), // K: ATIVO
+      existing[11] ?? '',                                                          // L: FOTO
+      existing[12] ?? '',                                                          // M: TEMPORADA
+      product.ptAtacado !== undefined ? parseFloat(product.ptAtacado.toFixed(2)) : (parseFloat(existing[13] || '0')), // N: PT ATAC
+      product.ptVarejo !== undefined ? parseFloat(product.ptVarejo.toFixed(2)) : (parseFloat(existing[14] || '0')),  // O: PT VAR
+    ];
+
+    const range = `PRODUTOS!A${sheetRow}:O${sheetRow}`;
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [updatedRow] }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('[SheetsWriter] updateProductRowInSheet failed:', err);
+      return false;
+    }
+    console.log(`[SheetsWriter] Produto ${product.codigo} atualizado na planilha (linha ${sheetRow})`);
+    return true;
+  } catch (err) {
+    console.error('[SheetsWriter] updateProductRowInSheet error:', err);
+    return false;
+  }
+}
+
+/**
  * Grava os itens de um pedido na aba pedidos_itens da planilha
  *
  * Colunas (13 no total):

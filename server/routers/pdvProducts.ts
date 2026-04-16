@@ -4,27 +4,19 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
-import { appendProductToSheet } from "./pdvSheetsWriter";
+import { appendProductToSheet, updateProductRowInSheet } from "./pdvSheetsWriter";
 
 // Sincroniza um produto atualizado na planilha (assíncrono, não bloqueia a resposta)
+// Usa updateProductRowInSheet para ATUALIZAR a linha existente (não adicionar nova linha)
 async function updateProductInSheetAsync(prod: any) {
-  // Usa appendProductToSheet para gravar os dados atualizados do produto
-  await appendProductToSheet({
+  await updateProductRowInSheet({
     codigo: prod.codigo,
-    linha: prod.linha || '',
-    modelo: prod.modelo || '',
-    time: prod.time || '',
-    descricao: prod.descricao || '',
-    tamanho: prod.tamanho || '',
-    tipo: prod.tipo || '',
     estoque: prod.estoque ?? 0,
     precoAtacado: prod.precoAtacado ?? 0,
     precoVarejo: prod.precoVarejo ?? 0,
-    isActive: prod.isActive === 1 || prod.isActive === true,
-    fotoUrl: prod.fotoUrl || '',
-    temporada: prod.temporada || '',
     ptAtacado: prod.ptAtacado ?? 0,
     ptVarejo: prod.ptVarejo ?? 0,
+    isActive: prod.isActive === 1 || prod.isActive === true,
   });
 }
 
