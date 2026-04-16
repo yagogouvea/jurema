@@ -286,8 +286,8 @@ export const pdvSiteSyncRouter = router({
       const params: any[] = [];
 
       if (input.search) {
-        conditions.push("(p.name LIKE ? OR p.reference LIKE ? OR p.team LIKE ? OR p.pdvCodigoBase LIKE ?)");
-        const s = `%${input.search}%`;
+        conditions.push("(LOWER(p.name) LIKE ? OR LOWER(p.reference) LIKE ? OR LOWER(p.team) LIKE ? OR LOWER(p.pdvCodigoBase) LIKE ?)");
+        const s = `%${input.search.toLowerCase()}%`;
         params.push(s, s, s, s);
       }
       if (input.isActive !== undefined) {
