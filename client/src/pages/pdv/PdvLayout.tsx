@@ -90,7 +90,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 md:p-6 space-y-1 md:space-y-2">
         {navItems.map((item: any) => {
           const active = isActive(item.href, item.exact);
           return (
@@ -98,7 +98,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
               key={item.href}
               href={item.href}
               onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              className={`flex items-center gap-3 px-4 py-3.5 md:py-4 rounded-xl text-sm md:text-base font-medium transition-all ${
                 active
                   ? "bg-green-700 text-white shadow-lg shadow-green-700/20"
                   : "text-gray-400 hover:text-white hover:bg-gray-800"
@@ -128,7 +128,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
         </div>
         <button
           onClick={() => logoutMutation.mutate()}
-          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-green-500 hover:bg-green-950/30 transition-all"
+          className="w-full flex items-center gap-3 px-4 py-3 md:py-3.5 rounded-xl text-sm md:text-base font-medium text-gray-400 hover:text-green-500 hover:bg-green-950/30 transition-all active:bg-green-950/50"
         >
           <LogOut className="w-4 h-4" />
           Sair
@@ -140,13 +140,13 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
   return (
     <div className="min-h-screen bg-gray-950 flex">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-64 bg-gray-900 border-r border-gray-800 flex-col flex-shrink-0">
+      <aside className="hidden xl:flex w-64 bg-gray-900 border-r border-gray-800 flex-col flex-shrink-0">
         <SidebarContent />
       </aside>
 
-      {/* Mobile Sidebar Overlay */}
+      {/* Mobile/Tablet Sidebar Overlay */}
       {sidebarOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
+        <div className="xl:hidden fixed inset-0 z-50 flex">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setSidebarOpen(false)}
@@ -165,21 +165,21 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Header */}
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-gray-900 border-b border-gray-800">
+        {/* Mobile/Tablet Header */}
+        <header className="xl:hidden flex items-center gap-3 px-4 py-4 bg-gray-900 border-b border-gray-800">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-gray-400 hover:text-white"
+            className="text-gray-400 hover:text-white active:text-green-500 p-2 -m-2 rounded-lg transition-colors"
           >
-            <Menu className="w-6 h-6" />
+            <Menu className="w-6 h-6 md:w-7 md:h-7" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-green-700 rounded-lg flex items-center justify-center">
-              <ShoppingBag className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 md:w-9 md:h-9 bg-green-700 rounded-lg flex items-center justify-center">
+              <ShoppingBag className="w-4 h-4 md:w-5 md:h-5 text-white" />
             </div>
-            <span className="text-white font-bold text-sm">JUREMA PDV</span>
+            <span className="text-white font-bold text-sm md:text-base">JUREMA PDV</span>
           </div>
-          <div className="ml-auto text-gray-400 text-sm">{seller.name}</div>
+          <div className="ml-auto text-gray-400 text-xs md:text-sm truncate">{seller.name}</div>
         </header>
 
         {/* Page Content */}

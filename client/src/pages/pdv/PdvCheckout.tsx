@@ -431,7 +431,7 @@ export default function PdvCheckout({
               <span>Dados do Cliente</span>
               <span className="text-xs text-red-400 font-normal">* obrigatório</span>
             </h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:gap-4 md:grid-cols-2">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Nome <span className="text-red-400">*</span></label>
                 <input
@@ -439,7 +439,7 @@ export default function PdvCheckout({
                   value={clienteNome}
                   onChange={(e) => setClienteNome(e.target.value)}
                   placeholder="Nome do cliente (obrigatório)"
-                  className={`w-full bg-gray-800 border rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none transition-colors ${
+                  className={`w-full bg-gray-800 border rounded-xl px-4 py-3 md:py-3.5 text-white text-sm md:text-base placeholder-gray-500 focus:outline-none transition-colors ${
                     !clienteNome.trim() ? "border-red-700 focus:border-red-500" : "border-gray-700 focus:border-green-600"
                   }`}
                 />
@@ -451,7 +451,7 @@ export default function PdvCheckout({
                   value={clienteTelefone}
                   onChange={(e) => setClienteTelefone(e.target.value)}
                   placeholder="(00) 00000-0000"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-600 transition-colors"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 md:py-3.5 text-white text-sm md:text-base placeholder-gray-500 focus:outline-none focus:border-green-600 transition-colors"
                 />
               </div>
             </div>
@@ -463,7 +463,7 @@ export default function PdvCheckout({
               <h3 className="text-white font-semibold">Serviços Extras</h3>
               <button
                 onClick={() => setShowAddService(!showAddService)}
-                className="text-green-500 hover:text-green-400 text-sm flex items-center gap-1 transition-colors"
+                className="text-green-500 hover:text-green-400 text-sm md:text-base flex items-center gap-1 transition-colors active:text-green-600 p-2 -m-2 rounded-lg"
               >
                 <Plus className="w-4 h-4" />
                 Adicionar
@@ -476,7 +476,7 @@ export default function PdvCheckout({
                   <select
                     value={newServiceTipo}
                     onChange={(e) => setNewServiceTipo(e.target.value)}
-                    className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
+                    className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-3 md:py-3.5 text-white text-sm md:text-base focus:outline-none focus:border-green-600"
                   >
                     {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -485,7 +485,7 @@ export default function PdvCheckout({
                     value={newServiceValor}
                     onChange={(e) => setNewServiceValor(e.target.value)}
                     placeholder="Valor"
-                    className="w-28 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
+                    className="w-32 md:w-40 bg-gray-700 border border-gray-600 rounded-lg px-3 py-3 md:py-3.5 text-white text-sm md:text-base focus:outline-none focus:border-green-600"
                   />
                 </div>
                 <input
@@ -493,7 +493,7 @@ export default function PdvCheckout({
                   value={newServiceDescricao}
                   onChange={(e) => setNewServiceDescricao(e.target.value)}
                   placeholder="Descrição (opcional)"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-3 md:py-3.5 text-white text-sm md:text-base focus:outline-none focus:border-green-600"
                 />
                 {newServiceTipo === "CORREIO" && (
                   <div>
@@ -507,14 +507,14 @@ export default function PdvCheckout({
                       }}
                       placeholder="CEP do destinatário *"
                       maxLength={9}
-                      className="w-full bg-gray-700 border border-orange-500 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-400 placeholder-orange-300/60"
+                      className="w-full bg-gray-700 border border-orange-500 rounded-lg px-3 py-3 md:py-3.5 text-white text-sm md:text-base focus:outline-none focus:border-orange-400 placeholder-orange-300/60"
                     />
                     <p className="text-orange-400 text-xs mt-1">CEP obrigatório para envio pelos Correios</p>
                   </div>
                 )}
                 <div className="flex gap-2">
-                  <button onClick={addService} className="flex-1 bg-green-700 hover:bg-green-800 text-white text-sm py-2 rounded-lg font-medium transition-colors">Adicionar</button>
-                  <button onClick={() => setShowAddService(false)} className="px-4 text-gray-400 hover:text-white text-sm py-2 rounded-lg transition-colors">Cancelar</button>
+                  <button onClick={addService} className="flex-1 bg-green-700 hover:bg-green-800 active:bg-green-900 text-white text-sm md:text-base py-3 md:py-3.5 rounded-lg font-medium transition-colors">Adicionar</button>
+                  <button onClick={() => setShowAddService(false)} className="px-4 md:px-6 text-gray-400 hover:text-white text-sm md:text-base py-3 md:py-3.5 rounded-lg transition-colors">Cancelar</button>
                 </div>
               </div>
             )}

@@ -758,3 +758,12 @@
 - [x] Vitest: 206/206 testes passando
 - [x] Dev server: rodando normalmente
 - [x] Sistema pronto para entrega ao cliente
+
+## v98 — Melhorias de usabilidade para tablets
+- [x] Melhorar PdvLayout.tsx: sidebar responsivo (xl:hidden para tablets), espaçamento aumentado (md:p-6), botões touch-friendly (py-3.5 em tablets)
+- [x] Melhorar PdvCheckout.tsx: inputs maiores em tablets (md:py-3.5, md:text-base), grid responsivo (md:gap-4), botões com active state
+- [x] Aumentar padding e espaçamento em formulários para melhor usabilidade em touch
+- [x] Adicionar classes active: para feedback visual em toque
+- [x] Melhorar select e inputs com tamanhos maiores em tablets
+- [x] Todos os testes passando (206/206)
+- [x] TypeScript sem erros
