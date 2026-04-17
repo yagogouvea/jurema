@@ -502,7 +502,7 @@ export default function PdvMain() {
                       {time}
                       <span className="text-gray-600">({timeGroups.length} modelo{timeGroups.length !== 1 ? "s" : ""})</span>
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
                       {timeGroups.map((group) => (
                         <GroupedProductCard
                           key={group.baseCode}
@@ -799,10 +799,10 @@ function GroupedProductCard({
       aria-disabled={semEstoque}
       onClick={() => !semEstoque && onSelect(group)}
       onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !semEstoque) onSelect(group); }}
-      className={`w-full text-left bg-gray-800 border rounded-xl p-3 transition-all group ${
+      className={`w-full text-left bg-gray-800 border rounded-xl p-3 md:p-4 transition-all group ${
         semEstoque
           ? "border-gray-700 opacity-60 cursor-not-allowed"
-          : "border-gray-700 hover:border-green-600 hover:bg-gray-750 cursor-pointer"
+          : "border-gray-700 hover:border-green-600 hover:bg-gray-750 cursor-pointer active:border-green-500 active:bg-gray-700"
       }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -817,22 +817,22 @@ function GroupedProductCard({
             />
           </div>
           <div className="min-w-0">
-            <div className="text-white font-semibold text-sm truncate">{group.time}</div>
-            <div className="text-gray-400 text-xs">
+            <div className="text-white font-semibold text-sm md:text-base truncate">{group.time}</div>
+            <div className="text-gray-400 text-xs md:text-sm">
               {group.linha} · {group.modelo}
               {group.descricao ? ` · ${group.descricao}` : ""}
             </div>
           </div>
         </div>
         <div className="text-right flex-shrink-0">
-          <div className="text-white font-bold text-sm">
+          <div className="text-white font-bold text-sm md:text-base">
             {precoVaria
               ? `R$ ${minPreco.toFixed(2).replace(".", ",")}+`
               : `R$ ${precoAtual.toFixed(2).replace(".", ",")}`
             }
           </div>
           {regime === "ATACADO" && group.precoVarejo > 0 && (
-            <div className="text-gray-500 text-xs line-through">
+            <div className="text-gray-500 text-xs md:text-sm line-through">
               R$ {group.precoVarejo.toFixed(2).replace(".", ",")}
             </div>
           )}
@@ -844,7 +844,7 @@ function GroupedProductCard({
         {tamanhos.slice(0, 8).map(t => (
           <span
             key={t}
-            className="text-xs px-1.5 py-0.5 bg-gray-700 text-gray-300 rounded font-medium"
+            className="text-xs md:text-sm px-2 md:px-2.5 py-0.5 md:py-1 bg-gray-700 text-gray-300 rounded font-medium"
           >
             {t}
           </span>

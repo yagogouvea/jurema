@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
+import { useSwipeGesture } from "@/hooks/useSwipeGesture";
 import { toast } from "sonner";
+
 import {
   ShoppingBag, History, Users, LogOut,
   ChevronRight, Menu, X, BarChart2, Settings, TrendingUp, Bell,
@@ -17,7 +19,15 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
   const [location, navigate] = useLocation();
   const { seller, isAdmin, isLoading } = usePdvAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const mainContentRef = useRef<HTMLDivElement | null>(null);
   const utils = trpc.useUtils();
+
+  // Swipe gesture para abrir/fechar sidebar
+  useSwipeGesture(mainContentRef, {
+    onSwipeRight: () => setSidebarOpen(true),
+    onSwipeLeft: () => setSidebarOpen(false),
+    threshold: 40
+  });
 
   const logoutMutation = trpc.pdvAuth.logout.useMutation({
     onSuccess: () => {
@@ -164,7 +174,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div ref={mainContentRef} className="flex-1 flex flex-col min-w-0">
         {/* Mobile/Tablet Header */}
         <header className="xl:hidden flex items-center gap-3 px-4 py-4 bg-gray-900 border-b border-gray-800">
           <button

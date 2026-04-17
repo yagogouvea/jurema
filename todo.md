@@ -767,3 +767,12 @@
 - [x] Melhorar select e inputs com tamanhos maiores em tablets
 - [x] Todos os testes passando (206/206)
 - [x] TypeScript sem erros
+
+## v99 — Grid responsivo e gestos touch (swipe)
+- [x] Implementar grid responsivo em PdvMain.tsx: 1 coluna mobile, 2 tablets, 3+ desktop
+- [x] Aumentar tamanho de cards de produtos em tablets (md:p-4, md:text-base)
+- [x] Adicionar feedback visual em toque (active:border-green-500 active:bg-gray-700)
+- [x] Criar hook customizado useSwipeGesture para detectar gestos touch
+- [x] Implementar swipe para abrir/fechar sidebar (swipe right abre, swipe left fecha)
+- [x] Todos os testes passando (206/206)
+- [x] TypeScript sem erros
