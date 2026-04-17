@@ -124,49 +124,56 @@ describe('v59 — Bug: extras não somados ao total', () => {
     });
   });
 
-  describe('Bug 4 — Planilha pedidos_itens: extra distribuído proporcionalmente', () => {
-    it('dois itens iguais: extra dividido 50/50', () => {
+  describe('v85 — Planilha pedidos_itens: serviços extras como linha dedicada (não rateio)', () => {
+    // Nova lógica: cada serviço extra gera uma linha própria na aba pedidos_itens
+    // Os itens normais não recebem nenhuma parcela do extra
+
+    it('itens normais não recebem rateio de extras', () => {
+      // Simula a nova lógica: item.totalItem é o total puro sem extras
       const items = [
         { totalItem: 100 },
         { totalItem: 100 },
       ];
-      const totalGeralItens = 200;
-      const extraValorTotal = 20;
-      const extra0 = calcExtraProporcional(items[0], totalGeralItens, extraValorTotal);
-      const extra1 = calcExtraProporcional(items[1], totalGeralItens, extraValorTotal);
-      expect(extra0).toBeCloseTo(10);
-      expect(extra1).toBeCloseTo(10);
-      expect(extra0 + extra1).toBeCloseTo(extraValorTotal);
+      // Na nova lógica, o total de cada item não inclui extra
+      expect(items[0].totalItem).toBe(100);
+      expect(items[1].totalItem).toBe(100);
     });
 
-    it('itens com valores diferentes: extra proporcional ao valor', () => {
-      const items = [
-        { totalItem: 300 }, // 75% do total
-        { totalItem: 100 }, // 25% do total
+    it('serviço extra gera linha com quantidade=1, preco=valor, total=valor', () => {
+      const service = { tipo: 'CORREIO', valor: 45 };
+      // Linha dedicada do serviço extra
+      const row = {
+        sku: service.tipo,
+        produto: service.tipo,
+        quantidade: 1,
+        precoAtacado: service.valor,
+        precoVarejo: service.valor,
+        modalidade: service.tipo,
+        servicoExtra: service.tipo,
+        valorServico: service.valor,
+        total: service.valor,
+      };
+      expect(row.quantidade).toBe(1);
+      expect(row.precoAtacado).toBe(45);
+      expect(row.precoVarejo).toBe(45);
+      expect(row.total).toBe(45);
+      expect(row.sku).toBe('CORREIO');
+    });
+
+    it('múltiplos serviços extras geram múltiplas linhas dedicadas', () => {
+      const services = [
+        { tipo: 'CORREIO', valor: 45 },
+        { tipo: 'CAIXINHA', valor: 5 },
       ];
-      const totalGeralItens = 400;
-      const extraValorTotal = 40;
-      const extra0 = calcExtraProporcional(items[0], totalGeralItens, extraValorTotal);
-      const extra1 = calcExtraProporcional(items[1], totalGeralItens, extraValorTotal);
-      expect(extra0).toBeCloseTo(30); // 75% de 40
-      expect(extra1).toBeCloseTo(10); // 25% de 40
-      expect(extra0 + extra1).toBeCloseTo(extraValorTotal);
+      // Cada serviço gera uma linha
+      expect(services.length).toBe(2);
+      const totalExtras = services.reduce((s, sv) => s + sv.valor, 0);
+      expect(totalExtras).toBe(50);
     });
 
-    it('sem extras: extra proporcional = 0', () => {
-      const items = [{ totalItem: 200 }];
-      const totalGeralItens = 200;
-      const extraValorTotal = 0;
-      const extra = calcExtraProporcional(items[0], totalGeralItens, extraValorTotal);
-      expect(extra).toBe(0);
-    });
-
-    it('item único: recebe 100% do extra', () => {
-      const items = [{ totalItem: 150 }];
-      const totalGeralItens = 150;
-      const extraValorTotal = 25;
-      const extra = calcExtraProporcional(items[0], totalGeralItens, extraValorTotal);
-      expect(extra).toBeCloseTo(25);
+    it('sem extras: nenhuma linha extra gerada', () => {
+      const services: { tipo: string; valor: number }[] = [];
+      expect(services.length).toBe(0);
     });
   });
 

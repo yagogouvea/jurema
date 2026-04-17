@@ -439,7 +439,7 @@ export async function updateProductRowInSheet(product: {
 /**
  * Grava os itens de um pedido na aba pedidos_itens da planilha
  *
- * Colunas (13 no total):
+ * Colunas (12 no total):
  * A: pedido_id
  * B: cod (SKU)
  * C: produto (Linha Modelo Time Descrição Tamanho Tipo)
@@ -449,10 +449,11 @@ export async function updateProductRowInSheet(product: {
  * G: subtotal_atacado (preco_atacado × quantidade)
  * H: subtotal_varejo (preco_varejo × quantidade)
  * I: modalidade usada (Atacado | Varejo)
- * J: preco_utilizado (subtotal na modalidade escolhida)
- * K: serviço extra (tipo/descrição)
- * L: valor serviço extra (R$)
- * M: TOTAL (preco_utilizado + valor serviço extra)
+ * J: serviço extra (tipo/descrição) — vazio para itens normais; tipo do serviço para linha de extra
+ * K: valor serviço extra (R$) — vazio para itens normais; valor do serviço para linha de extra
+ * L: TOTAL (subtotal na modalidade para itens normais; valor do serviço para linha de extra)
+ *
+ * NOTA: Serviços extras são gravados como linhas dedicadas ao final (não rateados entre itens).
  */
 export async function appendOrderItemsToSheet(params: {
   pedidoId: string;
@@ -475,15 +476,10 @@ export async function appendOrderItemsToSheet(params: {
 }): Promise<boolean> {
   try {
     const { pedidoId, regime, services, items } = params;
+    const modalidade = regime === 'ATACADO' ? 'Atacado' : 'Varejo';
 
-    // Serviços extras: tipo(s) e valor total
-    const extraTipos = services.map(s => s.tipo).join(', ');
-    const extraValorTotal = services.reduce((sum, s) => sum + s.valor, 0);
-    // Total geral dos itens para distribuição proporcional
-    const totalGeralItens = items.reduce((sum, i) => sum + i.totalItem, 0);
-
-    const rows = items.map(item => {
-      // Descrição completa: Linha Modelo Time Descrição Tamanho Tipo
+    // ── Linhas dos itens normais (sem rateio de extras) ──
+    const itemRows = items.map(item => {
       const descParts = [
         item.linha || '',
         item.modelo || '',
@@ -494,40 +490,49 @@ export async function appendOrderItemsToSheet(params: {
       ].filter(Boolean);
       const produtoDesc = descParts.join(' ');
 
-      // Preços unitários (por unidade, não subtotal)
       const precoAtacadoUnit = item.precoAtacado ?? item.precoUnitario;
       const precoVarejoUnit = item.precoVarejo ?? item.precoUnitario;
-
-      // Subtotais (preço unitário × quantidade)
       const subtotalAtacado = precoAtacadoUnit * item.quantidade;
       const subtotalVarejo = precoVarejoUnit * item.quantidade;
-
-      const modalidade = regime === 'ATACADO' ? 'Atacado' : 'Varejo';
-      // preco_utilizado = subtotal na modalidade escolhida
-      const precoUtilizado = regime === 'ATACADO' ? subtotalAtacado : subtotalVarejo;
-      // Distribuir extra proporcionalmente ao valor do item (não dividir por nº de itens)
-      const proporcao = totalGeralItens > 0 ? item.totalItem / totalGeralItens : 0;
-      const extraProporcional = extraValorTotal * proporcao;
-      const totalComExtra = precoUtilizado + extraProporcional;
+      const totalItem = regime === 'ATACADO' ? subtotalAtacado : subtotalVarejo;
 
       return [
-        pedidoId,                                                    // A: pedido_id
-        item.codigo || '',                                           // B: cod (SKU)
-        produtoDesc,                                                 // C: produto
-        item.quantidade,                                             // D: quantidade (número)
-        parseFloat(precoAtacadoUnit.toFixed(2)),                     // E: preco_atacado (número)
-        parseFloat(precoVarejoUnit.toFixed(2)),                      // F: preco_varejo (número)
-        parseFloat(subtotalAtacado.toFixed(2)),                      // G: subtotal_atacado (número)
-        parseFloat(subtotalVarejo.toFixed(2)),                       // H: subtotal_varejo (número)
-        modalidade,                                                  // I: modalidade usada
-        parseFloat(precoUtilizado.toFixed(2)),                       // J: preco_utilizado (número)
-        extraTipos || '',                                            // K: serviço extra
-        extraProporcional > 0 ? parseFloat(extraProporcional.toFixed(2)) : '', // L: valor serviço extra (número)
-        parseFloat(totalComExtra.toFixed(2)),                        // M: TOTAL (número)
+        pedidoId,                                         // A: pedido_id
+        item.codigo || '',                                // B: cod (SKU)
+        produtoDesc,                                      // C: produto
+        item.quantidade,                                  // D: quantidade
+        parseFloat(precoAtacadoUnit.toFixed(2)),          // E: preco_atacado
+        parseFloat(precoVarejoUnit.toFixed(2)),           // F: preco_varejo
+        parseFloat(subtotalAtacado.toFixed(2)),           // G: subtotal_atacado
+        parseFloat(subtotalVarejo.toFixed(2)),            // H: subtotal_varejo
+        modalidade,                                       // I: modalidade usada
+        '',                                               // J: serviço extra (vazio para itens normais)
+        '',                                               // K: valor serviço extra (vazio para itens normais)
+        parseFloat(totalItem.toFixed(2)),                 // L: TOTAL
       ];
     });
 
-    return await appendToSheet(`${ITEMS_SHEET}!A:M`, rows);
+    // ── Linhas dedicadas para cada serviço extra ──
+    const serviceRows = services.map(service => {
+      const valorFmt = parseFloat(service.valor.toFixed(2));
+      return [
+        pedidoId,                   // A: pedido_id
+        service.tipo,               // B: cod (SKU) = tipo do serviço
+        service.tipo,               // C: produto = tipo do serviço
+        1,                          // D: quantidade = 1
+        valorFmt,                   // E: preco_atacado = valor do serviço
+        valorFmt,                   // F: preco_varejo = valor do serviço
+        valorFmt,                   // G: subtotal_atacado = valor do serviço
+        valorFmt,                   // H: subtotal_varejo = valor do serviço
+        service.tipo,               // I: modalidade = tipo do serviço
+        service.tipo,               // J: serviço extra = tipo do serviço
+        valorFmt,                   // K: valor serviço extra = valor do serviço
+        valorFmt,                   // L: TOTAL = valor do serviço
+      ];
+    });
+
+    const allRows = [...itemRows, ...serviceRows];
+    return await appendToSheet(`${ITEMS_SHEET}!A:L`, allRows);
   } catch (err) {
     console.error('[SheetsWriter] appendOrderItemsToSheet error:', err);
     return false;

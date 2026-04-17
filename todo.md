@@ -666,3 +666,11 @@
 - [x] Aba PEDIDOS: coluna V "JUSTIFICATIVA <6" adicionada (cabeçalho V1 atualizado na planilha)
 - [x] appendOrderToSheet: passa justificativaAtacado na coluna V quando regime=ATACADO e peças<6
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v85 — Serviços extras como linha dedicada em pedidos_itens + Correio no update
+- [x] Endpoint updateStatus não recebe services (apenas status); validação Correio já coberta no create
+- [x] appendOrderItemsToSheet: removido rateio proporcional de extras entre itens
+- [x] appendOrderItemsToSheet: cada serviço extra gera linha dedicada (SKU=tipo, qtd=1, precoAtacado=precoVarejo=valor, modalidade=tipo, total=valor)
+- [x] Coluna J "preco_utilizado" removida; nova estrutura 12 colunas (A-L)
+- [x] Cabeçalhos da aba pedidos_itens atualizados na planilha Google Sheets
+- [x] 206/206 testes passando, zero erros TypeScript
