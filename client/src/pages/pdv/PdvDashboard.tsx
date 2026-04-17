@@ -289,7 +289,7 @@ export default function PdvDashboard() {
                   {bySeller.map(s => {
                     const pt = parseFloat(s.pontuacao || "0");
                     const goal = getGoalLevel(pt);
-                    const pct = Math.min(100, (pt / ouro) * 100);
+                    const pct = ouro > 0 ? Math.min(100, (pt / ouro) * 100) : 0;
                     return (
                       <div key={s.sellerName}>
                         <div className="flex items-center justify-between text-xs mb-1">
@@ -416,7 +416,7 @@ export default function PdvDashboard() {
           <div className="h-4 bg-gray-800 rounded-full overflow-hidden mb-3">
             <div
               className="h-full bg-gradient-to-r from-green-700 to-green-500 rounded-full transition-all"
-              style={{ width: `${Math.min(100, (pontuacaoLoja / metaLoja) * 100)}%` }}
+              style={{ width: `${metaLoja > 0 ? Math.min(100, (pontuacaoLoja / metaLoja) * 100) : 0}%` }}
             />
           </div>
           <div className="grid grid-cols-4 gap-3">

@@ -51,6 +51,8 @@ interface SheetProduct {
   precoAtacado: number;
   precoVarejo: number;
   isActive: number;
+  ptAtacado?: number;
+  ptVarejo?: number;
 }
 
 // Buscar, validar e DEDUPLICAR dados da planilha
@@ -119,6 +121,11 @@ async function fetchSheetData(apiKey: string): Promise<{
     }
 
     const ativo = row[10]?.toString().toUpperCase().trim();
+    // Colunas N (13) = PT ATAC e O (14) = PT VAR — opcionais
+    const ptAtacadoRaw = row[13]?.toString().trim();
+    const ptVarejoRaw = row[14]?.toString().trim();
+    const ptAtacado = ptAtacadoRaw ? parseFloat(ptAtacadoRaw.replace(',', '.')) : 0;
+    const ptVarejo = ptVarejoRaw ? parseFloat(ptVarejoRaw.replace(',', '.')) : 0;
     validRaw.push({
       codigo: row[0].trim(),
       linha: norm(row[1]),
@@ -130,6 +137,8 @@ async function fetchSheetData(apiKey: string): Promise<{
       precoAtacado: atc,
       precoVarejo: varejo,
       isActive: ativo === "SIM" || ativo === "1" || ativo === "TRUE" ? 1 : 0,
+      ptAtacado: isNaN(ptAtacado) ? 0 : ptAtacado,
+      ptVarejo: isNaN(ptVarejo) ? 0 : ptVarejo,
     });
   }
 
@@ -153,6 +162,9 @@ async function fetchSheetData(apiKey: string): Promise<{
         precoVarejo: Math.max(existing.precoVarejo, p.precoVarejo),
         // Se qualquer uma estiver ativa, manter ativo
         isActive: existing.isActive || p.isActive ? 1 : 0,
+        // Manter a maior pontuação entre as duplicatas
+        ptAtacado: Math.max(existing.ptAtacado ?? 0, p.ptAtacado ?? 0),
+        ptVarejo: Math.max(existing.ptVarejo ?? 0, p.ptVarejo ?? 0),
       });
     } else {
       deduped.set(p.codigo, { ...p });
@@ -318,24 +330,26 @@ export const pdvSyncRouter = router({
       for (let i = 0; i < valid.length; i += CHUNK_SIZE) {
         const chunk = valid.slice(i, i + CHUNK_SIZE);
         try {
-          const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())").join(", ");
+          const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())").join(", ");
           const values: any[] = [];
           for (const p of chunk) {
             values.push(
               p.codigo, p.linha, p.modelo, p.time, p.descricao,
-              p.tamanho, p.estoque, p.precoAtacado, p.precoVarejo, p.isActive
+              p.tamanho, p.estoque, p.precoAtacado, p.precoVarejo, p.isActive,
+              p.ptAtacado ?? 0, p.ptVarejo ?? 0
             );
           }
 
           await db.execute(
             `INSERT INTO pdv_products
-              (codigo, linha, modelo, \`time\`, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, createdAt, updatedAt)
+              (codigo, linha, modelo, \`time\`, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, ptAtacado, ptVarejo, createdAt, updatedAt)
              VALUES ${placeholders}
              ON DUPLICATE KEY UPDATE
                linha=VALUES(linha), modelo=VALUES(modelo), \`time\`=VALUES(\`time\`),
                descricao=VALUES(descricao), tamanho=VALUES(tamanho),
                estoque=VALUES(estoque), precoAtacado=VALUES(precoAtacado),
                precoVarejo=VALUES(precoVarejo), isActive=VALUES(isActive),
+               ptAtacado=VALUES(ptAtacado), ptVarejo=VALUES(ptVarejo),
                updatedAt=NOW()`,
             values
           );
@@ -443,6 +457,8 @@ export const pdvSyncRouter = router({
         precoAtacado: z.number().default(0),
         precoVarejo: z.number().default(0),
         isActive: z.boolean().default(true),
+        ptAtacado: z.number().default(0),
+        ptVarejo: z.number().default(0),
       }),
     }))
     .mutation(async ({ input }) => {
@@ -481,13 +497,14 @@ export const pdvSyncRouter = router({
           // Produto novo — inserir
           await db.execute(
             `INSERT INTO pdv_products
-             (codigo, linha, modelo, \`time\`, descricao, tamanho, tipo, estoque, precoAtacado, precoVarejo, isActive, createdAt, updatedAt)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+             (codigo, linha, modelo, \`time\`, descricao, tamanho, tipo, estoque, precoAtacado, precoVarejo, isActive, ptAtacado, ptVarejo, createdAt, updatedAt)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
             [
               input.product.codigo, input.product.linha, input.product.modelo,
               input.product.time, input.product.descricao, input.product.tamanho,
               input.product.tipo, input.product.estoque, input.product.precoAtacado,
-              input.product.precoVarejo, input.product.isActive ? 1 : 0
+              input.product.precoVarejo, input.product.isActive ? 1 : 0,
+              input.product.ptAtacado ?? 0, input.product.ptVarejo ?? 0
             ]
           );
           await db.end();
@@ -528,6 +545,7 @@ export const pdvSyncRouter = router({
         estoque: 'estoque', precoAtacado: 'precoAtacado', precoVarejo: 'precoVarejo',
         descricao: 'descricao', isActive: 'isActive', linha: 'linha',
         modelo: 'modelo', time: '`time`', tamanho: 'tamanho', tipo: 'tipo',
+        ptAtacado: 'ptAtacado', ptVarejo: 'ptVarejo',
       };
       
       const dbField = allowedFields[input.field];

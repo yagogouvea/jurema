@@ -700,3 +700,11 @@
 - [x] appendOrderToSheet: coluna G "cep" na aba PEDIDOS (ao lado do telefone F)
 - [x] Cabeçalhos da aba PEDIDOS atualizados (A:W = 23 colunas) via API Google Sheets
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v89 — Correções da Validação Geral (v82–v88)
+- [x] pdvSync.ts: ler colunas N (PT_ATAC) e O (PT_VAR) da planilha e salvar no banco durante sincronização
+- [x] pdvSync.ts: incluir ptAtacado e ptVarejo no INSERT/ON DUPLICATE KEY UPDATE (sincronização em lote)
+- [x] pdvSync.ts: webhookNewProduct inclui ptAtacado/ptVarejo no INSERT e no schema Zod
+- [x] pdvSync.ts: webhookUpdateProduct aceita ptAtacado/ptVarejo como campos permitidos
+- [x] Barra de progresso: proteção contra divisão por zero em PdvDashboard e PdvMain
+- [x] 206/206 testes passando, zero erros TypeScript

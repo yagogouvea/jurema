@@ -356,7 +356,7 @@ export default function PdvMain() {
                   : pontuacao < (goals.OURO || 0)
                     ? { label: 'Ouro', value: goals.OURO || 0, color: 'bg-yellow-400' }
                     : null;
-              const progressValue = nextMeta
+              const progressValue = nextMeta && nextMeta.value > 0
                 ? Math.min(100, (pontuacao / nextMeta.value) * 100)
                 : 100;
               const metaLabel = myProgress.metaAtingida
