@@ -744,3 +744,9 @@
 - [x] 14/14 itens atualizados (todos os itens históricos tinham ptAtacado=0)
 - [x] Resultado: 0 itens zerados, 14 com pontos, 339 PT total acumulado
 - [x] Top pedidos: VANESSA VAREJO 190PT, VANESSA ATACADO 108PT, FLAVIO ATACADO 51PT
+
+## v95 — Meu Perfil com layout padrão do PDV (menu lateral)
+- [x] PdvMeuPerfil.tsx agora envolve todo o conteúdo com PdvLayout (menu lateral igual às demais páginas)
+- [x] Removido o wrapper div min-h-screen bg-gray-950 que duplicava o fundo — agora usa apenas o padding interno p-4 md:p-6
+- [x] Menu lateral aparece em desktop e hambúrguer no mobile, igual a PdvHistorico, PdvDashboard, etc.
+- [x] 206/206 testes passando, zero erros TypeScript
