@@ -721,3 +721,13 @@
 - [x] pdvOrders.ts: coluna V (justificativa_atac_menos6) recebe apenas quando isAtacadoMenos6=true
 - [x] Os dois casos são mutuamente exclusivos na UI (campos separados por isPendente)
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v92 — Perfil do vendedor: barra de metas + histórico com pontos
+- [x] Backend: endpoint getMyHistory com pontuação, peças, bônus e paginação por vendedor logado
+- [x] Frontend: página PdvMeuPerfil.tsx com cards de resumo (PT, peças, faturamento)
+- [x] Barra de progresso animada com marcadores Bronze/Prata/Ouro e mensagem de faltam X PT
+- [x] Histórico: tabela desktop + cards mobile com colunas pedidoId, data, cliente, regime, peças, pontos, bônus, total, status
+- [x] Filtro por período (data inicial/final) com paginação (15 por página)
+- [x] Rota /pdv/meu-perfil adicionada no PdvLayout (menu lateral) e App.tsx
+- [x] Cada vendedor vê apenas seus próprios dados (requirePdvAuth filtra por sellerId)
+- [x] 206/206 testes passando, zero erros TypeScript

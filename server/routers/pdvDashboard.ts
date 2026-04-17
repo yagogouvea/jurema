@@ -424,4 +424,75 @@ export const pdvDashboardRouter = router({
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     }
   }),
+
+  // Histórico de vendas do vendedor logado com pontuação por pedido
+  getMyHistory: publicProcedure
+    .input(z.object({
+      page: z.number().default(1),
+      limit: z.number().default(20),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    }))
+    .query(async ({ input, ctx }) => {
+      const seller = await requirePdvAuth(ctx);
+      const db = await getDb();
+      if (!db) return { orders: [], total: 0, pages: 0 };
+      try {
+        const params: any[] = [seller.sellerId];
+        let dateFilter = '';
+        if (input.startDate) { dateFilter += ' AND DATE(o.createdAt) >= ?'; params.push(input.startDate); }
+        if (input.endDate) { dateFilter += ' AND DATE(o.createdAt) <= ?'; params.push(input.endDate); }
+
+        const countParams = [...params];
+        const [countRows] = await db.execute(
+          `SELECT COUNT(*) as total FROM pdv_orders o WHERE o.sellerId = ? AND o.isSofia = 0 AND o.status != 'CANCELADO'${dateFilter}`,
+          countParams
+        );
+        const total = (countRows as any[])[0].total;
+        const pages = Math.ceil(total / input.limit);
+        const offset = (input.page - 1) * input.limit;
+
+        const [rows] = await db.execute(
+          `SELECT
+            o.pedidoId,
+            o.createdAt,
+            o.clienteNome,
+            o.regime,
+            o.status,
+            o.totalAplicado,
+            COALESCE(SUM(oi.quantidade), 0) as totalPecas,
+            COALESCE(SUM(
+              CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
+                   ELSE oi.ptVarejo * oi.quantidade END
+            ), 0) as pontuacao,
+            COALESCE(SUM(oi.comissaoUnitaria * oi.quantidade), 0) as bonusTotal
+          FROM pdv_orders o
+          LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+          WHERE o.sellerId = ? AND o.isSofia = 0 AND o.status != 'CANCELADO'${dateFilter}
+          GROUP BY o.pedidoId, o.createdAt, o.clienteNome, o.regime, o.status, o.totalAplicado
+          ORDER BY o.createdAt DESC
+          LIMIT ${input.limit} OFFSET ${offset}`,
+          params
+        );
+        await db.end();
+        return {
+          orders: (rows as any[]).map(r => ({
+            pedidoId: r.pedidoId,
+            createdAt: r.createdAt,
+            clienteNome: r.clienteNome,
+            regime: r.regime,
+            status: r.status,
+            totalAplicado: parseFloat(r.totalAplicado || '0'),
+            totalPecas: parseInt(r.totalPecas || '0'),
+            pontuacao: parseFloat(r.pontuacao || '0'),
+            bonusTotal: parseFloat(r.bonusTotal || '0'),
+          })),
+          total,
+          pages,
+        };
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      }
+    }),
 });

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   ShoppingBag, History, Users, LogOut,
   ChevronRight, Menu, X, BarChart2, Settings, TrendingUp, Bell,
-  Package, Wallet, FileText, PlusSquare, Globe
+  Package, Wallet, FileText, PlusSquare, Globe, UserCircle
 } from "lucide-react";
 
 interface PdvLayoutProps {
@@ -55,6 +55,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
     { href: "/pdv", icon: ShoppingBag, label: "PDV", exact: true },
     { href: "/pdv/historico", icon: History, label: "Histórico" },
     { href: "/pdv/comissoes", icon: TrendingUp, label: "Bônus" },
+    { href: "/pdv/meu-perfil", icon: UserCircle, label: "Meu Perfil" },
     ...(isAdmin ? [
       { href: "/pdv/dashboard", icon: BarChart2, label: "Dashboard" },
       { href: "/pdv/vendedores", icon: Users, label: "Vendedores" },
