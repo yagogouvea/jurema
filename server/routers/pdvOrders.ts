@@ -59,9 +59,13 @@ const OrderServiceSchema = z.object({
   tipo: z.string(),
   descricao: z.string().optional(),
   valor: z.number().min(0),
+  cep: z.string().optional(),
 }).refine(
   (s) => !(s.tipo === 'CORREIO' && s.valor < 45),
   { message: 'O valor mínimo para Correio é R$ 45,00', path: ['valor'] }
+).refine(
+  (s) => !(s.tipo === 'CORREIO' && (!s.cep || s.cep.replace(/\D/g, '').length !== 8)),
+  { message: 'CEP obrigatório para Correio', path: ['cep'] }
 );
 
 export const pdvOrdersRouter = router({
@@ -173,9 +177,9 @@ export const pdvOrdersRouter = router({
         // Insert services
         for (const service of input.services) {
           await db.execute(
-            `INSERT INTO pdv_order_services (pedidoId, tipo, descricao, valor)
-             VALUES (?, ?, ?, ?)`,
-            [pedidoId, service.tipo, service.descricao || null, service.valor]
+            `INSERT INTO pdv_order_services (pedidoId, tipo, descricao, valor, cep)
+             VALUES (?, ?, ?, ?, ?)`,
+            [pedidoId, service.tipo, service.descricao || null, service.valor, service.cep || null]
           );
         }
         
@@ -269,6 +273,8 @@ export const pdvOrdersRouter = router({
               // Verificar se é atacado com menos de 6 peças (para coluna V da aba PEDIDOS)
               const totalPecasOrder = normalItems.reduce((sum, item) => sum + item.quantidade, 0);
               const isAtacadoMenos6Order = input.regime === 'ATACADO' && totalPecasOrder < 6;
+              // Extrair CEP do serviço Correio (se houver)
+              const correioService = input.services.find(s => s.tipo === 'CORREIO');
               await appendOrderToSheet({
                 pedidoId,
                 createdAt: new Date(),
@@ -276,6 +282,7 @@ export const pdvOrdersRouter = router({
                 canal: input.canal,
                 clienteNome: input.clienteNome,
                 clienteTelefone: input.clienteTelefone,
+                cepCorreio: correioService?.cep || null,
                 totalVarejo: totalVarejoNormal,
                 totalAtacado: totalAtacadoNormal,
                 regime: input.regime,

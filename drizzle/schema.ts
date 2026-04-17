@@ -310,6 +310,7 @@ export const pdvOrderServices = mysqlTable("pdv_order_services", {
   tipo: varchar("tipo", { length: 100 }).notNull(), // CORREIO, CARRETO, CAIXINHA, etc.
   descricao: varchar("descricao", { length: 255 }),
   valor: decimal("valor", { precision: 10, scale: 2 }).notNull(),
+  cep: varchar("cep", { length: 10 }), // CEP do destinatário (obrigatório para CORREIO)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

@@ -691,3 +691,12 @@
 - [x] PDV: comissão → bônus em PdvComissoes, PdvConfiguracoes, PdvLayout, PdvRelatorio, PdvSofia, PdvCheckout
 - [x] Planilha: coluna M mantida como "comissao" (campo técnico interno, não visível ao usuário)
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v88 — CEP obrigatório para Correio
+- [x] PdvCheckout: campo CEP com máscara 99999-999 e borda laranja ao selecionar CORREIO
+- [x] Validação CEP no frontend (8 dígitos) e no backend (Zod refine)
+- [x] Coluna cep na tabela pdv_order_services (migration 0013 aplicada)
+- [x] CEP exibido na lista de serviços (laranja) e na mensagem WhatsApp
+- [x] appendOrderToSheet: coluna G "cep" na aba PEDIDOS (ao lado do telefone F)
+- [x] Cabeçalhos da aba PEDIDOS atualizados (A:W = 23 colunas) via API Google Sheets
+- [x] 206/206 testes passando, zero erros TypeScript

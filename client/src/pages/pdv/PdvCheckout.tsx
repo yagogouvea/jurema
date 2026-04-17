@@ -26,6 +26,7 @@ interface ServiceItem {
   tipo: string;
   descricao?: string;
   valor: number;
+  cep?: string;
 }
 
 interface PaymentItem {
@@ -82,6 +83,7 @@ export default function PdvCheckout({
   const [newServiceTipo, setNewServiceTipo] = useState("CORREIO");
   const [newServiceDescricao, setNewServiceDescricao] = useState("");
   const [newServiceValor, setNewServiceValor] = useState("");
+  const [newServiceCep, setNewServiceCep] = useState("");
   const [newPaymentMethod, setNewPaymentMethod] = useState<typeof PAYMENT_METHODS[number]["key"]>("PIX");
   const [newPaymentValor, setNewPaymentValor] = useState("");
   const [newPaymentNomePix, setNewPaymentNomePix] = useState("");
@@ -158,7 +160,7 @@ export default function PdvCheckout({
     if (services.length > 0) {
       lines.push(``, `*SERVIÇOS:*`);
       services.forEach(s => {
-        lines.push(`${s.tipo}${s.descricao ? ` (${s.descricao})` : ""}: R$ ${fmt(s.valor)}`);
+        lines.push(`${s.tipo}${s.descricao ? ` (${s.descricao})` : ""}${s.cep ? ` - CEP: ${s.cep}` : ""}: R$ ${fmt(s.valor)}`);
       });
     }
 
@@ -189,9 +191,19 @@ export default function PdvCheckout({
       toast.error("O valor mínimo para Correio é R$ 45,00");
       return;
     }
-    setServices(prev => [...prev, { tipo: newServiceTipo, descricao: newServiceDescricao || undefined, valor }]);
+    // Regra: Correio requer CEP
+    if (newServiceTipo === "CORREIO") {
+      const cepLimpo = newServiceCep.replace(/\D/g, '');
+      if (cepLimpo.length !== 8) {
+        toast.error("CEP obrigatório para Correio (8 dígitos)");
+        return;
+      }
+    }
+    const cepFormatado = newServiceTipo === "CORREIO" ? newServiceCep.replace(/\D/g, '').replace(/(\d{5})(\d{3})/, '$1-$2') : undefined;
+    setServices(prev => [...prev, { tipo: newServiceTipo, descricao: newServiceDescricao || undefined, valor, cep: cepFormatado }]);
     setNewServiceValor("");
     setNewServiceDescricao("");
+    setNewServiceCep("");
     setShowAddService(false);
   };
 
@@ -483,6 +495,23 @@ export default function PdvCheckout({
                   placeholder="Descrição (opcional)"
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
                 />
+                {newServiceTipo === "CORREIO" && (
+                  <div>
+                    <input
+                      type="text"
+                      value={newServiceCep}
+                      onChange={(e) => {
+                        // Aplica máscara 99999-999
+                        const v = e.target.value.replace(/\D/g, '').slice(0, 8);
+                        setNewServiceCep(v.length > 5 ? v.replace(/(\d{5})(\d+)/, '$1-$2') : v);
+                      }}
+                      placeholder="CEP do destinatário *"
+                      maxLength={9}
+                      className="w-full bg-gray-700 border border-orange-500 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-400 placeholder-orange-300/60"
+                    />
+                    <p className="text-orange-400 text-xs mt-1">CEP obrigatório para envio pelos Correios</p>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <button onClick={addService} className="flex-1 bg-green-700 hover:bg-green-800 text-white text-sm py-2 rounded-lg font-medium transition-colors">Adicionar</button>
                   <button onClick={() => setShowAddService(false)} className="px-4 text-gray-400 hover:text-white text-sm py-2 rounded-lg transition-colors">Cancelar</button>
@@ -499,6 +528,7 @@ export default function PdvCheckout({
                     <div>
                       <span className="text-white text-sm font-medium">{service.tipo}</span>
                       {service.descricao && <span className="text-gray-400 text-xs ml-2">{service.descricao}</span>}
+                      {service.cep && <span className="text-orange-400 text-xs ml-2">CEP: {service.cep}</span>}
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-white text-sm font-semibold">R$ {fmt(service.valor)}</span>

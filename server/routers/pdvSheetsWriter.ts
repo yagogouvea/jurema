@@ -134,7 +134,7 @@ async function updateCellInSheet(range: string, value: any): Promise<boolean> {
 
 /**
  * Grava um pedido completo na aba PEDIDOS da planilha
- * Colunas: pedido_id | data | vendedor | canal | cliente | telefone | varejo | atacado |
+ * Colunas: pedido_id | data | vendedor | canal | cliente | telefone | cep | varejo | atacado |
  *          atacado/varejo | extra | valor_adicional | valor_sem_taxa | forma_pagamento |
  *          taxa | total_com_taxa | pendente | justificativa | modalidade | status | qtd_itens | comissao | justificativa_atac_menos6
  */
@@ -145,6 +145,7 @@ export async function appendOrderToSheet(order: {
   canal: string;
   clienteNome?: string | null;
   clienteTelefone?: string | null;
+  cepCorreio?: string | null;
   totalVarejo: number;
   totalAtacado: number;
   regime: string;
@@ -184,25 +185,26 @@ export async function appendOrderToSheet(order: {
       order.canal === 'WHATSAPP' ? 'WhatsApp' : 'Balcão', // D: canal
       order.clienteNome || '',                           // E: cliente
       order.clienteTelefone || '',                       // F: telefone
-      parseFloat(order.totalVarejo.toFixed(2)),          // G: varejo (número)
-      parseFloat(order.totalAtacado.toFixed(2)),         // H: atacado (número)
-      order.regime === 'ATACADO' ? 'Atacado' : 'Varejo', // I: atacado/varejo (mantido para compatibilidade)
-      extraTipos,                                        // J: extra (serviço extra)
-      extraValor > 0 ? parseFloat(extraValor.toFixed(2)) : '', // K: valor_adicional (número)
-      parseFloat(valorSemTaxaFinal.toFixed(2)),          // L: valor_sem_taxa (subtotal + extras, número)
-      formasPagamento,                                   // M: forma_pagamento
-      taxaTotal > 0 ? parseFloat(taxaTotal.toFixed(2)) : '', // N: taxa (número)
-      parseFloat(totalComTaxaFinal.toFixed(2)),          // O: total_com_taxa (número)
-      order.totalPendente > 0 ? parseFloat(order.totalPendente.toFixed(2)) : '', // P: pendente (número)
-      order.justificativa || '',                         // Q: justificativa
-      order.regime === 'ATACADO' ? 'Atacado' : 'Varejo',  // R: modalidade (atacado/varejo)
-      order.status === 'CANCELADO' ? 'Cancelado' : order.status === 'PENDENTE' ? 'Pendente' : 'Pago', // S: status
-      order.qtdItens,                                    // T: qtd_itens (número)
-      parseFloat(order.comissaoTotal.toFixed(2)),        // U: comissao (número)
-      order.justificativaAtacado || '',                   // V: justificativa_atac_menos6
+      order.cepCorreio || '',                            // G: cep (CEP do Correio, se houver)
+      parseFloat(order.totalVarejo.toFixed(2)),          // H: varejo (número)
+      parseFloat(order.totalAtacado.toFixed(2)),         // I: atacado (número)
+      order.regime === 'ATACADO' ? 'Atacado' : 'Varejo', // J: atacado/varejo
+      extraTipos,                                        // K: extra (serviço extra)
+      extraValor > 0 ? parseFloat(extraValor.toFixed(2)) : '', // L: valor_adicional (número)
+      parseFloat(valorSemTaxaFinal.toFixed(2)),          // M: valor_sem_taxa (subtotal + extras, número)
+      formasPagamento,                                   // N: forma_pagamento
+      taxaTotal > 0 ? parseFloat(taxaTotal.toFixed(2)) : '', // O: taxa (número)
+      parseFloat(totalComTaxaFinal.toFixed(2)),          // P: total_com_taxa (número)
+      order.totalPendente > 0 ? parseFloat(order.totalPendente.toFixed(2)) : '', // Q: pendente (número)
+      order.justificativa || '',                         // R: justificativa
+      order.regime === 'ATACADO' ? 'Atacado' : 'Varejo',  // S: modalidade (atacado/varejo)
+      order.status === 'CANCELADO' ? 'Cancelado' : order.status === 'PENDENTE' ? 'Pendente' : 'Pago', // T: status
+      order.qtdItens,                                    // U: qtd_itens (número)
+      parseFloat(order.comissaoTotal.toFixed(2)),        // V: comissao (número)
+      order.justificativaAtacado || '',                   // W: justificativa_atac_menos6
     ];
     
-    return await appendToSheet(`${ORDERS_SHEET}!A:V`, [row]);
+    return await appendToSheet(`${ORDERS_SHEET}!A:W`, [row]);
   } catch (err) {
     console.error('[SheetsWriter] appendOrderToSheet error:', err);
     return false;

@@ -1,0 +1,1 @@
+ALTER TABLE `pdv_order_services` ADD `cep` varchar(10);
