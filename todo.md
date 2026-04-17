@@ -731,3 +731,10 @@
 - [x] Rota /pdv/meu-perfil adicionada no PdvLayout (menu lateral) e App.tsx
 - [x] Cada vendedor vê apenas seus próprios dados (requirePdvAuth filtra por sellerId)
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v93 — Correção pontos das vendas zerados
+- [x] Diagnóstico: 807 de 811 produtos na planilha tinham PT_ATAC/PT_VAR preenchidos, mas o banco tinha apenas 9 produtos com pontos
+- [x] Causa raiz: sincronização anterior não importou os pontos (bug corrigido na v89, mas banco não foi re-sincronizado)
+- [x] Correção: script de sincronização em lote atualizou 811 produtos no banco (652 com ptAtacado > 0)
+- [x] Queries de getMyProgress e getMyHistory estão corretas (CASE WHEN regime='ATACADO' THEN ptAtacado*qty ELSE ptVarejo*qty)
+- [x] 206/206 testes passando
