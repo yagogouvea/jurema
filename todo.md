@@ -715,3 +715,9 @@
 - [x] Adicionado endpoint bulkActivate no pdvSiteSync para ativar todos os inativos em lote
 - [x] Adicionado botão "Ativar Todos (N)" na Gestão Site (aparece apenas quando há inativos)
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v91 — Corrigir justificativa atacado <6 gravada em duas colunas
+- [x] pdvOrders.ts: coluna Q (justificativa) recebe apenas quando totalPendente>0 E não é atacado<6
+- [x] pdvOrders.ts: coluna V (justificativa_atac_menos6) recebe apenas quando isAtacadoMenos6=true
+- [x] Os dois casos são mutuamente exclusivos na UI (campos separados por isPendente)
+- [x] 206/206 testes passando, zero erros TypeScript

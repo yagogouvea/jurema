@@ -290,10 +290,13 @@ export const pdvOrdersRouter = router({
                 totalAplicado: totalAplicadoNormal,
                 payments: input.payments,
                 totalPendente: input.totalPendente,
-                justificativa: input.justificativa,
+                // Coluna Q (justificativa) = apenas para pagamento pendente (totalPendente > 0)
+                // NÃO recebe a justificativa de atacado <6 peças
+                justificativa: (input.totalPendente > 0 && !isAtacadoMenos6Order) ? (input.justificativa || null) : null,
                 status: input.status,
                 qtdItens: qtdItensNormais,
                 comissaoTotal,
+                // Coluna V (justificativa_atac_menos6) = apenas para atacado com menos de 6 peças
                 justificativaAtacado: isAtacadoMenos6Order ? (input.justificativa || '') : null,
               });
 
