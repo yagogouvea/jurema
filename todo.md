@@ -750,3 +750,11 @@
 - [x] Removido o wrapper div min-h-screen bg-gray-950 que duplicava o fundo — agora usa apenas o padding interno p-4 md:p-6
 - [x] Menu lateral aparece em desktop e hambúrguer no mobile, igual a PdvHistorico, PdvDashboard, etc.
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v96 — Limpeza geral e testes finais para entrega ao cliente
+- [x] Banco de dados limpo: deletados 4 pedidos, 14 itens, 2 lançamentos de caixa, pagamentos e serviços
+- [x] Planilha Google Sheets limpa: abas PEDIDOS, pedidos_itens, FLUXO_CAIXA, VENDAS_CAIXA zeradas
+- [x] TypeScript: zero erros
+- [x] Vitest: 206/206 testes passando
+- [x] Dev server: rodando normalmente
+- [x] Sistema pronto para entrega ao cliente
