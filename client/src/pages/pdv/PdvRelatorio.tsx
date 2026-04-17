@@ -118,7 +118,7 @@ export default function PdvRelatorio() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-white">Relatório PDV</h1>
-          <p className="text-gray-400 text-sm">Gere relatórios por período com comissões, Sofia e descontos</p>
+          <p className="text-gray-400 text-sm">Gere relatórios por período com bônus, Sofia e descontos</p>
         </div>
       </div>
 
@@ -156,7 +156,7 @@ export default function PdvRelatorio() {
             </div>
           </div>
           <div>
-            <label className="text-gray-400 text-xs mb-1 block">Comissão (R$/peça)</label>
+            <label className="text-gray-400 text-xs mb-1 block">Bônus (R$/peça)</label>
             <input
               type="number"
               value={taxaComissao}
@@ -178,7 +178,7 @@ export default function PdvRelatorio() {
               className="accent-green-600 w-4 h-4"
             />
             <TrendingUp className="w-4 h-4 text-green-500" />
-            <span className="text-white text-sm">Comissões</span>
+            <span className="text-white text-sm">Bônus</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer bg-gray-800 rounded-lg px-4 py-2.5 border border-gray-700 hover:border-green-600 transition-colors">
             <input
@@ -279,7 +279,7 @@ function ReportContent({ data, startDate, endDate, taxaComissao }: {
       {data.comissoes && (
         <div className="section" style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#16a34a", marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid #e5e7eb" }}>
-            📊 Comissões por Vendedor (R$ {taxaComissao.toFixed(2)}/peça)
+            📊 Bônus por Vendedor (R$ {taxaComissao.toFixed(2)}/peça)
           </div>
 
           <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "12px 16px", marginBottom: 12 }}>
@@ -296,7 +296,7 @@ function ReportContent({ data, startDate, endDate, taxaComissao }: {
               <span style={{ fontWeight: 700, fontSize: 12 }}>{formatCurrency(data.comissoes.totalFaturamento)}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
-              <span style={{ color: "#666", fontSize: 11 }}>Total em Comissões</span>
+              <span style={{ color: "#666", fontSize: 11 }}>Total em Bônus</span>
               <span style={{ fontWeight: 700, fontSize: 14, color: "#16a34a" }}>{formatCurrency(data.comissoes.totalComissoes)}</span>
             </div>
           </div>
@@ -310,7 +310,7 @@ function ReportContent({ data, startDate, endDate, taxaComissao }: {
                 <th style={thStyle}>Faturamento</th>
                 <th style={thStyle}>Atacado</th>
                 <th style={thStyle}>Varejo</th>
-                <th style={thStyle}>Comissão</th>
+                <th style={thStyle}>Bônus</th>
               </tr>
             </thead>
             <tbody>
@@ -334,7 +334,7 @@ function ReportContent({ data, startDate, endDate, taxaComissao }: {
       {data.sofia && (
         <div className="section" style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#7c3aed", marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid #e5e7eb" }}>
-            📦 Vendas Sofia (Comissão Loja: R$ {data.sofia.comissaoLoja.toFixed(2)}/peça)
+            📦 Vendas Sofia (Bônus Loja: R$ {data.sofia.comissaoLoja.toFixed(2)}/peça)
           </div>
 
           <div style={{ background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: 8, padding: "12px 16px", marginBottom: 12 }}>

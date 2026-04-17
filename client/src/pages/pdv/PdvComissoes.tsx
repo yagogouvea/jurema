@@ -26,8 +26,8 @@ function formatCurrency(value: number): string {
 
 // ============================================================
 // VISÃO ADMIN: relatório completo de todos os vendedores
-// A taxa de comissão é lida do banco (sem campo editável aqui)
-// Para alterar a taxa, use Configurações > Comissões
+// A taxa de bônus é lida do banco (sem campo editável aqui)
+// Para alterar a taxa, use Configurações > Bônus
 // ============================================================
 function AdminComissoes() {
   const [startDate, setStartDate] = useState(() => {
@@ -36,7 +36,7 @@ function AdminComissoes() {
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
 
-  // Sem taxaComissao no input — a comissão é calculada pelo valor registrado em cada item no momento da venda
+  // Sem taxaBonus no input — o bônus é calculado pelo valor registrado em cada item no momento da venda
   const { data, isLoading } = trpc.pdvComissoes.relatorio.useQuery(
     { startDate, endDate },
   );
@@ -48,7 +48,7 @@ function AdminComissoes() {
 
   function exportCSV() {
     if (!sellers.length) return;
-    const header = "Vendedor,Pedidos,Peças,Faturamento,Atacado,Varejo,Ticket Médio,Comissão,Meta\n";
+    const header = "Vendedor,Pedidos,Peças,Faturamento,Atacado,Varejo,Ticket Médio,Bônus,Meta\n";
     const rows = sellers.map(s =>
       `${s.sellerName},${s.totalPedidos},${s.totalPecas},${s.faturamento.toFixed(2)},${s.faturamentoAtacado.toFixed(2)},${s.faturamentoVarejo.toFixed(2)},${s.ticketMedio.toFixed(2)},${s.comissao.toFixed(2)},${s.metaAtingida || "Sem meta"}`
     ).join("\n");
@@ -56,7 +56,7 @@ function AdminComissoes() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `comissoes_${startDate}_${endDate}.csv`;
+    a.download = `bonus_${startDate}_${endDate}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -66,8 +66,8 @@ function AdminComissoes() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-white text-2xl font-bold">Relatório de Comissões</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Comissão por peça vendida (exclui vendas Sofia)</p>
+          <h1 className="text-white text-2xl font-bold">Relatório de Bônus</h1>
+          <p className="text-gray-400 text-sm mt-0.5">Bônus por peça vendida (exclui vendas Sofia)</p>
         </div>
         <button
           onClick={exportCSV}
@@ -83,9 +83,9 @@ function AdminComissoes() {
       <div className="flex items-center gap-2 bg-green-950/30 border border-green-900/40 rounded-xl px-4 py-2.5 text-sm">
         <Info className="w-4 h-4 text-green-400 flex-shrink-0" />
         <span className="text-green-300">
-          Taxa de comissão atual: <strong>{formatCurrency(taxaAtual)}/peça</strong>
+          Taxa de bônus atual: <strong>{formatCurrency(taxaAtual)}/peça</strong>
           {" "}— cada venda registra o valor vigente no momento da venda.
-          Para alterar, acesse <strong>Configurações &gt; Comissões</strong>.
+          Para alterar, acesse <strong>Configurações &gt; Bônus</strong>.
         </span>
       </div>
 
@@ -113,7 +113,7 @@ function AdminComissoes() {
               { label: "Total de Peças", value: String(summary?.totalPecas || 0), icon: Package, color: "text-green-400" },
               { label: "Faturamento", value: formatCurrency(summary?.totalFaturamento || 0), icon: DollarSign, color: "text-blue-400" },
               { label: "Total Pedidos", value: String(summary?.totalPedidos || 0), icon: ShoppingBag, color: "text-gray-300" },
-              { label: "Total Comissões", value: formatCurrency(summary?.totalComissoes || 0), icon: TrendingUp, color: "text-yellow-400" },
+              { label: "Total Bônus", value: formatCurrency(summary?.totalComissoes || 0), icon: TrendingUp, color: "text-yellow-400" },
               { label: "Vendedores Ativos", value: String(sellers.filter(s => s.totalPecas > 0).length), icon: Award, color: "text-green-500" },
             ].map((kpi) => (
               <div key={kpi.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
@@ -171,7 +171,7 @@ function AdminComissoes() {
                       <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Faturamento</th>
                       <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Atacado</th>
                       <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Varejo</th>
-                      <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Comissão</th>
+                      <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Bônus</th>
                       <th className="text-center text-gray-400 text-xs font-semibold px-4 py-3">Meta</th>
                     </tr>
                   </thead>
@@ -245,8 +245,8 @@ function AdminComissoes() {
 }
 
 // ============================================================
-// VISÃO VENDEDOR: só vê suas próprias comissões
-// Sem campo de taxa — a comissão é calculada pelo valor registrado no momento da venda
+// VISÃO VENDEDOR: só vê seus próprios bônus
+// Sem campo de taxa — o bônus é calculado pelo valor registrado no momento da venda
 // ============================================================
 function SellerComissoes() {
   const { seller } = usePdvAuth();
@@ -263,8 +263,8 @@ function SellerComissoes() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-white text-2xl font-bold">Minhas Comissões</h1>
-        <p className="text-gray-400 text-sm mt-0.5">Olá, {seller?.name}! Veja suas vendas e comissões por peça.</p>
+        <h1 className="text-white text-2xl font-bold">Meus Bônus</h1>
+        <p className="text-gray-400 text-sm mt-0.5">Olá, {seller?.name}! Veja suas vendas e bônus por peça.</p>
       </div>
 
       {/* Filters — apenas período, sem campo de taxa */}
@@ -291,7 +291,7 @@ function SellerComissoes() {
               { label: "Peças Vendidas", value: String(data.totalPecas), icon: Package, color: "text-green-400" },
               { label: "Faturamento", value: formatCurrency(data.faturamento), icon: DollarSign, color: "text-blue-400" },
               { label: "Pedidos", value: String(data.totalPedidos), icon: ShoppingBag, color: "text-gray-300" },
-              { label: "Comissão", value: formatCurrency(data.comissao), icon: TrendingUp, color: "text-yellow-400" },
+              { label: "Bônus", value: formatCurrency(data.comissao), icon: TrendingUp, color: "text-yellow-400" },
             ].map((kpi) => (
               <div key={kpi.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-2">
@@ -329,7 +329,7 @@ function SellerComissoes() {
                     contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "12px" }}
                     labelStyle={{ color: "#fff" }}
                     labelFormatter={(v) => new Date(v + "T00:00:00").toLocaleDateString("pt-BR")}
-                    formatter={(value: any, name: string) => [value, name === "pecas" ? "Peças" : name === "comissao" ? "Comissão" : "Faturamento"]}
+                    formatter={(value: any, name: string) => [value, name === "pecas" ? "Peças" : name === "comissao" ? "Bônus" : "Faturamento"]}
                   />
                   <Bar dataKey="pecas" name="Peças" fill="#16a34a" radius={[6, 6, 0, 0]} />
                 </BarChart>
@@ -351,7 +351,7 @@ function SellerComissoes() {
                       <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Pedidos</th>
                       <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Peças</th>
                       <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Faturamento</th>
-                      <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Comissão</th>
+                      <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Bônus</th>
                     </tr>
                   </thead>
                   <tbody>

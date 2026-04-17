@@ -684,3 +684,10 @@
 - [x] Barra de progresso de metas no header do PdvMain (apenas para vendedores nao-admin)
 - [x] Exibe: pontuacao atual em PT, barra colorida, texto "X PT para Bronze/Prata/Ouro", marcadores de meta
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v87 — Banner promoções, sem boleto, comissão → bônus
+- [x] Site: banner de frete grátis removido; banner de promoções R$35 já presente (link para tailandesa-promocao)
+- [x] Site: Boleto removido do Footer.tsx (dois locais)
+- [x] PDV: comissão → bônus em PdvComissoes, PdvConfiguracoes, PdvLayout, PdvRelatorio, PdvSofia, PdvCheckout
+- [x] Planilha: coluna M mantida como "comissao" (campo técnico interno, não visível ao usuário)
+- [x] 206/206 testes passando, zero erros TypeScript

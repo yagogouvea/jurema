@@ -34,7 +34,7 @@ export default function Footer() {
               </div>
               <div>
                 <p className="text-white font-semibold text-sm">Pague com Facilidade</p>
-                <p className="text-gray-500 text-xs">PIX, Cartão e Boleto</p>
+                <p className="text-gray-500 text-xs">PIX e Cartão</p>
               </div>
             </div>
           </div>
@@ -134,7 +134,7 @@ export default function Footer() {
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="bg-[#1A1A1A] text-gray-400 text-xs px-2 py-1 rounded">PIX</span>
                 <span className="bg-[#1A1A1A] text-gray-400 text-xs px-2 py-1 rounded">Cartão</span>
-                <span className="bg-[#1A1A1A] text-gray-400 text-xs px-2 py-1 rounded">Boleto</span>
+
               </div>
             </div>
           </div>

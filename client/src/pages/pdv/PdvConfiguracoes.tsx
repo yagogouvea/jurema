@@ -27,7 +27,7 @@ export default function PdvConfiguracoes() {
 
   const tabs: { key: TabKey; label: string; icon: any }[] = [
     { key: "geral", label: "Geral", icon: Settings },
-    { key: "comissoes", label: "Comissões", icon: DollarSign },
+    { key: "comissoes", label: "Bônus", icon: DollarSign },
     { key: "metas", label: "Metas", icon: Target },
     { key: "sofia", label: "Sofia", icon: Crown },
     { key: "sync", label: "Sincronização", icon: Database },
@@ -157,14 +157,14 @@ function TabGeral() {
   );
 }
 
-// ===================== TAB COMISSÕES =====================
+// ===================== TAB BÔNUS =====================
 function TabComissoes() {
   const [comissaoPeca, setComissaoPeca] = useState("");
   const [dirty, setDirty] = useState(false);
 
   const { data, isLoading, refetch } = trpc.pdvConfig.get.useQuery({ key: "comissao_peca" });
   const saveMutation = trpc.pdvConfig.set.useMutation({
-    onSuccess: () => { toast.success("Comissão por peça atualizada!"); setDirty(false); refetch(); },
+    onSuccess: () => { toast.success("Bônus por peça atualizado!"); setDirty(false); refetch(); },
     onError: (err: any) => toast.error(err.message),
   });
 
@@ -181,14 +181,14 @@ function TabComissoes() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-white font-bold text-lg">Comissões</h2>
+        <h2 className="text-white font-bold text-lg">Bônus</h2>
         <SaveButton dirty={dirty} saving={saveMutation.isPending} onClick={handleSave} />
       </div>
 
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <DollarSign className="w-4 h-4 text-green-400" />
-          <label className="text-white font-semibold text-sm">Comissão por Peça (R$)</label>
+          <label className="text-white font-semibold text-sm">Bônus por Peça (R$)</label>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-gray-400 text-sm">R$</span>
@@ -205,13 +205,13 @@ function TabComissoes() {
         </div>
         <p className="text-gray-500 text-xs mt-3">
           Cada vendedor recebe R$ {comissaoPeca || "0"} por peça vendida (excluindo itens Sofia).
-          O valor é calculado automaticamente no relatório de comissões.
+          O valor é calculado automaticamente no relatório de bônus.
         </p>
       </div>
 
       <div className="bg-blue-950/30 border border-blue-900/50 rounded-2xl p-4">
         <p className="text-blue-300 text-sm">
-          <strong>Como funciona:</strong> A comissão é calculada por quantidade de peças vendidas, não por pedido.
+          <strong>Como funciona:</strong> O bônus é calculado por quantidade de peças vendidas, não por pedido.
           Itens marcados como "Sofia" (terceirizado) são excluídos automaticamente do cálculo.
         </p>
       </div>
@@ -329,7 +329,7 @@ function TabSofia() {
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <Crown className="w-4 h-4 text-purple-400" />
-          <label className="text-white font-semibold text-sm">Comissão da Loja por Peça (R$)</label>
+          <label className="text-white font-semibold text-sm">Bônus da Loja por Peça (R$)</label>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-gray-400 text-sm">R$</span>
@@ -346,15 +346,15 @@ function TabSofia() {
         </div>
         <p className="text-gray-500 text-xs mt-3">
           Esse valor é descontado do faturamento Sofia para calcular o reembolso ao vendedor.
-          Exemplo: peça vendida a R$50 com comissão R${comissaoLoja || "10"} = reembolso R${Math.max(0, 50 - (parseFloat(comissaoLoja) || 10))}.
+          Exemplo: peça vendida a R$50 com bônus R${comissaoLoja || "10"} = reembolso R${Math.max(0, 50 - (parseFloat(comissaoLoja) || 10))}.
         </p>
       </div>
 
       <div className="bg-purple-950/30 border border-purple-900/50 rounded-2xl p-4">
         <p className="text-purple-300 text-sm">
           <strong>Como funciona:</strong> No checkout, cada item pode ser marcado individualmente como "Sofia".
-          Itens Sofia não entram na comissão dos vendedores. No final do dia, o Dashboard Sofia
-          calcula automaticamente o reembolso (faturamento - comissão da loja).
+          Itens Sofia não entram no bônus dos vendedores. No final do dia, o Dashboard Sofia
+          calcula automaticamente o reembolso (faturamento - bônus da loja).
         </p>
       </div>
     </div>

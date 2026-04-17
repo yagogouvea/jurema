@@ -63,7 +63,7 @@ export default function PdvSofia() {
 
   const updateConfigMutation = trpc.pdvSofia.updateConfig.useMutation({
     onSuccess: () => {
-      toast.success("Comissão atualizada!");
+      toast.success("Bônus atualizado!");
       utils.pdvSofia.dashboard.invalidate();
       utils.pdvSofia.getConfig.invalidate();
       setShowConfig(false);
@@ -122,7 +122,7 @@ export default function PdvSofia() {
         {/* Config panel */}
         {showConfig && (
           <div className="bg-gray-900 border border-purple-900/50 rounded-2xl p-4">
-            <h3 className="text-white font-semibold mb-3">Comissão da Loja por Peça Sofia</h3>
+            <h3 className="text-white font-semibold mb-3">Bônus da Loja por Peça Sofia</h3>
             <div className="flex items-center gap-3">
               <span className="text-gray-400 text-sm">R$</span>
               <input
@@ -186,7 +186,7 @@ export default function PdvSofia() {
                   { label: "Total Peças", value: String(summary?.totalPecas || 0), icon: Package, color: "text-purple-400" },
                   { label: "Faturamento", value: formatCurrency(summary?.faturamento || 0), icon: DollarSign, color: "text-blue-400" },
                   { label: "Pedidos", value: String(summary?.totalPedidos || 0), icon: ShoppingBag, color: "text-gray-300" },
-                  { label: "Comissão Loja", value: formatCurrency(summary?.comissaoTotal || 0), icon: ArrowUpRight, color: "text-green-400" },
+                  { label: "Bônus Loja", value: formatCurrency(summary?.comissaoTotal || 0), icon: ArrowUpRight, color: "text-green-400" },
                   { label: "Reembolso", value: formatCurrency(summary?.reembolsoTotal || 0), icon: ArrowDownRight, color: "text-green-400" },
                 ].map((kpi) => (
                   <div key={kpi.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
@@ -212,7 +212,7 @@ export default function PdvSofia() {
                           <th className="text-left text-gray-400 text-xs font-semibold px-4 py-3">Vendedor</th>
                           <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Peças</th>
                           <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Faturamento</th>
-                          <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Comissão Loja</th>
+                          <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Bônus Loja</th>
                           <th className="text-right text-gray-400 text-xs font-semibold px-4 py-3">Reembolso</th>
                         </tr>
                       </thead>

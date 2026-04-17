@@ -54,7 +54,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
   const navItems = [
     { href: "/pdv", icon: ShoppingBag, label: "PDV", exact: true },
     { href: "/pdv/historico", icon: History, label: "Histórico" },
-    { href: "/pdv/comissoes", icon: TrendingUp, label: "Comissões" },
+    { href: "/pdv/comissoes", icon: TrendingUp, label: "Bônus" },
     ...(isAdmin ? [
       { href: "/pdv/dashboard", icon: BarChart2, label: "Dashboard" },
       { href: "/pdv/vendedores", icon: Users, label: "Vendedores" },

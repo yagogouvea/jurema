@@ -343,7 +343,7 @@ export default function PdvCheckout({
                       </button>
                       {sofiaItems[i] && (
                         <div className="flex items-center gap-1">
-                          <span className="text-purple-400 text-[10px]">Com.</span>
+                          <span className="text-purple-400 text-[10px]">Bôn.</span>
                           <input
                             type="text"
                             inputMode="decimal"
@@ -351,7 +351,7 @@ export default function PdvCheckout({
                             onChange={e => updateSofiaComissao(i, e.target.value)}
                             placeholder="10"
                             className="w-14 text-[11px] px-1.5 py-0.5 rounded bg-purple-950/50 border border-purple-800 text-purple-200 text-center placeholder-purple-600 focus:outline-none focus:border-purple-500"
-                            title="Comissão da loja por peça (R$)"
+                            title="Bônus da loja por peça (R$)"
                           />
                         </div>
                       )}
@@ -369,12 +369,12 @@ export default function PdvCheckout({
                       {sofiaCount} {sofiaCount === 1 ? 'item marcado' : 'itens marcados'} como Sofia (terceirizado)
                     </p>
                     <p className="text-purple-400/70 text-[10px]">
-                      Esses itens não entram na comissão do vendedor. Informe a comissão da loja (R$/peça) ao lado de cada item Sofia.
+                      Esses itens não entram no bônus do vendedor. Informe o bônus da loja (R$/peça) ao lado de cada item Sofia.
                     </p>
                     {cart.map((item, i) => sofiaItems[i] ? (
                       <div key={i} className="flex items-center justify-between text-[11px] text-purple-300">
                         <span className="truncate">{item.time} ({item.tamanho}) x{item.quantidade}</span>
-                        <span>Com: R$ {(parseFloat((sofiaComissao[i] || '0').replace(',', '.')) || 0).toFixed(2)}/pç → Reemb: R$ {Math.max(0, item.totalItem - ((parseFloat((sofiaComissao[i] || '0').replace(',', '.')) || 0) * item.quantidade)).toFixed(2)}</span>
+                        <span>Bôn: R$ {(parseFloat((sofiaComissao[i] || '0').replace(',', '.')) || 0).toFixed(2)}/pç → Reemb: R$ {Math.max(0, item.totalItem - ((parseFloat((sofiaComissao[i] || '0').replace(',', '.')) || 0) * item.quantidade)).toFixed(2)}</span>
                       </div>
                     ) : null)}
                   </div>

@@ -647,22 +647,35 @@ export default function Home() {
       {/* Promo Banner */}
       <section className="py-12">
         <div className="container">
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#1B8C3D] to-[#8B0000] p-8 md:p-12 text-center">
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#8B0000] to-[#1B8C3D] p-8 md:p-12">
             <div className="absolute inset-0 opacity-10">
               <div className="absolute top-0 left-0 w-40 h-40 rounded-full bg-white -translate-x-1/2 -translate-y-1/2" />
               <div className="absolute bottom-0 right-0 w-60 h-60 rounded-full bg-white translate-x-1/2 translate-y-1/2" />
             </div>
-            <div className="relative">
-              <img src={LOGO_URL} alt="Jurema Sport" className="h-16 w-16 mx-auto mb-4 rounded-full" />
-              <h2 className="font-['Bebas_Neue'] text-4xl md:text-5xl text-white tracking-wider mb-2">
-                FRETE GRÁTIS
-              </h2>
-              <p className="text-green-200 text-lg mb-6">Em compras acima de R$ 200,00</p>
-              <Link href="/produtos">
-                <Button className="bg-white text-[#1B8C3D] hover:bg-gray-100 font-bold px-8 py-3 text-base">
-                  Aproveitar Agora
-                </Button>
-              </Link>
+            <div className="relative flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex-1 text-center md:text-left">
+                <div className="inline-block bg-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full mb-3 tracking-wider">
+                  PROMOÇÃO ESPECIAL
+                </div>
+                <h2 className="font-['Bebas_Neue'] text-5xl md:text-6xl text-white tracking-wider leading-none mb-2">
+                  A PARTIR DE
+                </h2>
+                <div className="font-['Bebas_Neue'] text-7xl md:text-8xl text-yellow-400 tracking-wider leading-none mb-3">
+                  R$35
+                </div>
+                <p className="text-green-200 text-base md:text-lg mb-6">
+                  Camisas tailandesas com preços imperdíveis!
+                </p>
+                <Link href="/produtos?categoria=tailandesa-promocao">
+                  <Button className="bg-yellow-400 text-black hover:bg-yellow-300 font-bold px-8 py-3 text-base shadow-lg">
+                    Ver Promoções
+                  </Button>
+                </Link>
+              </div>
+              <div className="hidden md:flex flex-col items-center gap-2">
+                <img src={LOGO_URL} alt="Jurema Sport" className="h-24 w-24 rounded-full border-4 border-yellow-400 shadow-xl" />
+                <span className="text-yellow-400 font-bold text-sm tracking-widest">JUREMA SPORT</span>
+              </div>
             </div>
           </div>
         </div>
