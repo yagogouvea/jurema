@@ -922,7 +922,7 @@ export async function appendCashFlowToSheet(entry: {
 
 /**
  * Grava um pedido fechado na aba VENDAS_CAIXA da planilha.
- * Colunas: ID PEDIDO | DATA | VENDEDOR | CANAL | CLIENTE | REGIME | TOTAL (R$) | FORMA PAGAMENTO | STATUS | QTD ITENS
+ * Colunas: ID PEDIDO | DATA | VENDEDOR | CANAL | CLIENTE | REGIME | TOTAL (R$) | FORMA PAGAMENTO | STATUS | QTD ITENS | JUSTIFICATIVA <6
  */
 export async function appendSaleToCashFlowSheet(pedido: {
   id: number;
@@ -935,6 +935,7 @@ export async function appendSaleToCashFlowSheet(pedido: {
   formaPagamento: string;
   status: string;
   qtdItens: number;
+  justificativaAtacado?: string;
 }): Promise<boolean> {
   try {
     const data = new Date(pedido.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -949,8 +950,9 @@ export async function appendSaleToCashFlowSheet(pedido: {
       pedido.formaPagamento,
       pedido.status,
       pedido.qtdItens,
+      pedido.justificativaAtacado || '',  // K: Justificativa <6 (atacado com menos de 6 peças)
     ];
-    const ok = await appendToSheet(`${SALES_CASHFLOW_SHEET}!A:J`, [row]);
+    const ok = await appendToSheet(`${SALES_CASHFLOW_SHEET}!A:K`, [row]);
     if (ok) console.log(`[SheetsWriter] Pedido #${pedido.id} gravado em VENDAS_CAIXA`);
     return ok;
   } catch (err) {
@@ -1075,6 +1077,7 @@ export async function syncAllSalesToCashFlowSheet(pedidos: Array<{
   formaPagamento: string;
   status: string;
   qtdItens: number;
+  justificativaAtacado?: string;
 }>): Promise<boolean> {
   try {
     const token = await getServiceAccountToken();
@@ -1091,10 +1094,11 @@ export async function syncAllSalesToCashFlowSheet(pedidos: Array<{
       p.formaPagamento,
       p.status,
       p.qtdItens,
+      p.justificativaAtacado || '',  // K: Justificativa <6
     ]);
 
     // Limpar e reescrever
-    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A2:J5000`)}:clear`;
+    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A2:K5000`)}:clear`;
     await fetch(clearUrl, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -1102,7 +1106,7 @@ export async function syncAllSalesToCashFlowSheet(pedidos: Array<{
 
     if (rows.length === 0) return true;
 
-    const writeUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A2:J${rows.length + 1}`)}?valueInputOption=USER_ENTERED`;
+    const writeUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A2:K${rows.length + 1}`)}?valueInputOption=USER_ENTERED`;
     const res = await fetch(writeUrl, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

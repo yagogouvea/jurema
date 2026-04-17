@@ -652,3 +652,11 @@
 - [x] Frontend: progress bars de metas usam pontos (PT) em vez de R$
 - [x] Metas Bronze/Prata/Ouro/Meta Loja exibem valores em PT
 - [x] 205/205 testes passando, zero erros TypeScript
+
+## v83 — Ajustes de Regras de Negócio
+- [x] Atacado <6 peças: exibir aviso laranja (não bloquear), campo Observações obrigatório com borda laranja
+- [x] Atacado <6 peças: justificativa gravada no campo observacoes do pedido (já existia no banco)
+- [x] Atacado <6 peças: nova coluna "JUSTIFICATIVA <6" na planilha VENDAS_CAIXA (coluna K)
+- [x] Nome do cliente obrigatório no pedido (validação frontend + backend com z.string().min(1))
+- [x] Correio: valor mínimo de R$ 45 (validação no addService do frontend)
+- [x] 206/206 testes passando, zero erros TypeScript

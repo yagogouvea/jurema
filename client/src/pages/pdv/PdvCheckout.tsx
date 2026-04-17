@@ -184,6 +184,11 @@ export default function PdvCheckout({
   const addService = () => {
     const valor = parseFloat(newServiceValor.replace(",", "."));
     if (isNaN(valor) || valor <= 0) { toast.error("Valor inválido"); return; }
+    // Regra: Correio mínimo R$ 45
+    if (newServiceTipo === "CORREIO" && valor < 45) {
+      toast.error("O valor mínimo para Correio é R$ 45,00");
+      return;
+    }
     setServices(prev => [...prev, { tipo: newServiceTipo, descricao: newServiceDescricao || undefined, valor }]);
     setNewServiceValor("");
     setNewServiceDescricao("");
@@ -222,7 +227,17 @@ export default function PdvCheckout({
     setEditingMaquininhaIdx(null);
   };
 
+  const totalPecas = cart.reduce((sum, item) => sum + item.quantidade, 0);
+
+  // Regra: atacado com menos de 6 peças requer justificativa
+  const isAtacadoMenos6 = regime === "ATACADO" && totalPecas < 6;
+
   const handleFinalize = () => {
+    // Nome do cliente obrigatório
+    if (!clienteNome.trim()) {
+      toast.error("Nome do cliente é obrigatório");
+      return;
+    }
     if (payments.length === 0 && totalGeral > 0) {
       toast.error("Adicione pelo menos uma forma de pagamento");
       return;
@@ -231,9 +246,14 @@ export default function PdvCheckout({
       toast.error("Informe a justificativa para o valor pendente");
       return;
     }
+    // Atacado com menos de 6 peças: justificativa obrigatória
+    if (isAtacadoMenos6 && !justificativa.trim()) {
+      toast.error("Atacado com menos de 6 peças: informe a justificativa no campo Observações");
+      return;
+    }
     createOrderMutation.mutate({
       canal,
-      clienteNome: clienteNome || undefined,
+      clienteNome: clienteNome.trim() as string,
       clienteTelefone: clienteTelefone || undefined,
       regime,
       totalVarejo,
@@ -262,8 +282,6 @@ export default function PdvCheckout({
       services,
     });
   };
-
-  const totalPecas = cart.reduce((sum, item) => sum + item.quantidade, 0);
 
   return (
     <div className="flex flex-col h-screen bg-gray-950">
@@ -399,17 +417,19 @@ export default function PdvCheckout({
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
             <h3 className="text-white font-semibold flex items-center gap-2">
               <span>Dados do Cliente</span>
-              <span className="text-xs text-gray-500 font-normal">(opcional)</span>
+              <span className="text-xs text-red-400 font-normal">* obrigatório</span>
             </h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Nome</label>
+                <label className="block text-xs text-gray-400 mb-1">Nome <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={clienteNome}
                   onChange={(e) => setClienteNome(e.target.value)}
-                  placeholder="Nome do cliente"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-600 transition-colors"
+                  placeholder="Nome do cliente (obrigatório)"
+                  className={`w-full bg-gray-800 border rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none transition-colors ${
+                    !clienteNome.trim() ? "border-red-700 focus:border-red-500" : "border-gray-700 focus:border-green-600"
+                  }`}
                 />
               </div>
               <div>
@@ -735,16 +755,45 @@ export default function PdvCheckout({
             )}
           </div>
 
+          {/* Aviso: Atacado com menos de 6 peças */}
+          {isAtacadoMenos6 && (
+            <div className="bg-orange-950/40 border border-orange-700/60 rounded-2xl p-4">
+              <div className="flex items-start gap-3">
+                <span className="text-orange-400 text-lg mt-0.5">⚠️</span>
+                <div>
+                  <p className="text-orange-300 font-semibold text-sm">Atacado com menos de 6 peças</p>
+                  <p className="text-orange-400/80 text-xs mt-1">
+                    Esta modalidade só é permitida no Varejo. A venda pode ser realizada, mas é obrigatório informar a justificativa no campo Observações abaixo.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Observações (apenas quando não está pendente) */}
           {!isPendente && (
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-            <h3 className="text-white font-semibold mb-2">Observações</h3>
+          <div className={`rounded-2xl p-4 border transition-all ${
+            isAtacadoMenos6
+              ? "bg-orange-950/20 border-orange-700/50"
+              : "bg-gray-900 border-gray-800"
+          }`}>
+            <h3 className="text-white font-semibold mb-2">
+              Observações
+              {isAtacadoMenos6 && <span className="text-red-400 ml-1">*</span>}
+            </h3>
+            {isAtacadoMenos6 && (
+              <p className="text-orange-400 text-xs mb-2">Justificativa obrigatória para atacado com menos de 6 peças</p>
+            )}
             <textarea
               value={justificativa}
               onChange={(e) => setJustificativa(e.target.value)}
-              placeholder="Observações do pedido (opcional)"
+              placeholder={isAtacadoMenos6 ? "Informe o motivo da venda no atacado com menos de 6 peças..." : "Observações do pedido (opcional)"}
               rows={2}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-600 resize-none"
+              className={`w-full bg-gray-800 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none resize-none transition-colors border ${
+                isAtacadoMenos6 && !justificativa.trim()
+                  ? "border-orange-700 focus:border-orange-500"
+                  : "border-gray-700 focus:border-green-600"
+              }`}
             />
           </div>
           )}

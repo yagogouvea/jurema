@@ -295,28 +295,33 @@ export const pdvDashboardRouter = router({
     try {
       const [rows] = await db.execute(`
         SELECT o.id, o.createdAt, s.name as sellerName, o.canal, o.clienteNome,
-               o.atacadoVarejo as regime, o.totalComTaxa, o.formaPagamento, o.status,
-               COUNT(oi.id) as qtdItens
+               o.regime, o.totalComTaxa, o.formaPagamento, o.status, o.justificativa,
+               COUNT(oi.id) as qtdItens,
+               SUM(oi.quantidade) as totalPecas
         FROM pdv_orders o
         LEFT JOIN pdv_sellers s ON o.sellerId = s.id
-        LEFT JOIN pdv_order_items oi ON oi.orderId = o.id
+        LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
         WHERE o.isSofia = 0
         GROUP BY o.id
         ORDER BY o.createdAt ASC
       `);
       await db.end();
-      const pedidos = (rows as any[]).map(r => ({
-        id: r.id,
-        createdAt: r.createdAt,
-        sellerName: r.sellerName || '',
-        canal: r.canal || '',
-        clienteNome: r.clienteNome || '',
-        regime: r.regime || '',
-        totalComTaxa: parseFloat(r.totalComTaxa || '0'),
-        formaPagamento: r.formaPagamento || '',
-        status: r.status || '',
-        qtdItens: parseInt(r.qtdItens || '0'),
-      }));
+      const pedidos = (rows as any[]).map(r => {
+        const isAtacadoMenos6 = r.regime === 'ATACADO' && parseInt(r.totalPecas || '0') < 6;
+        return {
+          id: r.id,
+          createdAt: r.createdAt,
+          sellerName: r.sellerName || '',
+          canal: r.canal || '',
+          clienteNome: r.clienteNome || '',
+          regime: r.regime || '',
+          totalComTaxa: parseFloat(r.totalComTaxa || '0'),
+          formaPagamento: r.formaPagamento || '',
+          status: r.status || '',
+          qtdItens: parseInt(r.qtdItens || '0'),
+          justificativaAtacado: isAtacadoMenos6 ? (r.justificativa || '') : undefined,
+        };
+      });
       const ok = await syncAllSalesToCashFlowSheet(pedidos);
       return { success: ok, count: pedidos.length };
     } catch (err) {

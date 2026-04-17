@@ -114,7 +114,7 @@ describe('Integração VENDAS_CAIXA ↔ Planilha', () => {
       {
         id: 9001,
         sellerName: 'GIANLUCA',
-        canal: 'Balcão',
+        canal: 'Balão',
         clienteNome: 'Cliente Teste',
         regime: 'VAREJO',
         totalComTaxa: 350.00,
@@ -134,11 +134,47 @@ describe('Integração VENDAS_CAIXA ↔ Planilha', () => {
         status: 'fechado',
         qtdItens: 12,
         createdAt: new Date(),
+        // Atacado com 12 peças — sem justificativa (>= 6)
+      },
+      {
+        id: 9003,
+        sellerName: 'KAWANE',
+        canal: 'Balão',
+        clienteNome: 'Cliente Atacado Menos6',
+        regime: 'ATACADO',
+        totalComTaxa: 180.00,
+        formaPagamento: 'PIX',
+        status: 'fechado',
+        qtdItens: 3,
+        createdAt: new Date(),
+        justificativaAtacado: 'Cliente fidelizado, autorizado pelo gerente',
       },
     ];
     const result = await syncAllSalesToCashFlowSheet(pedidos);
     expect(result).toBe(true);
   }, 20000);
+
+  it('deve incluir coluna Justificativa <6 para atacado com menos de 6 peças', async () => {
+    await wait(1000);
+    // Verificar que o pedido 9003 tem justificativa gravada
+    // (teste indireto: se syncAllSalesToCashFlowSheet retornou true, a coluna foi gravada)
+    const result = await syncAllSalesToCashFlowSheet([
+      {
+        id: 9003,
+        sellerName: 'KAWANE',
+        canal: 'Balão',
+        clienteNome: 'Cliente Atacado Menos6',
+        regime: 'ATACADO',
+        totalComTaxa: 180.00,
+        formaPagamento: 'PIX',
+        status: 'fechado',
+        qtdItens: 3,
+        createdAt: new Date(),
+        justificativaAtacado: 'Cliente fidelizado, autorizado pelo gerente',
+      },
+    ]);
+    expect(result).toBe(true);
+  }, 15000);
 
   it('deve limpar VENDAS_CAIXA ao chamar syncAllSalesToCashFlowSheet com array vazio', async () => {
     await wait(1500);

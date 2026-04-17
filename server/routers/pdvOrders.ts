@@ -65,7 +65,7 @@ export const pdvOrdersRouter = router({
   create: publicProcedure
     .input(z.object({
       canal: z.enum(["BALCAO", "WHATSAPP"]),
-      clienteNome: z.string().optional(),
+      clienteNome: z.string().min(1, "Nome do cliente é obrigatório"),
       clienteTelefone: z.string().optional(),
       regime: z.enum(["ATACADO", "VAREJO"]),
       totalVarejo: z.number().default(0),
@@ -322,6 +322,9 @@ export const pdvOrdersRouter = router({
             if (normalItems.length > 0) {
               const qtdItensNormaisVendas = normalItems.reduce((sum, item) => sum + item.quantidade, 0);
               const totalComTaxaFinal = input.payments.reduce((s: number, p: any) => s + (parseFloat(p.valor) || 0), 0);
+              // Verificar se é atacado com menos de 6 peças (para coluna Justificativa <6)
+              const totalPecasNormais = normalItems.reduce((sum, item) => sum + item.quantidade, 0);
+              const isAtacadoMenos6 = input.regime === 'ATACADO' && totalPecasNormais < 6;
               await appendSaleToCashFlowSheet({
                 id: parseInt(pedidoId.replace(/\D/g, '')) || 0,
                 createdAt: new Date(),
@@ -333,6 +336,7 @@ export const pdvOrdersRouter = router({
                 formaPagamento: input.payments.map((p: any) => p.formaPagamento || p.forma || '').join(', '),
                 status: input.status,
                 qtdItens: qtdItensNormaisVendas,
+                justificativaAtacado: isAtacadoMenos6 ? (input.justificativa || '') : undefined,
               });
             }
           } catch (sheetErr) {
