@@ -439,7 +439,7 @@ export async function updateProductRowInSheet(product: {
 /**
  * Grava os itens de um pedido na aba pedidos_itens da planilha
  *
- * Colunas (12 no total):
+ * Colunas (13 no total):
  * A: pedido_id
  * B: cod (SKU)
  * C: produto (Linha Modelo Time Descrição Tamanho Tipo)
@@ -452,6 +452,7 @@ export async function updateProductRowInSheet(product: {
  * J: serviço extra (tipo/descrição) — vazio para itens normais; tipo do serviço para linha de extra
  * K: valor serviço extra (R$) — vazio para itens normais; valor do serviço para linha de extra
  * L: TOTAL (subtotal na modalidade para itens normais; valor do serviço para linha de extra)
+ * M: comissao (comissaoUnitaria × quantidade para itens normais; vazio para linhas de serviço extra)
  *
  * NOTA: Serviços extras são gravados como linhas dedicadas ao final (não rateados entre itens).
  */
@@ -459,6 +460,7 @@ export async function appendOrderItemsToSheet(params: {
   pedidoId: string;
   regime: string;
   services: Array<{ tipo: string; valor: number }>;
+  comissaoUnitaria?: number;
   items: Array<{
     codigo?: string | null;
     linha?: string | null;
@@ -475,7 +477,7 @@ export async function appendOrderItemsToSheet(params: {
   }>;
 }): Promise<boolean> {
   try {
-    const { pedidoId, regime, services, items } = params;
+    const { pedidoId, regime, services, items, comissaoUnitaria = 0 } = params;
     const modalidade = regime === 'ATACADO' ? 'Atacado' : 'Varejo';
 
     // ── Linhas dos itens normais (sem rateio de extras) ──
@@ -509,6 +511,7 @@ export async function appendOrderItemsToSheet(params: {
         '',                                               // J: serviço extra (vazio para itens normais)
         '',                                               // K: valor serviço extra (vazio para itens normais)
         parseFloat(totalItem.toFixed(2)),                 // L: TOTAL
+        parseFloat((comissaoUnitaria * item.quantidade).toFixed(2)), // M: comissao
       ];
     });
 
@@ -528,11 +531,12 @@ export async function appendOrderItemsToSheet(params: {
         service.tipo,               // J: serviço extra = tipo do serviço
         valorFmt,                   // K: valor serviço extra = valor do serviço
         valorFmt,                   // L: TOTAL = valor do serviço
+        '',                         // M: comissao (vazio para serviços extras)
       ];
     });
 
     const allRows = [...itemRows, ...serviceRows];
-    return await appendToSheet(`${ITEMS_SHEET}!A:L`, allRows);
+    return await appendToSheet(`${ITEMS_SHEET}!A:M`, allRows);
   } catch (err) {
     console.error('[SheetsWriter] appendOrderItemsToSheet error:', err);
     return false;
@@ -919,7 +923,48 @@ export async function appendCashFlowToSheet(entry: {
     ];
 
     const ok = await appendToSheet(`${CASHFLOW_SHEET}!A:G`, [row]);
-    if (ok) console.log(`[SheetsWriter] CashFlow #${entry.id} (${entry.tipo}) gravado na planilha`);
+    if (ok) {
+      console.log(`[SheetsWriter] CashFlow #${entry.id} (${entry.tipo}) gravado na planilha`);
+      // Aplicar formatação vermelha para SANGRIA
+      if (entry.tipo === 'SANGRIA') {
+        try {
+          const sheetNumericId = await getSheetId(CASHFLOW_SHEET);
+          if (sheetNumericId !== null) {
+            const token = await getServiceAccountToken();
+            if (token) {
+              const rowIndex = nextRow - 1; // 0-based
+              const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`;
+              await fetch(batchUrl, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  requests: [{
+                    repeatCell: {
+                      range: {
+                        sheetId: sheetNumericId,
+                        startRowIndex: rowIndex,
+                        endRowIndex: rowIndex + 1,
+                        startColumnIndex: 0,
+                        endColumnIndex: 7,
+                      },
+                      cell: {
+                        userEnteredFormat: {
+                          backgroundColor: { red: 0.4, green: 0.0, blue: 0.0 },
+                          textFormat: { foregroundColor: { red: 1.0, green: 0.8, blue: 0.8 } },
+                        },
+                      },
+                      fields: 'userEnteredFormat(backgroundColor,textFormat)',
+                    },
+                  }],
+                }),
+              });
+            }
+          }
+        } catch (fmtErr) {
+          console.warn('[SheetsWriter] Formatação de sangria falhou (não crítico):', fmtErr);
+        }
+      }
+    }
     return ok;
   } catch (err) {
     console.error('[SheetsWriter] appendCashFlowToSheet error:', err);

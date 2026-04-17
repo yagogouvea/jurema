@@ -674,3 +674,13 @@
 - [x] Coluna J "preco_utilizado" removida; nova estrutura 12 colunas (A-L)
 - [x] Cabeçalhos da aba pedidos_itens atualizados na planilha Google Sheets
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v86 — Comissão por item, sangria vermelha, metas dos funcionários
+- [x] appendOrderItemsToSheet: coluna M (comissao = comissaoUnitaria x quantidade) adicionada
+- [x] Cabeçalho M1 "comissao" atualizado na planilha pedidos_itens (13 células)
+- [x] Dashboard financeiro: linhas de sangria com fundo vermelho escuro + texto vermelho
+- [x] Planilha FLUXO_CAIXA: sangria com formatação vermelha via batchUpdate repeatCell
+- [x] Endpoint getMyProgress no pdvDashboard: pontuacao do mes + metas para o vendedor logado
+- [x] Barra de progresso de metas no header do PdvMain (apenas para vendedores nao-admin)
+- [x] Exibe: pontuacao atual em PT, barra colorida, texto "X PT para Bronze/Prata/Ouro", marcadores de meta
+- [x] 206/206 testes passando, zero erros TypeScript

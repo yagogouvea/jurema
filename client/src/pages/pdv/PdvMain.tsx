@@ -31,6 +31,12 @@ export default function PdvMain() {
   const { seller, isAdmin } = usePdvAuth();
   const utils = trpc.useUtils();
 
+  // Progresso de metas do vendedor (apenas para nao-admins)
+  const { data: myProgress } = trpc.pdvDashboard.getMyProgress.useQuery(
+    undefined,
+    { enabled: !isAdmin, refetchInterval: 60000, staleTime: 30000 }
+  );
+
   // Modal de sincronização
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncPreview, setSyncPreview] = useState<any>(null);
@@ -338,6 +344,71 @@ export default function PdvMain() {
                 </div>
               )}
             </div>
+
+            {/* Barra de Progresso de Metas (apenas para vendedores nao-admin) */}
+            {!isAdmin && myProgress && (() => {
+              const goals = myProgress.goals as Record<string, number>;
+              const pontuacao = myProgress.pontuacao;
+              const nextMeta = pontuacao < (goals.BRONZE || 0)
+                ? { label: 'Bronze', value: goals.BRONZE || 0, color: 'bg-orange-500' }
+                : pontuacao < (goals.PRATA || 0)
+                  ? { label: 'Prata', value: goals.PRATA || 0, color: 'bg-gray-300' }
+                  : pontuacao < (goals.OURO || 0)
+                    ? { label: 'Ouro', value: goals.OURO || 0, color: 'bg-yellow-400' }
+                    : null;
+              const progressValue = nextMeta
+                ? Math.min(100, (pontuacao / nextMeta.value) * 100)
+                : 100;
+              const metaLabel = myProgress.metaAtingida
+                ? `Parabens! Meta ${myProgress.metaAtingida} atingida!`
+                : nextMeta
+                  ? `${Math.round(nextMeta.value - pontuacao)} PT para ${nextMeta.label}`
+                  : '';
+              return (
+                <div className="mb-3 bg-gray-800/60 rounded-xl px-3 py-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-400 font-medium">Minha Meta</span>
+                    <span className={`text-xs font-bold ${
+                      myProgress.metaAtingida === 'OURO' ? 'text-yellow-400'
+                      : myProgress.metaAtingida === 'PRATA' ? 'text-gray-300'
+                      : myProgress.metaAtingida === 'BRONZE' ? 'text-orange-400'
+                      : 'text-green-400'
+                    }`}>{pontuacao.toLocaleString('pt-BR')} PT</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-500 ${
+                        myProgress.metaAtingida === 'OURO' ? 'bg-yellow-400'
+                        : myProgress.metaAtingida === 'PRATA' ? 'bg-gray-300'
+                        : myProgress.metaAtingida === 'BRONZE' ? 'bg-orange-500'
+                        : nextMeta ? nextMeta.color : 'bg-green-500'
+                      }`}
+                      style={{ width: `${progressValue}%` }}
+                    />
+                  </div>
+                  {metaLabel && (
+                    <div className="text-xs text-gray-500 mt-1">{metaLabel}</div>
+                  )}
+                  <div className="flex gap-3 mt-1.5">
+                    {(goals.BRONZE || 0) > 0 && (
+                      <span className={`text-xs ${ pontuacao >= goals.BRONZE ? 'text-orange-400 font-semibold' : 'text-gray-600' }`}>
+                        Bronze: {(goals.BRONZE || 0).toLocaleString('pt-BR')} PT
+                      </span>
+                    )}
+                    {(goals.PRATA || 0) > 0 && (
+                      <span className={`text-xs ${ pontuacao >= goals.PRATA ? 'text-gray-300 font-semibold' : 'text-gray-600' }`}>
+                        Prata: {(goals.PRATA || 0).toLocaleString('pt-BR')} PT
+                      </span>
+                    )}
+                    {(goals.OURO || 0) > 0 && (
+                      <span className={`text-xs ${ pontuacao >= goals.OURO ? 'text-yellow-400 font-semibold' : 'text-gray-600' }`}>
+                        Ouro: {(goals.OURO || 0).toLocaleString('pt-BR')} PT
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Search */}
             <div className="relative mb-3">

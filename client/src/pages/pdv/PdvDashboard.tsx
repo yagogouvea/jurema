@@ -505,15 +505,17 @@ export default function PdvDashboard() {
           ) : (
             <div className="space-y-2">
               {cashData?.entries?.slice(0, 5).map((entry: any) => (
-                <div key={entry.id} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-2">
+                <div key={entry.id} className={`flex items-center justify-between rounded-xl px-3 py-2 ${
+                  entry.tipo === "SANGRIA" ? "bg-red-950/40 border border-red-900/40" : "bg-gray-800"
+                }`}>
                   <div>
-                    <span className={`text-xs font-semibold ${entry.tipo === "SUPRIMENTO" ? "text-green-400" : "text-green-500"}`}>
+                    <span className={`text-xs font-semibold ${entry.tipo === "SUPRIMENTO" ? "text-green-400" : "text-red-400"}`}>
                       {entry.tipo}
                     </span>
-                    <span className="text-gray-300 text-sm ml-2">{entry.descricao}</span>
-                    {entry.usuario && <span className="text-gray-500 text-xs ml-2">por {entry.usuario}</span>}
+                    <span className={`text-sm ml-2 ${entry.tipo === "SANGRIA" ? "text-red-200" : "text-gray-300"}`}>{entry.descricao}</span>
+                    {entry.usuario && <span className={`text-xs ml-2 ${entry.tipo === "SANGRIA" ? "text-red-400/60" : "text-gray-500"}`}>por {entry.usuario}</span>}
                   </div>
-                  <span className={`font-bold text-sm ${entry.tipo === "SUPRIMENTO" ? "text-green-400" : "text-green-500"}`}>
+                  <span className={`font-bold text-sm ${entry.tipo === "SUPRIMENTO" ? "text-green-400" : "text-red-400"}`}>
                     {entry.tipo === "SUPRIMENTO" ? "+" : "-"}{formatCurrency(parseFloat(entry.valor))}
                   </span>
                 </div>

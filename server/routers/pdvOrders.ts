@@ -295,6 +295,7 @@ export const pdvOrdersRouter = router({
                 pedidoId,
                 regime: input.regime,
                 services: input.services,
+                comissaoUnitaria,
                 items: normalItems,
               });
             }

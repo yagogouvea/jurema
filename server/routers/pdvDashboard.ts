@@ -356,4 +356,72 @@ export const pdvDashboardRouter = router({
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     }
   }),
+
+  /**
+   * Retorna a pontuação do mês atual do vendedor logado + metas configuradas.
+   * Usado na tela de funcionários para exibir a barra de progresso de metas.
+   */
+  getMyProgress: publicProcedure.query(async ({ ctx }) => {
+    const seller = await requirePdvAuth(ctx);
+    const db = await getDb();
+    if (!db) return null;
+    try {
+      // Pontuação do mês atual
+      const now = new Date();
+      const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+
+      const [rows] = await db.execute(
+        `SELECT
+          COALESCE(SUM(
+            CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
+                 ELSE oi.ptVarejo * oi.quantidade END
+          ), 0) as pontuacao,
+          COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
+          COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento
+        FROM pdv_orders o
+        JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+        WHERE o.status != 'CANCELADO'
+          AND o.isSofia = 0
+          AND o.sellerId = ?
+          AND DATE(o.createdAt) >= ?
+          AND DATE(o.createdAt) <= ?`,
+        [seller.sellerId, startDate, endDate]
+      );
+
+      // Metas configuradas
+      const [goalRows] = await db.execute("SELECT `key`, value FROM pdv_goals");
+      const goals: Record<string, number> = {};
+      (goalRows as any[]).forEach((g: any) => { goals[g.key] = parseFloat(g.value); });
+
+      await db.end();
+
+      const result = (rows as any[])[0];
+      const pontuacao = parseFloat(result?.pontuacao || '0');
+      const totalPecas = parseInt(result?.totalPecas || '0');
+      const faturamento = parseFloat(result?.faturamento || '0');
+
+      // Determinar nível de meta atingido
+      const metaAtingida = pontuacao >= (goals.OURO || 0) && goals.OURO
+        ? 'OURO'
+        : pontuacao >= (goals.PRATA || 0) && goals.PRATA
+          ? 'PRATA'
+          : pontuacao >= (goals.BRONZE || 0) && goals.BRONZE
+            ? 'BRONZE'
+            : null;
+
+      return {
+        pontuacao,
+        totalPecas,
+        faturamento,
+        goals,
+        metaAtingida,
+        sellerName: seller.name,
+        periodo: { startDate, endDate },
+      };
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    }
+  }),
 });
