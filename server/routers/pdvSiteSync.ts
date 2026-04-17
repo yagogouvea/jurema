@@ -484,6 +484,35 @@ export const pdvSiteSyncRouter = router({
         },
       };
     }),
+
+  /**
+   * Ativa todos os produtos inativos do site em lote
+   * Opcionalmente filtra por categoria
+   */
+  bulkActivate: publicProcedure
+    .input(z.object({
+      category: z.string().optional(), // se informado, ativa apenas essa categoria
+    }).optional())
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+      try {
+        let sql = 'UPDATE products SET isActive = 1, isNewProduct = 0, updatedAt = NOW() WHERE isActive = 0 AND pdvSynced = 1';
+        const params: any[] = [];
+        if (input?.category) {
+          sql += ' AND category = ?';
+          params.push(input.category);
+        }
+        const [result] = await db.execute(sql, params);
+        await db.end();
+        const affected = (result as any).affectedRows || 0;
+        return { success: true, activated: affected };
+      } catch (err) {
+        console.error('[pdvSiteSync] bulkActivate error:', err);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+      }
+    }),
 });
 
 // ─── Auto-sync: chamado automaticamente ao criar/atualizar produto no PDV ────

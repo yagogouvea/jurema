@@ -708,3 +708,10 @@
 - [x] pdvSync.ts: webhookUpdateProduct aceita ptAtacado/ptVarejo como campos permitidos
 - [x] Barra de progresso: proteção contra divisão por zero em PdvDashboard e PdvMain
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v90 — Correção catálogo: produtos ativos não apareciam
+- [x] Corrigir lógica getProducts: removido filtro isFeatured=false do catálogo geral (produtos em destaque agora aparecem também no catálogo)
+- [x] Confirmado: importação do PDV cria produtos com isActive=0 por design (revisão manual)
+- [x] Adicionado endpoint bulkActivate no pdvSiteSync para ativar todos os inativos em lote
+- [x] Adicionado botão "Ativar Todos (N)" na Gestão Site (aparece apenas quando há inativos)
+- [x] 206/206 testes passando, zero erros TypeScript

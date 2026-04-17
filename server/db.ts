@@ -82,10 +82,9 @@ export async function getProducts(opts: {
   }
   if (isFeatured !== undefined) conditions.push(eq(products.isFeatured, isFeatured));
   if (featuredSection !== undefined) conditions.push(eq(products.featuredSection, featuredSection as any));
-  // Se não está buscando por featured section E não é adminMode, excluir produtos em destaque do catálogo
-  else if (!adminMode && isFeatured === undefined && featuredSection === undefined) {
-    conditions.push(eq(products.isFeatured, false));
-  }
+  // Nota: produtos em destaque (isFeatured=true) aparecem tanto nas seções de destaque quanto no catálogo geral.
+  // Só excluímos do catálogo geral quando o usuário está buscando uma seção específica de destaque.
+  // (Bloco removido — não filtramos mais por isFeatured=false no catálogo geral)
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 

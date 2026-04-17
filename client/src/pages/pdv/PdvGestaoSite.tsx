@@ -144,6 +144,15 @@ export default function PdvGestaoSite() {
     onError: (e) => toast.error(e.message),
   });
 
+  const bulkActivateMutation = trpc.pdvSiteSync.bulkActivate.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.activated} produtos ativados no catálogo`);
+      productsQuery.refetch();
+      statsQuery.refetch();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const syncMutation = trpc.pdvSiteSync.syncStockFromPdv.useMutation({
     onSuccess: (data) => {
       toast.success(data.message);
@@ -271,6 +280,21 @@ export default function PdvGestaoSite() {
               <Upload className="w-4 h-4 mr-1" />
               Importar do PDV
             </Button>
+            {stats && stats.inactive > 0 && (
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => {
+                  if (confirm(`Ativar todos os ${stats.inactive} produtos inativos no catálogo?`)) {
+                    bulkActivateMutation.mutate({});
+                  }
+                }}
+                disabled={bulkActivateMutation.isPending}
+              >
+                <CheckCircle className="w-4 h-4 mr-1" />
+                Ativar Todos ({stats.inactive})
+              </Button>
+            )}
           </div>
         </div>
       </div>
