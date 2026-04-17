@@ -738,3 +738,9 @@
 - [x] Correção: script de sincronização em lote atualizou 811 produtos no banco (652 com ptAtacado > 0)
 - [x] Queries de getMyProgress e getMyHistory estão corretas (CASE WHEN regime='ATACADO' THEN ptAtacado*qty ELSE ptVarejo*qty)
 - [x] 206/206 testes passando
+
+## v94 — Recalcular pontos dos pedidos antigos
+- [x] Script UPDATE JOIN: pdv_order_items.ptAtacado/ptVarejo = pdv_products.ptAtacado/ptVarejo WHERE zerados
+- [x] 14/14 itens atualizados (todos os itens históricos tinham ptAtacado=0)
+- [x] Resultado: 0 itens zerados, 14 com pontos, 339 PT total acumulado
+- [x] Top pedidos: VANESSA VAREJO 190PT, VANESSA ATACADO 108PT, FLAVIO ATACADO 51PT
