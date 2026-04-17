@@ -59,7 +59,10 @@ const OrderServiceSchema = z.object({
   tipo: z.string(),
   descricao: z.string().optional(),
   valor: z.number().min(0),
-});
+}).refine(
+  (s) => !(s.tipo === 'CORREIO' && s.valor < 45),
+  { message: 'O valor mínimo para Correio é R$ 45,00', path: ['valor'] }
+);
 
 export const pdvOrdersRouter = router({
   create: publicProcedure
@@ -263,6 +266,9 @@ export const pdvOrdersRouter = router({
                 return sum + (pa * item.quantidade);
               }, 0);
 
+              // Verificar se é atacado com menos de 6 peças (para coluna V da aba PEDIDOS)
+              const totalPecasOrder = normalItems.reduce((sum, item) => sum + item.quantidade, 0);
+              const isAtacadoMenos6Order = input.regime === 'ATACADO' && totalPecasOrder < 6;
               await appendOrderToSheet({
                 pedidoId,
                 createdAt: new Date(),
@@ -281,6 +287,7 @@ export const pdvOrdersRouter = router({
                 status: input.status,
                 qtdItens: qtdItensNormais,
                 comissaoTotal,
+                justificativaAtacado: isAtacadoMenos6Order ? (input.justificativa || '') : null,
               });
 
               // ── ABA pedidos_itens (geral) — somente itens NÃO-Sofia ──

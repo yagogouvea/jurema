@@ -136,7 +136,7 @@ async function updateCellInSheet(range: string, value: any): Promise<boolean> {
  * Grava um pedido completo na aba PEDIDOS da planilha
  * Colunas: pedido_id | data | vendedor | canal | cliente | telefone | varejo | atacado |
  *          atacado/varejo | extra | valor_adicional | valor_sem_taxa | forma_pagamento |
- *          taxa | total_com_taxa | pendente | justificativa | modalidade | qtd_itens | comissao
+ *          taxa | total_com_taxa | pendente | justificativa | modalidade | status | qtd_itens | comissao | justificativa_atac_menos6
  */
 export async function appendOrderToSheet(order: {
   pedidoId: string;
@@ -156,6 +156,7 @@ export async function appendOrderToSheet(order: {
   status: string;
   qtdItens: number;
   comissaoTotal: number;
+  justificativaAtacado?: string | null;
 }): Promise<boolean> {
   try {
     // Serviços extras
@@ -198,9 +199,10 @@ export async function appendOrderToSheet(order: {
       order.status === 'CANCELADO' ? 'Cancelado' : order.status === 'PENDENTE' ? 'Pendente' : 'Pago', // S: status
       order.qtdItens,                                    // T: qtd_itens (número)
       parseFloat(order.comissaoTotal.toFixed(2)),        // U: comissao (número)
+      order.justificativaAtacado || '',                   // V: justificativa_atac_menos6
     ];
     
-    return await appendToSheet(`${ORDERS_SHEET}!A:U`, [row]);
+    return await appendToSheet(`${ORDERS_SHEET}!A:V`, [row]);
   } catch (err) {
     console.error('[SheetsWriter] appendOrderToSheet error:', err);
     return false;

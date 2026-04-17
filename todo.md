@@ -660,3 +660,9 @@
 - [x] Nome do cliente obrigatório no pedido (validação frontend + backend com z.string().min(1))
 - [x] Correio: valor mínimo de R$ 45 (validação no addService do frontend)
 - [x] 206/206 testes passando, zero erros TypeScript
+
+## v84 — Correio mínimo backend + Justificativa <6 na aba PEDIDOS
+- [x] Backend: validar Correio mínimo R$ 45 no schema Zod (OrderServiceSchema.refine)
+- [x] Aba PEDIDOS: coluna V "JUSTIFICATIVA <6" adicionada (cabeçalho V1 atualizado na planilha)
+- [x] appendOrderToSheet: passa justificativaAtacado na coluna V quando regime=ATACADO e peças<6
+- [x] 206/206 testes passando, zero erros TypeScript
