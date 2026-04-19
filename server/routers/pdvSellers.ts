@@ -33,7 +33,7 @@ export const pdvSellersRouter = router({
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     
     const [rows] = await db.execute(
-      "SELECT id, name, username, role, isActive, createdAt FROM pdv_sellers ORDER BY name ASC"
+      "SELECT id, name, username, role, isActive, createdAt FROM pdv_sellers WHERE isActive = 1 ORDER BY name ASC"
     );
     await db.end();
     return rows as any[];
@@ -53,13 +53,26 @@ export const pdvSellersRouter = router({
       
       try {
         const passwordHash = hashPassword(input.password);
+        const username = input.username.toLowerCase();
+        
+        // Verificar se username já existe em vendedor ativo
+        const [existing] = await db.execute(
+          "SELECT id FROM pdv_sellers WHERE LOWER(username) = ? AND isActive = 1",
+          [username]
+        );
+        
+        if ((existing as any[]).length > 0) {
+          throw new TRPCError({ code: "CONFLICT", message: "Nome de usuário já existe" });
+        }
+        
         const [result] = await db.execute(
           "INSERT INTO pdv_sellers (name, username, passwordHash, role) VALUES (?, ?, ?, ?)",
-          [input.name.toUpperCase(), input.username.toLowerCase(), passwordHash, input.role]
+          [input.name.toUpperCase(), username, passwordHash, input.role]
         );
         await db.end();
         return { success: true, id: (result as any).insertId };
       } catch (err: any) {
+        if (err instanceof TRPCError) throw err;
         if (err.code === "ER_DUP_ENTRY") {
           throw new TRPCError({ code: "CONFLICT", message: "Nome de usuário já existe" });
         }
@@ -86,7 +99,19 @@ export const pdvSellersRouter = router({
       const params: any[] = [];
       
       if (name) { sets.push("name = ?"); params.push(name.toUpperCase()); }
-      if (rest.username) { sets.push("username = ?"); params.push(rest.username.toLowerCase()); }
+      if (rest.username) {
+        const newUsername = rest.username.toLowerCase();
+        // Verificar se novo username já existe em outro vendedor ativo
+        const [existing] = await db.execute(
+          "SELECT id FROM pdv_sellers WHERE LOWER(username) = ? AND id != ? AND isActive = 1",
+          [newUsername, id]
+        );
+        if ((existing as any[]).length > 0) {
+          throw new TRPCError({ code: "CONFLICT", message: "Nome de usuário já existe" });
+        }
+        sets.push("username = ?");
+        params.push(newUsername);
+      }
       if (rest.role !== undefined) { sets.push("role = ?"); params.push(rest.role); }
       if (rest.isActive !== undefined) { sets.push("isActive = ?"); params.push(rest.isActive); }
       if (password) { sets.push("passwordHash = ?"); params.push(hashPassword(password)); }
@@ -99,6 +124,7 @@ export const pdvSellersRouter = router({
         await db.end();
         return { success: true };
       } catch (err: any) {
+        if (err instanceof TRPCError) throw err;
         if (err.code === "ER_DUP_ENTRY") {
           throw new TRPCError({ code: "CONFLICT", message: "Nome de usuário já existe" });
         }
@@ -113,7 +139,15 @@ export const pdvSellersRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       
-      await db.execute("UPDATE pdv_sellers SET isActive = 0 WHERE id = ?", [input.id]);
+      // Ao deletar, marca como inativo E gera um novo username único
+      // Isso permite reutilizar o username original para novos vendedores
+      const timestamp = Date.now();
+      const newUsername = `deleted_${input.id}_${timestamp}`;
+      
+      await db.execute(
+        "UPDATE pdv_sellers SET isActive = 0, username = ? WHERE id = ?",
+        [newUsername, input.id]
+      );
       await db.end();
       return { success: true };
     }),

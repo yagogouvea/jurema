@@ -85,7 +85,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
   };
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Logo */}
       <div className="p-6 border-b border-gray-800">
         <div className="flex items-center gap-3">
@@ -100,7 +100,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-4 md:p-6 space-y-1 md:space-y-2">
+      <nav className="flex-1 p-4 md:p-6 space-y-1 md:space-y-2 overflow-y-auto overflow-x-hidden md:overflow-x-auto">
         {navItems.map((item: any) => {
           const active = isActive(item.href, item.exact);
           return (
@@ -108,14 +108,14 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
               key={item.href}
               href={item.href}
               onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-3 px-4 py-3.5 md:py-4 rounded-xl text-sm md:text-base font-medium transition-all ${
+              className={`flex items-center gap-3 px-4 py-3.5 md:py-4 rounded-xl text-sm md:text-base font-medium transition-all whitespace-nowrap ${
                 active
                   ? "bg-green-700 text-white shadow-lg shadow-green-700/20"
                   : "text-gray-400 hover:text-white hover:bg-gray-800"
               }`}
             >
               <item.icon className="w-5 h-5 flex-shrink-0" />
-              <span>{item.label}</span>
+              <span className="truncate">{item.label}</span>
               {item.badge > 0 && (
                 <span className="ml-auto bg-green-700 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                   {item.badge > 99 ? "99+" : item.badge}
@@ -128,7 +128,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
       </nav>
 
       {/* User info + logout */}
-      <div className="p-4 border-t border-gray-800">
+      <div className="p-4 border-t border-gray-800 shrink-0">
         <div className="bg-gray-800/50 rounded-xl p-3 mb-3">
           <div className="text-white font-semibold text-sm">{seller.name}</div>
           <div className="text-gray-400 text-xs mt-0.5 flex items-center gap-1">
