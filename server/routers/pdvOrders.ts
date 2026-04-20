@@ -33,18 +33,18 @@ function generatePedidoId(): string {
 }
 
 const OrderItemSchema = z.object({
-  productId: z.number().optional(),
-  linha: z.string().optional(),
-  modelo: z.string().optional(),
-  time: z.string(),
-  descricao: z.string().optional(),
-  tipo: z.string().optional(),
+  productId: z.number().optional().nullable(),
+  linha: z.string().optional().nullable(),
+  modelo: z.string().optional().nullable(),
+  time: z.string().nullable().transform(v => v ?? ""),
+  descricao: z.string().optional().nullable().transform(v => v ?? undefined),
+  tipo: z.string().optional().nullable().transform(v => v ?? undefined),
   tamanho: z.string(),
   quantidade: z.number().min(1),
   precoUnitario: z.number().min(0),
   totalItem: z.number().min(0),
   isSofia: z.boolean().default(false),
-  comissaoLojaSofia: z.number().optional(), // comissão personalizada da loja por item Sofia (R$)
+  comissaoLojaSofia: z.number().optional().nullable(), // comissão personalizada da loja por item Sofia (R$)
 });
 
 const OrderPaymentSchema = z.object({

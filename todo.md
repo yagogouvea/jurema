@@ -782,3 +782,6 @@
 - [x] Criar comando para enviar atualizações para GitHub específico do cliente (scripts/push-to-client-github.mjs)
 - [x] Adicionar scroll horizontal no menu lateral para tablets (PdvLayout.tsx com overflow-y-auto e overflow-x-auto)
 - [x] Corrigir bug de duplicação ao recriar vendedor com mesmo nome (pdvSellers.ts: username renomeado ao deletar)
+
+## v101 — Correção erro descricao null no checkout
+- [x] Corrigir campo descricao dos itens chegando como null ao finalizar venda (OrderItemSchema: nullable + transform)
