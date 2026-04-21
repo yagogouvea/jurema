@@ -284,6 +284,7 @@ export async function appendProductToSheet(product: {
   temporada?: string;
   ptAtacado?: number;
   ptVarejo?: number;
+  custo?: number;
 }): Promise<boolean> {
   try {
     const row = [
@@ -302,8 +303,9 @@ export async function appendProductToSheet(product: {
       product.temporada || '',                           // M: TEMPORADA
       (product.ptAtacado ?? 0).toFixed(2),               // N: PT ATAC
       (product.ptVarejo ?? 0).toFixed(2),                // O: PT VAR
+      (product.custo ?? 0).toFixed(2),                   // P: CUSTO
     ];
-    return await appendToSheet(`PRODUTOS!A:O`, [row]);
+    return await appendToSheet(`PRODUTOS!A:P`, [row]);
   } catch (err) {
     console.error('[SheetsWriter] appendProductToSheet error:', err);
     return false;
@@ -380,10 +382,11 @@ export async function updateProductRowInSheet(product: {
   precoVarejo?: number;
   ptAtacado?: number;
   ptVarejo?: number;
+  custo?: number;
   isActive?: boolean;
 }): Promise<boolean> {
   try {
-    const rows = await readSheet('PRODUTOS!A2:O2000');
+    const rows = await readSheet('PRODUTOS!A2:P2000');
     const rowIndex = rows.findIndex(row => row[0]?.toString().trim() === product.codigo.trim());
     if (rowIndex === -1) {
       console.warn(`[SheetsWriter] updateProductRowInSheet: produto ${product.codigo} não encontrado na planilha`);
@@ -415,9 +418,10 @@ export async function updateProductRowInSheet(product: {
       existing[12] ?? '',                                                          // M: TEMPORADA
       product.ptAtacado !== undefined ? parseFloat(product.ptAtacado.toFixed(2)) : (parseFloat(existing[13] || '0')), // N: PT ATAC
       product.ptVarejo !== undefined ? parseFloat(product.ptVarejo.toFixed(2)) : (parseFloat(existing[14] || '0')),  // O: PT VAR
+      product.custo !== undefined ? parseFloat(product.custo.toFixed(2)) : (parseFloat(existing[15] || '0')),        // P: CUSTO
     ];
 
-    const range = `PRODUTOS!A${sheetRow}:O${sheetRow}`;
+    const range = `PRODUTOS!A${sheetRow}:P${sheetRow}`;
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
     const res = await fetch(url, {
       method: 'PUT',

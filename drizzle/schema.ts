@@ -232,6 +232,7 @@ export const pdvProducts = mysqlTable("pdv_products", {
   temporada: varchar("temporada", { length: 100 }),       // ex: 2024/25
   ptAtacado: decimal("ptAtacado", { precision: 10, scale: 2 }).default("0").notNull(),  // ponto de atacado
   ptVarejo: decimal("ptVarejo", { precision: 10, scale: 2 }).default("0").notNull(),    // ponto de varejo
+  custo: decimal("custo", { precision: 10, scale: 2 }).default("0").notNull(),          // custo do produto
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

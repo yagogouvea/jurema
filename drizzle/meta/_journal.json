@@ -99,6 +99,13 @@
       "when": 1776440050579,
       "tag": "0013_bright_zarek",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1776780196943,
+      "tag": "0014_dusty_jack_flag",
+      "breakpoints": true
     }
   ]
 }

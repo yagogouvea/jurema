@@ -22,6 +22,7 @@ async function updateProductInSheetAsync(prod: any) {
     precoVarejo: prod.precoVarejo ?? 0,
     ptAtacado: prod.ptAtacado ?? 0,
     ptVarejo: prod.ptVarejo ?? 0,
+    custo: prod.custo ?? 0,
     isActive: prod.isActive === 1 || prod.isActive === true,
   });
 }
@@ -161,6 +162,7 @@ export const pdvProductsRouter = router({
       estoque: z.number().default(0),
       precoAtacado: z.number().default(0),
       precoVarejo: z.number().default(0),
+      custo: z.number().default(0),
     }))
     .mutation(async ({ input, ctx }) => {
       await requirePdvAdmin(ctx);
@@ -168,10 +170,10 @@ export const pdvProductsRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       
       const [result] = await db.execute(
-        `INSERT INTO pdv_products (codigo, linha, modelo, time, descricao, tamanho, tipo, estoque, precoAtacado, precoVarejo)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO pdv_products (codigo, linha, modelo, time, descricao, tamanho, tipo, estoque, precoAtacado, precoVarejo, custo)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [input.codigo || null, input.linha, input.modelo, input.time, input.descricao || null, 
-         input.tamanho, input.tipo, input.estoque, input.precoAtacado, input.precoVarejo]
+         input.tamanho, input.tipo, input.estoque, input.precoAtacado, input.precoVarejo, input.custo]
       );
       await db.end();
       return { success: true, id: (result as any).insertId };
@@ -190,6 +192,7 @@ export const pdvProductsRouter = router({
       estoque: z.number().optional(),
       precoAtacado: z.number().optional(),
       precoVarejo: z.number().optional(),
+      custo: z.number().optional(),
       isActive: z.boolean().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -394,6 +397,7 @@ export const pdvProductsRouter = router({
       precoVarejo: z.number().min(0).optional(),
       ptAtacado: z.number().min(0).optional(),
       ptVarejo: z.number().min(0).optional(),
+      custo: z.number().min(0).optional(),
       isActive: z.boolean().optional(),
       syncSheet: z.boolean().default(true),
     }))
@@ -411,6 +415,7 @@ export const pdvProductsRouter = router({
       if (fields.precoVarejo !== undefined) { sets.push("precoVarejo = ?"); params.push(fields.precoVarejo); }
       if (fields.ptAtacado !== undefined) { sets.push("ptAtacado = ?"); params.push(fields.ptAtacado); }
       if (fields.ptVarejo !== undefined) { sets.push("ptVarejo = ?"); params.push(fields.ptVarejo); }
+      if (fields.custo !== undefined) { sets.push("custo = ?"); params.push(fields.custo); }
       if (fields.isActive !== undefined) { sets.push("isActive = ?"); params.push(fields.isActive ? 1 : 0); }
 
       if (sets.length === 0) return { success: true };
@@ -525,6 +530,7 @@ export const pdvProductsRouter = router({
       temporada: z.string().optional(),
       ptAtacado: z.number().min(0).default(0),
       ptVarejo: z.number().min(0).default(0),
+      custo: z.number().min(0).default(0),
       fotoUrl: z.string().optional(),
       // Prefixo do código (ex: "CA-T-TO-ALH-VERM") — o sistema completa com "-{TAM}"
       codigoBase: z.string().optional(),
@@ -560,8 +566,8 @@ export const pdvProductsRouter = router({
           const [result] = await db.execute(
             `INSERT INTO pdv_products
               (codigo, linha, modelo, time, descricao, tamanho, tipo, estoque,
-               precoAtacado, precoVarejo, isSofia, temporada, ptAtacado, ptVarejo, fotoUrl)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               precoAtacado, precoVarejo, isSofia, temporada, ptAtacado, ptVarejo, fotoUrl, custo)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               codigo,
               input.linha,
@@ -578,6 +584,7 @@ export const pdvProductsRouter = router({
               input.ptAtacado,
               input.ptVarejo,
               input.fotoUrl || null,
+              input.custo,
             ]
           );
           created.push({ id: (result as any).insertId, tamanho: tam.tamanho, codigo: codigo || '' });

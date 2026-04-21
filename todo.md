@@ -785,3 +785,9 @@
 
 ## v101 — Correção erro descricao null no checkout
 - [x] Corrigir campo descricao dos itens chegando como null ao finalizar venda (OrderItemSchema: nullable + transform)
+
+## v102 — Coluna Custo nos produtos
+- [x] Migrar banco: adicionar coluna custo em pdv_products
+- [x] Atualizar router pdvProducts.ts com campo custo (create, createBatch, update, updateProduct)
+- [x] Atualizar frontend PdvCadastroProdutos.tsx com campo Custo
+- [x] Atualizar sincronização planilha: coluna Custo (P) ao lado de PT VAR (O)

@@ -50,6 +50,7 @@ interface FormState {
   temporada: string;
   ptAtacado: string;
   ptVarejo: string;
+  custo: string;
   fotoUrl: string;
   fotoBase64?: string;
   fotoMime?: string;
@@ -76,6 +77,7 @@ const EMPTY_FORM: FormState = {
   temporada: "",
   ptAtacado: "",
   ptVarejo: "",
+  custo: "",
   fotoUrl: "",
 };
 
@@ -252,6 +254,7 @@ export default function PdvCadastroProdutos() {
       precoVarejo: parseMoney(form.varejo),
       ptAtacado: parseFloat(form.ptAtacado) || 0,
       ptVarejo: parseFloat(form.ptVarejo) || 0,
+      custo: parseMoney(form.custo),
       isSofia: form.isSofia,
       temporada: form.temporada.trim() || undefined,
       codigoBase: form.codigo.trim().toUpperCase() || undefined,
@@ -479,6 +482,20 @@ export default function PdvCadastroProdutos() {
                         placeholder="0,00"
                         inputMode="numeric"
                         className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* CUSTO */}
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <Label className="text-gray-300 text-sm font-medium">Custo (R$)</Label>
+                      <Input
+                        value={form.custo}
+                        onChange={e => set("custo", formatMoney(e.target.value))}
+                        placeholder="0,00"
+                        inputMode="numeric"
+                        className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-yellow-600"
                       />
                     </div>
                   </div>
