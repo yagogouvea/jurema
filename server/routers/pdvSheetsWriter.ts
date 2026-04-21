@@ -134,9 +134,30 @@ async function updateCellInSheet(range: string, value: any): Promise<boolean> {
 
 /**
  * Grava um pedido completo na aba PEDIDOS da planilha
- * Colunas: pedido_id | data | vendedor | canal | cliente | telefone | cep | varejo | atacado |
- *          atacado/varejo | extra | valor_adicional | valor_sem_taxa | forma_pagamento |
- *          taxa | total_com_taxa | pendente | justificativa | modalidade | status | qtd_itens | comissao | justificativa_atac_menos6
+ * Colunas (22 no total, sem coluna K vazia):
+ * A: pedido_id
+ * B: data
+ * C: vendedor
+ * D: canal
+ * E: cliente
+ * F: telefone
+ * G: cep
+ * H: varejo
+ * I: atacado
+ * J: atacado_varejo
+ * K: extra (tipo do serviço)
+ * L: valor_adicional (valor do serviço)
+ * M: valor_sem_taxa
+ * N: forma_pagamento
+ * O: taxa
+ * P: total_com_taxa
+ * Q: pendente
+ * R: justificativa
+ * S: modalidade
+ * T: status
+ * U: qtd_itens
+ * V: comissao
+ * W: justificativa_atac_menos6
  */
 export async function appendOrderToSheet(order: {
   pedidoId: string;
@@ -182,14 +203,14 @@ export async function appendOrderToSheet(order: {
       order.pedidoId,                                    // A: pedido_id
       dataFormatada,                                     // B: data (DD/MM/YYYY HH:MM)
       order.sellerName,                                  // C: vendedor
-      order.canal === 'WHATSAPP' ? 'WhatsApp' : 'Balcão', // D: canal
+      order.canal === 'WHATSAPP' ? 'WhatsApp' : 'Balão', // D: canal
       order.clienteNome || '',                           // E: cliente
       order.clienteTelefone || '',                       // F: telefone
       order.cepCorreio || '',                            // G: cep (CEP do Correio, se houver)
       parseFloat(order.totalVarejo.toFixed(2)),          // H: varejo (número)
       parseFloat(order.totalAtacado.toFixed(2)),         // I: atacado (número)
-      order.regime === 'ATACADO' ? 'Atacado' : 'Varejo', // J: atacado/varejo
-      extraTipos,                                        // K: extra (serviço extra)
+      order.regime === 'ATACADO' ? 'Atacado' : 'Varejo', // J: atacado_varejo
+      extraTipos,                                        // K: extra (tipo do serviço) — sem coluna vazia antes
       extraValor > 0 ? parseFloat(extraValor.toFixed(2)) : '', // L: valor_adicional (número)
       parseFloat(valorSemTaxaFinal.toFixed(2)),          // M: valor_sem_taxa (subtotal + extras, número)
       formasPagamento,                                   // N: forma_pagamento

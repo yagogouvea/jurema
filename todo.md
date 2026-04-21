@@ -823,3 +823,9 @@
 - [x] Adicionar aba "Caixinhas" no PdvMeuPerfil (vendedor vê apenas as suas)
 - [x] Adicionar seção de caixinhas no PdvDashboard admin (visão ampla por vendedor)
 - [x] Adicionar coluna VENDEDOR na aba pedidos_itens da planilha (código + sincronização)
+
+## v108 — Correção desalinhamento coluna K na aba PEDIDOS
+- [x] Identificar causa: coluna K vazia no cabeçalho causava offset no append do Google Sheets API
+- [x] Remover coluna K vazia do código (pdvSheetsWriter.ts appendOrderToSheet)
+- [x] Corrigir planilha física: realinhar 4 linhas deslocadas (75-78) e remover coluna K do cabeçalho
+- [x] 206/206 testes passando, 0 erros TypeScript
