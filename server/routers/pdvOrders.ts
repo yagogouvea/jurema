@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
-import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet } from './pdvSheetsWriter';
+import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet, appendToLucroProdutos, type LucroItem } from './pdvSheetsWriter';
 import { autoSyncProductToSite } from './pdvSiteSync';
 
 async function getDb() {
@@ -233,9 +233,9 @@ export const pdvOrdersRouter = router({
             // Buscar códigos e preços dos produtos para a descrição completa
             const db3 = await getDb();
             const itemsWithCodigo = await Promise.all(input.items.map(async (item) => {
-              if (!item.productId || !db3) return { ...item, codigo: null, precoAtacado: null, precoVarejo: null };
+              if (!item.productId || !db3) return { ...item, codigo: null, precoAtacado: null, precoVarejo: null, custo: 0 };
               const [pRows] = await db3.execute(
-                'SELECT codigo, tipo, precoAtacado, precoVarejo FROM pdv_products WHERE id = ? LIMIT 1',
+                'SELECT codigo, tipo, precoAtacado, precoVarejo, custo FROM pdv_products WHERE id = ? LIMIT 1',
                 [item.productId]
               );
               const prod = (pRows as any[])[0];
@@ -245,6 +245,7 @@ export const pdvOrdersRouter = router({
                 tipo: item.tipo || prod?.tipo || null,
                 precoAtacado: prod ? parseFloat(prod.precoAtacado) : null,
                 precoVarejo: prod ? parseFloat(prod.precoVarejo) : null,
+                custo: prod?.custo ? parseFloat(prod.custo) : 0,
               };
             }));
             if (db3) await db3.end();
@@ -356,6 +357,26 @@ export const pdvOrdersRouter = router({
                 qtdItens: qtdItensNormaisVendas,
                 justificativaAtacado: isAtacadoMenos6 ? (input.justificativa || '') : undefined,
               });
+            }
+
+            // ── ABA Lucro_produtos — somente itens NÃO-Sofia ──
+            if (normalItems.length > 0) {
+              const lucroItems: LucroItem[] = normalItems.map(item => ({
+                codigo: item.codigo ?? '',
+                linha: item.linha ?? '',
+                modelo: item.modelo ?? '',
+                time: item.time ?? '',
+                descricao: item.descricao ?? '',
+                tamanho: item.tamanho ?? '',
+                tipo: item.tipo ?? '',
+                tipoVenda: input.regime === 'ATACADO' ? 'ATACADO' : 'VAREJO',
+                precoAtacado: item.precoAtacado ?? item.precoUnitario,
+                precoVarejo: item.precoVarejo ?? item.precoUnitario,
+                custo: item.custo ?? 0,
+                quantidade: item.quantidade,
+                dataPedido: new Date().toISOString(),
+              }));
+              await appendToLucroProdutos(lucroItems);
             }
           } catch (sheetErr) {
             console.error('[PDV Orders] Sheet sync error (non-blocking):', sheetErr);

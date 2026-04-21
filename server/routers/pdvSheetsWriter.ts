@@ -1184,3 +1184,86 @@ export async function syncAllSalesToCashFlowSheet(pedidos: Array<{
     return false;
   }
 }
+
+// ─── Aba Lucro_produtos ──────────────────────────────────────────────────────
+const LUCRO_SHEET = 'Lucro_produtos';
+
+export interface LucroItem {
+  codigo: string;
+  linha: string;
+  modelo: string;
+  time: string;
+  descricao: string;
+  tamanho: string;
+  tipo: string;
+  tipoVenda: 'ATACADO' | 'VAREJO';
+  precoAtacado: number;
+  precoVarejo: number;
+  custo: number;
+  quantidade: number;
+  dataPedido: string;
+}
+
+/**
+ * Adiciona linhas na aba Lucro_produtos para cada unidade vendida.
+ * Pedidos Sofia devem ser filtrados antes de chamar esta função.
+ * Cada unidade (quantidade) gera uma linha separada.
+ */
+export async function appendToLucroProdutos(items: LucroItem[]): Promise<boolean> {
+  if (items.length === 0) return true;
+  const token = await getServiceAccountToken();
+  if (!token) {
+    console.warn('[SheetsWriter] appendToLucroProdutos: sem token de service account');
+    return false;
+  }
+  try {
+    const rows: (string | number)[][] = [];
+
+    for (const item of items) {
+      const valor = item.tipoVenda === 'ATACADO' ? item.precoAtacado : item.precoVarejo;
+      const custo = item.custo ?? 0;
+      const lucro = valor - custo;
+      const margem = valor > 0 ? ((lucro / valor) * 100) : 0;
+      const dataFormatada = item.dataPedido
+        ? new Date(item.dataPedido).toLocaleDateString('pt-BR')
+        : new Date().toLocaleDateString('pt-BR');
+
+      for (let i = 0; i < item.quantidade; i++) {
+        rows.push([
+          item.codigo ?? '',
+          item.linha ?? '',
+          item.modelo ?? '',
+          item.time ?? '',
+          item.descricao ?? '',
+          item.tamanho ?? '',
+          item.tipo ?? '',
+          item.tipoVenda,
+          Number(valor.toFixed(2)),
+          Number(custo.toFixed(2)),
+          Number(lucro.toFixed(2)),
+          Number(margem.toFixed(2)),
+          dataFormatada,
+        ]);
+      }
+    }
+
+    if (rows.length === 0) return true;
+
+    const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${LUCRO_SHEET}!A:M`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+    const res = await fetch(appendUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: rows }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('[SheetsWriter] appendToLucroProdutos failed:', err);
+      return false;
+    }
+    console.log(`[SheetsWriter] ${rows.length} linhas adicionadas em Lucro_produtos`);
+    return true;
+  } catch (err) {
+    console.error('[SheetsWriter] appendToLucroProdutos error:', err);
+    return false;
+  }
+}

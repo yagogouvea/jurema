@@ -799,3 +799,8 @@
 - [x] Adicionar coluna Custo na tabela de listagem de produtos
 - [x] Adicionar campo Custo no modal/inline de edição de produto (desktop grid 4 colunas + mobile)
 - [x] Sincronizar custo com planilha ao editar produto (updateProduct já inclui custo)
+
+## v105 — Aba Lucro_produtos na planilha
+- [x] Criar aba Lucro_produtos com cabeçalho na planilha (verde, negrito, linha congelada)
+- [x] Criar função appendToLucroProdutos no pdvSheetsWriter.ts
+- [x] Chamar função ao finalizar pedido no pdvOrders.ts (exceto Sofia)
