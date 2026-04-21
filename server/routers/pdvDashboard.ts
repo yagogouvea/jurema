@@ -361,15 +361,20 @@ export const pdvDashboardRouter = router({
    * Retorna a pontuação do mês atual do vendedor logado + metas configuradas.
    * Usado na tela de funcionários para exibir a barra de progresso de metas.
    */
-  getMyProgress: publicProcedure.query(async ({ ctx }) => {
+  getMyProgress: publicProcedure
+    .input(z.object({
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    }).optional())
+    .query(async ({ input, ctx }) => {
     const seller = await requirePdvAuth(ctx);
     const db = await getDb();
     if (!db) return null;
     try {
-      // Pontuação do mês atual
+      // Pontuação do período (padrão: mês atual)
       const now = new Date();
-      const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-      const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+      const startDate = input?.startDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      const endDate = input?.endDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
 
       const [rows] = await db.execute(
         `SELECT
@@ -378,7 +383,8 @@ export const pdvDashboardRouter = router({
                  ELSE oi.ptVarejo * oi.quantidade END
           ), 0) as pontuacao,
           COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
-          COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento
+          COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+          COALESCE(SUM(oi.comissaoUnitaria * oi.quantidade), 0) as totalBonus
         FROM pdv_orders o
         JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
         WHERE o.status != 'CANCELADO'
@@ -386,6 +392,18 @@ export const pdvDashboardRouter = router({
           AND o.sellerId = ?
           AND DATE(o.createdAt) >= ?
           AND DATE(o.createdAt) <= ?`,
+        [seller.sellerId, startDate, endDate]
+      );
+
+      // Buscar total de caixinhas no período
+      const [caixRows] = await db.execute(
+        `SELECT COALESCE(SUM(s.valor), 0) as totalCaixinha, COUNT(s.id) as qtdCaixinha
+         FROM pdv_order_services s
+         JOIN pdv_orders o ON o.pedidoId = s.pedidoId
+         WHERE s.tipo = 'CAIXINHA'
+           AND o.sellerId = ?
+           AND DATE(s.createdAt) >= ?
+           AND DATE(s.createdAt) <= ?`,
         [seller.sellerId, startDate, endDate]
       );
 
@@ -397,9 +415,13 @@ export const pdvDashboardRouter = router({
       await db.end();
 
       const result = (rows as any[])[0];
+      const caixResult = (caixRows as any[])[0];
       const pontuacao = parseFloat(result?.pontuacao || '0');
       const totalPecas = parseInt(result?.totalPecas || '0');
       const faturamento = parseFloat(result?.faturamento || '0');
+      const totalBonus = parseFloat(result?.totalBonus || '0');
+      const totalCaixinha = parseFloat(caixResult?.totalCaixinha || '0');
+      const qtdCaixinha = parseInt(caixResult?.qtdCaixinha || '0');
 
       // Determinar nível de meta atingido
       const metaAtingida = pontuacao >= (goals.OURO || 0) && goals.OURO
@@ -414,6 +436,9 @@ export const pdvDashboardRouter = router({
         pontuacao,
         totalPecas,
         faturamento,
+        totalBonus,
+        totalCaixinha,
+        qtdCaixinha,
         goals,
         metaAtingida,
         sellerName: seller.name,
@@ -465,7 +490,11 @@ export const pdvDashboardRouter = router({
               CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
                    ELSE oi.ptVarejo * oi.quantidade END
             ), 0) as pontuacao,
-            COALESCE(SUM(oi.comissaoUnitaria * oi.quantidade), 0) as bonusTotal
+            COALESCE(SUM(oi.comissaoUnitaria * oi.quantidade), 0) as bonusTotal,
+            COALESCE((
+              SELECT SUM(s.valor) FROM pdv_order_services s
+              WHERE s.pedidoId = o.pedidoId AND s.tipo = 'CAIXINHA'
+            ), 0) as caixinhaTotal
           FROM pdv_orders o
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
           WHERE o.sellerId = ? AND o.isSofia = 0 AND o.status != 'CANCELADO'${dateFilter}
@@ -486,6 +515,7 @@ export const pdvDashboardRouter = router({
             totalPecas: parseInt(r.totalPecas || '0'),
             pontuacao: parseFloat(r.pontuacao || '0'),
             bonusTotal: parseFloat(r.bonusTotal || '0'),
+            caixinhaTotal: parseFloat(r.caixinhaTotal || '0'),
           })),
           total,
           pages,

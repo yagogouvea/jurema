@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import PdvLayout from "./PdvLayout";
-import { Trophy, Star, Medal, TrendingUp, ShoppingBag, Package, ChevronLeft, ChevronRight, Calendar, Box } from "lucide-react";
+import { Trophy, Star, Medal, TrendingUp, ShoppingBag, Package, ChevronLeft, ChevronRight, Calendar, Box, DollarSign, Layers, Gift } from "lucide-react";
 
 function formatPT(v: number) {
   return `${Math.round(v).toLocaleString("pt-BR")} PT`;
@@ -20,13 +20,44 @@ const LEVEL_CONFIG = {
   BRONZE: { label: "Bronze", color: "text-orange-400", bg: "bg-orange-400", border: "border-orange-500", icon: Medal, glow: "shadow-orange-500/30" },
 };
 
+// Atalhos de período
+const PERIOD_SHORTCUTS = [
+  { label: "Hoje", getValue: () => {
+    const d = new Date().toISOString().slice(0, 10);
+    return { start: d, end: d };
+  }},
+  { label: "Esta semana", getValue: () => {
+    const now = new Date();
+    const day = now.getDay();
+    const mon = new Date(now); mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    return { start: mon.toISOString().slice(0, 10), end: sun.toISOString().slice(0, 10) };
+  }},
+  { label: "Este mês", getValue: () => {
+    const now = new Date();
+    const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+    return { start, end };
+  }},
+  { label: "Mês passado", getValue: () => {
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const last = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { start: first.toISOString().slice(0, 10), end: last.toISOString().slice(0, 10) };
+  }},
+];
+
 export default function PdvMeuPerfil() {
   const { seller } = usePdvAuth();
   const [page, setPage] = useState(1);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [caixStartDate, setCaixStartDate] = useState("");
-  const [caixEndDate, setCaixEndDate] = useState("");
+
+  // Filtro unificado para progress + history
+  const progressInput = useMemo(() => ({
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
+  }), [startDate, endDate]);
 
   const historyInput = useMemo(() => ({
     page,
@@ -35,18 +66,19 @@ export default function PdvMeuPerfil() {
     endDate: endDate || undefined,
   }), [page, startDate, endDate]);
 
-  const { data: progress, isLoading: loadingProgress } = trpc.pdvDashboard.getMyProgress.useQuery();
+  const { data: progress, isLoading: loadingProgress } = trpc.pdvDashboard.getMyProgress.useQuery(progressInput);
   const { data: history, isLoading: loadingHistory } = trpc.pdvDashboard.getMyHistory.useQuery(historyInput);
-
-  const caixInput = useMemo(() => ({
-    startDate: caixStartDate || undefined,
-    endDate: caixEndDate || undefined,
-  }), [caixStartDate, caixEndDate]);
-  const { data: caixinhas, isLoading: loadingCaixinhas } = trpc.pdvOrders.caixinhasReport.useQuery(caixInput);
 
   const goals = progress?.goals ?? {};
   const pontuacao = progress?.pontuacao ?? 0;
   const metaAtingida = progress?.metaAtingida ?? null;
+  const totalBonus = progress?.totalBonus ?? 0;
+  const totalCaixinha = progress?.totalCaixinha ?? 0;
+  const qtdCaixinha = progress?.qtdCaixinha ?? 0;
+  const totalPecas = progress?.totalPecas ?? 0;
+
+  // Verificar se algum pedido tem caixinha (para mostrar coluna)
+  const hasCaixinha = history?.orders.some(o => o.caixinhaTotal > 0) ?? false;
 
   // Calcular barra de progresso
   const maxMeta = Math.max(goals.OURO || 0, goals.PRATA || 0, goals.BRONZE || 0, 1);
@@ -64,9 +96,22 @@ export default function PdvMeuPerfil() {
   const levelCfg = metaAtingida ? LEVEL_CONFIG[metaAtingida as keyof typeof LEVEL_CONFIG] : null;
   const LevelIcon = levelCfg?.icon ?? TrendingUp;
 
+  function applyShortcut(s: string, e: string) {
+    setStartDate(s);
+    setEndDate(e);
+    setPage(1);
+  }
+
+  const periodLabel = startDate || endDate
+    ? `${startDate ? formatDate(startDate) : "início"} até ${endDate ? formatDate(endDate) : "hoje"}`
+    : progress?.periodo
+      ? `${formatDate(progress.periodo.startDate)} a ${formatDate(progress.periodo.endDate)}`
+      : "Este mês";
+
   return (
     <PdvLayout>
-      <div className="p-4 md:p-6 space-y-6">
+      <div className="p-4 md:p-6 space-y-5">
+
         {/* Header */}
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-green-900/50 border border-green-700 flex items-center justify-center">
@@ -74,7 +119,7 @@ export default function PdvMeuPerfil() {
           </div>
           <div>
             <h1 className="text-white font-bold text-xl">{seller?.name ?? "Vendedor"}</h1>
-            <p className="text-gray-400 text-sm">Meu Perfil — {progress?.periodo ? `${formatDate(progress.periodo.startDate)} a ${formatDate(progress.periodo.endDate)}` : "Este mês"}</p>
+            <p className="text-gray-400 text-sm">Meu Perfil — {periodLabel}</p>
           </div>
           {levelCfg && (
             <div className={`ml-auto flex items-center gap-2 px-3 py-1.5 rounded-full border ${levelCfg.border} bg-gray-900`}>
@@ -84,24 +129,94 @@ export default function PdvMeuPerfil() {
           )}
         </div>
 
-        {/* Cards de resumo */}
+        {/* Filtro de período unificado */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-green-400" />
+            <span className="text-white text-sm font-semibold">Filtrar período</span>
+          </div>
+          {/* Atalhos */}
+          <div className="flex flex-wrap gap-2">
+            {PERIOD_SHORTCUTS.map(s => {
+              const v = s.getValue();
+              const isActive = startDate === v.start && endDate === v.end;
+              return (
+                <button
+                  key={s.label}
+                  onClick={() => applyShortcut(v.start, v.end)}
+                  className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                    isActive
+                      ? "border-green-600 bg-green-900/40 text-green-300"
+                      : "border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-500 hover:text-white"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+            {(startDate || endDate) && (
+              <button
+                onClick={() => { setStartDate(""); setEndDate(""); setPage(1); }}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-700 text-gray-500 hover:text-white hover:border-gray-500 transition-colors"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          {/* Datas manuais */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => { setStartDate(e.target.value); setPage(1); }}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-green-600"
+            />
+            <span className="text-gray-500 text-xs">até</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => { setEndDate(e.target.value); setPage(1); }}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-green-600"
+            />
+          </div>
+        </div>
+
+        {/* Cards de resumo — 5 cards */}
         {loadingProgress ? (
-          <div className="grid grid-cols-3 gap-3">
-            {[1,2,3].map(i => <div key={i} className="h-20 bg-gray-900 rounded-2xl animate-pulse" />)}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[1,2,3,4,5].map(i => <div key={i} className="h-24 bg-gray-900 rounded-2xl animate-pulse" />)}
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-center">
-              <p className="text-green-400 font-bold text-lg">{formatPT(pontuacao)}</p>
-              <p className="text-gray-400 text-xs mt-1">Pontuação</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {/* Pontuação */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col items-center justify-center gap-1">
+              <TrendingUp className="w-5 h-5 text-green-400 mb-0.5" />
+              <p className="text-green-400 font-bold text-lg leading-tight">{formatPT(pontuacao)}</p>
+              <p className="text-gray-400 text-xs">Pontuação</p>
             </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-center">
-              <p className="text-blue-400 font-bold text-lg">{progress?.totalPecas ?? 0}</p>
-              <p className="text-gray-400 text-xs mt-1">Peças</p>
+            {/* Peças */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col items-center justify-center gap-1">
+              <Layers className="w-5 h-5 text-blue-400 mb-0.5" />
+              <p className="text-blue-400 font-bold text-lg leading-tight">{totalPecas}</p>
+              <p className="text-gray-400 text-xs">Peças</p>
             </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-center">
-              <p className="text-purple-400 font-bold text-lg">{formatBRL(progress?.faturamento ?? 0)}</p>
-              <p className="text-gray-400 text-xs mt-1">Faturamento</p>
+            {/* Bônus */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col items-center justify-center gap-1">
+              <DollarSign className="w-5 h-5 text-purple-400 mb-0.5" />
+              <p className="text-purple-400 font-bold text-lg leading-tight">{formatBRL(totalBonus)}</p>
+              <p className="text-gray-400 text-xs">Bônus</p>
+            </div>
+            {/* Caixinha */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col items-center justify-center gap-1">
+              <Box className="w-5 h-5 text-yellow-400 mb-0.5" />
+              <p className="text-yellow-400 font-bold text-lg leading-tight">{formatBRL(totalCaixinha)}</p>
+              <p className="text-gray-400 text-xs">Caixinha {qtdCaixinha > 0 && <span className="text-yellow-600">({qtdCaixinha})</span>}</p>
+            </div>
+            {/* Bônus + Caixinha */}
+            <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-purple-900/40 to-yellow-900/30 border border-purple-700/50 rounded-2xl p-4 flex flex-col items-center justify-center gap-1">
+              <Gift className="w-5 h-5 text-pink-400 mb-0.5" />
+              <p className="text-pink-400 font-bold text-lg leading-tight">{formatBRL(totalBonus + totalCaixinha)}</p>
+              <p className="text-gray-400 text-xs text-center">Bônus + Caixinha</p>
             </div>
           </div>
         )}
@@ -111,7 +226,7 @@ export default function PdvMeuPerfil() {
           <div className="flex items-center justify-between">
             <h2 className="text-white font-semibold text-base flex items-center gap-2">
               <Trophy className="w-4 h-4 text-yellow-400" />
-              Progresso de Metas — Este Mês
+              Progresso de Metas
             </h2>
             <span className="text-green-400 font-bold text-sm">{formatPT(pontuacao)}</span>
           </div>
@@ -129,8 +244,6 @@ export default function PdvMeuPerfil() {
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-
-            {/* Marcadores de meta */}
             {goals.BRONZE > 0 && (
               <div className="absolute top-0 h-5 flex items-center" style={{ left: `${Math.min(99, (goals.BRONZE / maxMeta) * 100)}%` }}>
                 <div className="w-0.5 h-7 bg-orange-400 -mt-1 opacity-70" />
@@ -187,7 +300,7 @@ export default function PdvMeuPerfil() {
           )}
           {metaAtingida === "OURO" && (
             <div className="bg-yellow-950/40 border border-yellow-700/50 rounded-xl px-4 py-2.5 text-sm text-yellow-300 font-semibold text-center">
-              Parabéns! Você atingiu a meta Ouro este mês!
+              Parabéns! Você atingiu a meta Ouro no período!
             </div>
           )}
           {!metaAtingida && !proximaMeta && !loadingProgress && (
@@ -197,37 +310,16 @@ export default function PdvMeuPerfil() {
 
         {/* Histórico de vendas */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-gray-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="p-4 border-b border-gray-800 flex items-center justify-between">
             <h2 className="text-white font-semibold flex items-center gap-2">
               <ShoppingBag className="w-4 h-4 text-green-400" />
               Histórico de Vendas
-            </h2>
-            <div className="flex gap-2 items-center flex-wrap">
-              <div className="flex items-center gap-1 text-xs text-gray-400">
-                <Calendar className="w-3.5 h-3.5" />
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={e => { setStartDate(e.target.value); setPage(1); }}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-green-600"
-                />
-                <span>até</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={e => { setEndDate(e.target.value); setPage(1); }}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-green-600"
-                />
-              </div>
-              {(startDate || endDate) && (
-                <button
-                  onClick={() => { setStartDate(""); setEndDate(""); setPage(1); }}
-                  className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded-lg border border-gray-700 hover:border-gray-500"
-                >
-                  Limpar
-                </button>
+              {hasCaixinha && (
+                <span className="ml-1 text-xs bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Box className="w-3 h-3" /> com caixinha
+                </span>
               )}
-            </div>
+            </h2>
           </div>
 
           {loadingHistory ? (
@@ -252,7 +344,8 @@ export default function PdvMeuPerfil() {
                       <th className="text-left px-4 py-3">Regime</th>
                       <th className="text-right px-4 py-3">Peças</th>
                       <th className="text-right px-4 py-3 text-green-400">Pontos</th>
-                      <th className="text-right px-4 py-3">Bônus</th>
+                      <th className="text-right px-4 py-3 text-purple-400">Bônus</th>
+                      {hasCaixinha && <th className="text-right px-4 py-3 text-yellow-400">Caixinha</th>}
                       <th className="text-right px-4 py-3">Total</th>
                       <th className="text-center px-4 py-3">Status</th>
                     </tr>
@@ -271,6 +364,14 @@ export default function PdvMeuPerfil() {
                         <td className="px-4 py-3 text-right text-gray-300">{order.totalPecas}</td>
                         <td className="px-4 py-3 text-right font-bold text-green-400">{formatPT(order.pontuacao)}</td>
                         <td className="px-4 py-3 text-right text-purple-300">{formatBRL(order.bonusTotal)}</td>
+                        {hasCaixinha && (
+                          <td className="px-4 py-3 text-right">
+                            {order.caixinhaTotal > 0
+                              ? <span className="text-yellow-400 font-semibold">{formatBRL(order.caixinhaTotal)}</span>
+                              : <span className="text-gray-600">—</span>
+                            }
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-right text-white">{formatBRL(order.totalAplicado)}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
@@ -282,6 +383,20 @@ export default function PdvMeuPerfil() {
                       </tr>
                     ))}
                   </tbody>
+                  {/* Rodapé com totais */}
+                  <tfoot>
+                    <tr className="border-t border-gray-700 bg-gray-800/50">
+                      <td colSpan={4} className="px-4 py-3 text-gray-300 font-semibold text-sm">
+                        Total ({history.total} pedidos)
+                      </td>
+                      <td className="px-4 py-3 text-right text-blue-300 font-semibold">{totalPecas}</td>
+                      <td className="px-4 py-3 text-right text-green-400 font-bold">{formatPT(pontuacao)}</td>
+                      <td className="px-4 py-3 text-right text-purple-300 font-semibold">{formatBRL(totalBonus)}</td>
+                      {hasCaixinha && <td className="px-4 py-3 text-right text-yellow-400 font-semibold">{formatBRL(totalCaixinha)}</td>}
+                      <td className="px-4 py-3 text-right text-white font-semibold">{formatBRL(progress?.faturamento ?? 0)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
 
@@ -305,6 +420,11 @@ export default function PdvMeuPerfil() {
                       <span className="text-gray-400">{order.totalPecas} peças</span>
                       <span className="text-green-400 font-bold">{formatPT(order.pontuacao)}</span>
                       <span className="text-purple-300">Bônus: {formatBRL(order.bonusTotal)}</span>
+                      {order.caixinhaTotal > 0 && (
+                        <span className="text-yellow-400 font-semibold flex items-center gap-0.5">
+                          <Box className="w-3 h-3" /> {formatBRL(order.caixinhaTotal)}
+                        </span>
+                      )}
                       <span className="text-white font-medium">{formatBRL(order.totalAplicado)}</span>
                     </div>
                   </div>
@@ -335,120 +455,6 @@ export default function PdvMeuPerfil() {
           )}
         </div>
 
-        {/* Seção de Caixinhas */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-gray-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <Box className="w-4 h-4 text-yellow-400" />
-              <h2 className="text-white font-semibold">Minhas Caixinhas</h2>
-              {caixinhas && (
-                <span className="ml-2 text-xs bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 px-2 py-0.5 rounded-full">
-                  Total: {formatBRL(caixinhas.totalValor)} ({caixinhas.totalCaixinhas} un.)
-                </span>
-              )}
-            </div>
-            <div className="flex gap-2 items-center flex-wrap">
-              <div className="flex items-center gap-1 text-xs text-gray-400">
-                <Calendar className="w-3.5 h-3.5" />
-                <input
-                  type="date"
-                  value={caixStartDate}
-                  onChange={e => setCaixStartDate(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-600"
-                />
-                <span>até</span>
-                <input
-                  type="date"
-                  value={caixEndDate}
-                  onChange={e => setCaixEndDate(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-600"
-                />
-              </div>
-              {(caixStartDate || caixEndDate) && (
-                <button
-                  onClick={() => { setCaixStartDate(""); setCaixEndDate(""); }}
-                  className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded-lg border border-gray-700 hover:border-gray-500"
-                >
-                  Limpar
-                </button>
-              )}
-            </div>
-          </div>
-
-          {loadingCaixinhas ? (
-            <div className="p-8 flex justify-center">
-              <div className="w-6 h-6 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : !caixinhas?.historico.length ? (
-            <div className="p-8 text-center text-gray-500 text-sm">
-              <Box className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              Nenhuma caixinha registrada no período.
-            </div>
-          ) : (
-            <>
-              {/* Tabela desktop */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-gray-400 text-xs border-b border-gray-800">
-                      <th className="text-left px-4 py-3">Pedido</th>
-                      <th className="text-left px-4 py-3">Data</th>
-                      <th className="text-left px-4 py-3">Cliente</th>
-                      <th className="text-left px-4 py-3">Canal</th>
-                      <th className="text-left px-4 py-3">Descrição</th>
-                      <th className="text-right px-4 py-3 text-yellow-400">Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {caixinhas.historico.map((c, i) => (
-                      <tr key={c.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${i % 2 === 0 ? "" : "bg-gray-900/30"}`}>
-                        <td className="px-4 py-3 text-gray-300 font-mono text-xs">{c.pedidoId}</td>
-                        <td className="px-4 py-3 text-gray-400">{formatDate(c.createdAt)}</td>
-                        <td className="px-4 py-3 text-white">{c.clienteNome || "—"}</td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            c.canal === "BALCAO" ? "bg-blue-900/50 text-blue-300" : "bg-green-900/50 text-green-300"
-                          }`}>{c.canal}</span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-400 text-xs">{c.descricao || "—"}</td>
-                        <td className="px-4 py-3 text-right font-bold text-yellow-400">{formatBRL(c.valor)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-gray-700 bg-gray-800/50">
-                      <td colSpan={5} className="px-4 py-3 text-gray-300 font-semibold text-sm">Total</td>
-                      <td className="px-4 py-3 text-right font-bold text-yellow-400">{formatBRL(caixinhas.totalValor)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Cards mobile */}
-              <div className="md:hidden divide-y divide-gray-800">
-                {caixinhas.historico.map(c => (
-                  <div key={c.id} className="p-4 space-y-1.5">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-white font-medium text-sm">{c.clienteNome || "—"}</p>
-                        <p className="text-gray-500 text-xs font-mono">{c.pedidoId} · {formatDate(c.createdAt)}</p>
-                      </div>
-                      <span className="font-bold text-yellow-400">{formatBRL(c.valor)}</span>
-                    </div>
-                    {c.descricao && <p className="text-gray-400 text-xs">{c.descricao}</p>}
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      c.canal === "BALCAO" ? "bg-blue-900/50 text-blue-300" : "bg-green-900/50 text-green-300"
-                    }`}>{c.canal}</span>
-                  </div>
-                ))}
-                <div className="p-4 border-t border-gray-700 flex justify-between items-center bg-gray-800/50">
-                  <span className="text-gray-300 font-semibold text-sm">Total</span>
-                  <span className="font-bold text-yellow-400">{formatBRL(caixinhas.totalValor)}</span>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
       </div>
     </PdvLayout>
   );

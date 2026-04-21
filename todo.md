@@ -835,3 +835,10 @@
 - [x] Substituir estratégia de append: de INSERT_ROWS (:append API) para PUT em linha exata (lê coluna A para encontrar próxima linha vazia, depois usa PUT)
 - [x] Eliminar causa raiz do desalinhamento: o :append do Google Sheets API detectava incorretamente o "fim dos dados" quando havia células vazias no meio da tabela
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v110 — Correção planilha PEDIDOS + Meu Perfil vendedores reformulado
+- [x] Corrigir dados faltando nas colunas P-W das linhas 75+ da aba PEDIDOS (buscar do banco e reescrever)
+- [x] PdvMeuPerfil: adicionar filtro de período (hoje, semana, mês, personalizado)
+- [x] PdvMeuPerfil: cards Pontuação, Peças, Bônus, Caixinha, Bônus+Caixinha
+- [x] PdvMeuPerfil: tabela de pedidos com coluna Caixinha (só aparece quando há caixinha no pedido)
+- [x] PdvMeuPerfil: bônus visível e calculado corretamente
