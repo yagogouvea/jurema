@@ -829,3 +829,9 @@
 - [x] Remover coluna K vazia do código (pdvSheetsWriter.ts appendOrderToSheet)
 - [x] Corrigir planilha física: realinhar 4 linhas deslocadas (75-78) e remover coluna K do cabeçalho
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v109 — Correção definitiva do desalinhamento de colunas na planilha
+- [x] Limpar colunas extras (X-AG) das linhas 75-78 que ficaram como resquício da correção anterior
+- [x] Substituir estratégia de append: de INSERT_ROWS (:append API) para PUT em linha exata (lê coluna A para encontrar próxima linha vazia, depois usa PUT)
+- [x] Eliminar causa raiz do desalinhamento: o :append do Google Sheets API detectava incorretamente o "fim dos dados" quando havia células vazias no meio da tabela
+- [x] 206/206 testes passando, 0 erros TypeScript

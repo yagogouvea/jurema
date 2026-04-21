@@ -80,29 +80,55 @@ async function readSheet(range: string): Promise<any[][]> {
 
 // ─── Escrita na planilha (Service Account) ───────────────────────────────────
 
+/**
+ * Estratégia segura de append:
+ * 1. Lê a coluna A da aba para encontrar a primeira linha vazia
+ * 2. Usa PUT (update) na linha exata em vez de :append com INSERT_ROWS
+ * Isso evita o bug do Google Sheets API que desalinha colunas quando há
+ * células vazias no meio da tabela (o :append detecta incorretamente o
+ * "fim dos dados" e insere na coluna errada).
+ */
 async function appendToSheet(range: string, values: any[][]): Promise<boolean> {
   const token = await getServiceAccountToken();
   if (!token) {
     console.warn('[SheetsWriter] No service account token — skipping sheet write');
     return false;
   }
-  
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ values }),
-  });
-  
-  if (!res.ok) {
-    const err = await res.text();
-    console.error('[SheetsWriter] Append failed:', err);
+
+  try {
+    // Extrair nome da aba do range (ex: "PEDIDOS!A:W" → "PEDIDOS")
+    const sheetName = range.split('!')[0];
+    // Extrair coluna inicial do range (ex: "PEDIDOS!A:W" → "A")
+    const colStart = (range.split('!')[1] || 'A').replace(/[^A-Z]/g, '').charAt(0) || 'A';
+
+    // Ler coluna A para encontrar a próxima linha vazia
+    const colUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName + '!A:A')}`;
+    const colRes = await fetch(colUrl, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!colRes.ok) throw new Error('Falha ao ler coluna A: ' + await colRes.text());
+    const colData = (await colRes.json() as any).values || [];
+    const nextRow = colData.length + 1; // próxima linha vazia (1-indexed)
+
+    // Calcular range de destino (ex: "PEDIDOS!A79")
+    const targetRange = `${sheetName}!${colStart}${nextRow}`;
+
+    // Usar PUT para gravar na linha exata — sem risco de desalinhamento
+    const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(targetRange)}?valueInputOption=USER_ENTERED`;
+    const putRes = await fetch(putUrl, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values }),
+    });
+
+    if (!putRes.ok) {
+      const err = await putRes.text();
+      console.error('[SheetsWriter] Append (PUT) failed:', err);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[SheetsWriter] appendToSheet error:', err);
     return false;
   }
-  return true;
 }
 
 async function updateCellInSheet(range: string, value: any): Promise<boolean> {
