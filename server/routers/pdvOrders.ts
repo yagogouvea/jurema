@@ -306,6 +306,7 @@ export const pdvOrdersRouter = router({
                   regime: input.regime,
                   services: input.services,
                   comissaoUnitaria,
+                  sellerName: seller.name,
                   items: normalItems,
                 });
               }
@@ -580,7 +581,7 @@ export const pdvOrdersRouter = router({
           }
           await db.end();
           console.log(`[PDV Orders] Pedido ${input.pedidoId} reativado (${statusAtual} -> ${input.status}) — estoque descontado para ${items.length} produto(s)`);
-          // Descontar estoque também na planilha (assíncrono)
+           // Descontar estoque também na planilha (assíncrono)
           setImmediate(async () => {
             for (const item of items) {
               if (item.codigo) {
@@ -591,12 +592,125 @@ export const pdvOrdersRouter = router({
         } else {
           await db.end();
         }
-
         return { success: true };
       } catch (err) {
         if (err instanceof TRPCError) throw err;
         console.error("[PDV Orders] Erro ao atualizar status:", err);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao atualizar status do pedido" });
+      }
+    }),
+
+  // Relatório de caixinhas por vendedor com filtro de período
+  caixinhasReport: publicProcedure
+    .input(z.object({
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+      sellerId: z.number().optional(), // admin pode filtrar por vendedor específico
+    }))
+    .query(async ({ input, ctx }) => {
+      const seller = await requirePdvAuth(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      try {
+        // Vendedor comum só vê as próprias caixinhas
+        const effectiveSellerId = seller.role !== 'admin'
+          ? seller.sellerId
+          : (input.sellerId ?? null);
+
+        // Query para histórico por pedido
+        let histQuery = `
+          SELECT
+            s.id,
+            s.pedidoId,
+            s.tipo,
+            s.descricao,
+            s.valor,
+            s.createdAt,
+            o.sellerName,
+            o.sellerId,
+            o.clienteNome,
+            o.canal
+          FROM pdv_order_services s
+          JOIN pdv_orders o ON o.pedidoId = s.pedidoId
+          WHERE s.tipo = 'CAIXINHA'
+        `;
+        const histParams: any[] = [];
+
+        if (effectiveSellerId !== null) {
+          histQuery += ' AND o.sellerId = ?';
+          histParams.push(effectiveSellerId);
+        }
+        if (input.startDate) { histQuery += ' AND DATE(s.createdAt) >= ?'; histParams.push(input.startDate); }
+        if (input.endDate) { histQuery += ' AND DATE(s.createdAt) <= ?'; histParams.push(input.endDate); }
+        histQuery += ' ORDER BY s.createdAt DESC';
+
+        const [histRows] = await db.execute(histQuery, histParams);
+
+        // Query para resumo por vendedor (apenas admin)
+        let summaryRows: any[] = [];
+        if (seller.role === 'admin') {
+          let sumQuery = `
+            SELECT
+              o.sellerId,
+              o.sellerName,
+              COUNT(s.id) as totalCaixinhas,
+              COALESCE(SUM(s.valor), 0) as totalValor
+            FROM pdv_order_services s
+            JOIN pdv_orders o ON o.pedidoId = s.pedidoId
+            WHERE s.tipo = 'CAIXINHA'
+          `;
+          const sumParams: any[] = [];
+          if (input.startDate) { sumQuery += ' AND DATE(s.createdAt) >= ?'; sumParams.push(input.startDate); }
+          if (input.endDate) { sumQuery += ' AND DATE(s.createdAt) <= ?'; sumParams.push(input.endDate); }
+          sumQuery += ' GROUP BY o.sellerId, o.sellerName ORDER BY totalValor DESC';
+          const [sRows] = await db.execute(sumQuery, sumParams);
+          summaryRows = sRows as any[];
+        }
+
+        // Total geral no período
+        let totalQuery = `
+          SELECT COALESCE(SUM(s.valor), 0) as totalValor, COUNT(s.id) as totalCaixinhas
+          FROM pdv_order_services s
+          JOIN pdv_orders o ON o.pedidoId = s.pedidoId
+          WHERE s.tipo = 'CAIXINHA'
+        `;
+        const totalParams: any[] = [];
+        if (effectiveSellerId !== null) { totalQuery += ' AND o.sellerId = ?'; totalParams.push(effectiveSellerId); }
+        if (input.startDate) { totalQuery += ' AND DATE(s.createdAt) >= ?'; totalParams.push(input.startDate); }
+        if (input.endDate) { totalQuery += ' AND DATE(s.createdAt) <= ?'; totalParams.push(input.endDate); }
+        const [totalRows] = await db.execute(totalQuery, totalParams);
+
+        await db.end();
+
+        const totals = (totalRows as any[])[0];
+        return {
+          historico: (histRows as any[]).map(r => ({
+            id: r.id,
+            pedidoId: r.pedidoId,
+            tipo: r.tipo,
+            descricao: r.descricao || '',
+            valor: parseFloat(r.valor) || 0,
+            createdAt: r.createdAt,
+            sellerName: r.sellerName,
+            sellerId: r.sellerId,
+            clienteNome: r.clienteNome || '',
+            canal: r.canal,
+          })),
+          resumoPorVendedor: summaryRows.map(r => ({
+            sellerId: r.sellerId,
+            sellerName: r.sellerName,
+            totalCaixinhas: parseInt(r.totalCaixinhas) || 0,
+            totalValor: parseFloat(r.totalValor) || 0,
+          })),
+          totalValor: parseFloat(totals.totalValor) || 0,
+          totalCaixinhas: parseInt(totals.totalCaixinhas) || 0,
+          isAdmin: seller.role === 'admin',
+        };
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+        console.error('[PDV Orders] caixinhasReport error:', err);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao buscar relatório de caixinhas' });
       }
     }),
 });

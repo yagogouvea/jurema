@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, ShoppingBag, Users, DollarSign, Plus, Minus,
-  Target, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw
+  Target, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Box
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,6 +36,7 @@ export default function PdvDashboard() {
   const [showCashModal, setShowCashModal] = useState<"SUPRIMENTO" | "SANGRIA" | null>(null);
   const [cashDesc, setCashDesc] = useState("");
   const [cashValor, setCashValor] = useState("");
+  const [caixSellerId, setCaixSellerId] = useState<number | undefined>(undefined);
 
   const { data, isLoading, refetch } = trpc.pdvDashboard.summary.useQuery({
     startDate,
@@ -73,6 +74,13 @@ export default function PdvDashboard() {
     onSuccess: (res) => toast.success(`${res.count} vendas exportadas para VENDAS_CAIXA`),
     onError: (err) => toast.error(err.message),
   });
+
+  const caixInput = useMemo(() => ({
+    startDate,
+    endDate,
+    sellerId: caixSellerId,
+  }), [startDate, endDate, caixSellerId]);
+  const { data: caixData, isLoading: loadingCaix } = trpc.pdvOrders.caixinhasReport.useQuery(caixInput, { enabled: isAdmin });
 
   const syncCashFlowFromSheetMutation = trpc.pdvDashboard.syncCashFlowFromSheet.useMutation({
     onSuccess: (res) => {
@@ -520,6 +528,102 @@ export default function PdvDashboard() {
                   </span>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Caixinhas por Vendedor */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+          <div className="p-5 border-b border-gray-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Box className="w-5 h-5 text-yellow-400" />
+              <h3 className="text-white font-semibold">Caixinhas por Vendedor</h3>
+              {caixData && (
+                <span className="ml-2 text-xs bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 px-2 py-0.5 rounded-full">
+                  Total: {formatCurrency(caixData.totalValor)} ({caixData.totalCaixinhas} un.)
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={caixSellerId ?? ""}
+                onChange={e => setCaixSellerId(e.target.value ? parseInt(e.target.value) : undefined)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-yellow-600"
+              >
+                <option value="">Todos os vendedores</option>
+                {bySeller.map((s: any) => (
+                  <option key={s.sellerId} value={s.sellerId}>{s.sellerName}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Resumo por vendedor */}
+          {caixData?.resumoPorVendedor && caixData.resumoPorVendedor.length > 0 && !caixSellerId && (
+            <div className="p-5 border-b border-gray-800">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {caixData.resumoPorVendedor.map(v => (
+                  <button
+                    key={v.sellerId}
+                    onClick={() => setCaixSellerId(v.sellerId)}
+                    className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-yellow-700 rounded-xl p-3 text-left transition-colors"
+                  >
+                    <div className="text-white font-medium text-sm truncate">{v.sellerName}</div>
+                    <div className="text-yellow-400 font-bold mt-1">{formatCurrency(v.totalValor)}</div>
+                    <div className="text-gray-500 text-xs">{v.totalCaixinhas} caixinha{v.totalCaixinhas !== 1 ? 's' : ''}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {loadingCaix ? (
+            <div className="p-8 flex justify-center">
+              <div className="w-6 h-6 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : !caixData?.historico.length ? (
+            <div className="p-8 text-center text-gray-500 text-sm">
+              <Box className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              Nenhuma caixinha registrada no período.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-gray-400 text-xs border-b border-gray-800">
+                    <th className="text-left px-4 py-3">Pedido</th>
+                    <th className="text-left px-4 py-3">Data</th>
+                    <th className="text-left px-4 py-3">Vendedor</th>
+                    <th className="text-left px-4 py-3">Cliente</th>
+                    <th className="text-left px-4 py-3">Canal</th>
+                    <th className="text-left px-4 py-3">Descrição</th>
+                    <th className="text-right px-4 py-3 text-yellow-400">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {caixData.historico.map((c, i) => (
+                    <tr key={c.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-900/30'}`}>
+                      <td className="px-4 py-3 text-gray-300 font-mono text-xs">{c.pedidoId}</td>
+                      <td className="px-4 py-3 text-gray-400">{new Date(c.createdAt).toLocaleDateString('pt-BR')}</td>
+                      <td className="px-4 py-3 text-white">{c.sellerName}</td>
+                      <td className="px-4 py-3 text-gray-300">{c.clienteNome || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          c.canal === 'BALCAO' ? 'bg-blue-900/50 text-blue-300' : 'bg-green-900/50 text-green-300'
+                        }`}>{c.canal}</span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{c.descricao || '—'}</td>
+                      <td className="px-4 py-3 text-right font-bold text-yellow-400">{formatCurrency(c.valor)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-gray-700 bg-gray-800/50">
+                    <td colSpan={6} className="px-4 py-3 text-gray-300 font-semibold text-sm">Total</td>
+                    <td className="px-4 py-3 text-right font-bold text-yellow-400">{formatCurrency(caixData.totalValor)}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           )}
         </div>

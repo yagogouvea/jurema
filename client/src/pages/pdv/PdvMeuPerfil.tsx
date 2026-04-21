@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import PdvLayout from "./PdvLayout";
-import { Trophy, Star, Medal, TrendingUp, ShoppingBag, Package, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { Trophy, Star, Medal, TrendingUp, ShoppingBag, Package, ChevronLeft, ChevronRight, Calendar, Box } from "lucide-react";
 
 function formatPT(v: number) {
   return `${Math.round(v).toLocaleString("pt-BR")} PT`;
@@ -25,6 +25,8 @@ export default function PdvMeuPerfil() {
   const [page, setPage] = useState(1);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [caixStartDate, setCaixStartDate] = useState("");
+  const [caixEndDate, setCaixEndDate] = useState("");
 
   const historyInput = useMemo(() => ({
     page,
@@ -35,6 +37,12 @@ export default function PdvMeuPerfil() {
 
   const { data: progress, isLoading: loadingProgress } = trpc.pdvDashboard.getMyProgress.useQuery();
   const { data: history, isLoading: loadingHistory } = trpc.pdvDashboard.getMyHistory.useQuery(historyInput);
+
+  const caixInput = useMemo(() => ({
+    startDate: caixStartDate || undefined,
+    endDate: caixEndDate || undefined,
+  }), [caixStartDate, caixEndDate]);
+  const { data: caixinhas, isLoading: loadingCaixinhas } = trpc.pdvOrders.caixinhasReport.useQuery(caixInput);
 
   const goals = progress?.goals ?? {};
   const pontuacao = progress?.pontuacao ?? 0;
@@ -323,6 +331,121 @@ export default function PdvMeuPerfil() {
                   </button>
                 </div>
               )}
+            </>
+          )}
+        </div>
+
+        {/* Seção de Caixinhas */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-gray-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Box className="w-4 h-4 text-yellow-400" />
+              <h2 className="text-white font-semibold">Minhas Caixinhas</h2>
+              {caixinhas && (
+                <span className="ml-2 text-xs bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 px-2 py-0.5 rounded-full">
+                  Total: {formatBRL(caixinhas.totalValor)} ({caixinhas.totalCaixinhas} un.)
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2 items-center flex-wrap">
+              <div className="flex items-center gap-1 text-xs text-gray-400">
+                <Calendar className="w-3.5 h-3.5" />
+                <input
+                  type="date"
+                  value={caixStartDate}
+                  onChange={e => setCaixStartDate(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-600"
+                />
+                <span>até</span>
+                <input
+                  type="date"
+                  value={caixEndDate}
+                  onChange={e => setCaixEndDate(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-600"
+                />
+              </div>
+              {(caixStartDate || caixEndDate) && (
+                <button
+                  onClick={() => { setCaixStartDate(""); setCaixEndDate(""); }}
+                  className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded-lg border border-gray-700 hover:border-gray-500"
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+          </div>
+
+          {loadingCaixinhas ? (
+            <div className="p-8 flex justify-center">
+              <div className="w-6 h-6 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : !caixinhas?.historico.length ? (
+            <div className="p-8 text-center text-gray-500 text-sm">
+              <Box className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              Nenhuma caixinha registrada no período.
+            </div>
+          ) : (
+            <>
+              {/* Tabela desktop */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-gray-400 text-xs border-b border-gray-800">
+                      <th className="text-left px-4 py-3">Pedido</th>
+                      <th className="text-left px-4 py-3">Data</th>
+                      <th className="text-left px-4 py-3">Cliente</th>
+                      <th className="text-left px-4 py-3">Canal</th>
+                      <th className="text-left px-4 py-3">Descrição</th>
+                      <th className="text-right px-4 py-3 text-yellow-400">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {caixinhas.historico.map((c, i) => (
+                      <tr key={c.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${i % 2 === 0 ? "" : "bg-gray-900/30"}`}>
+                        <td className="px-4 py-3 text-gray-300 font-mono text-xs">{c.pedidoId}</td>
+                        <td className="px-4 py-3 text-gray-400">{formatDate(c.createdAt)}</td>
+                        <td className="px-4 py-3 text-white">{c.clienteNome || "—"}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            c.canal === "BALCAO" ? "bg-blue-900/50 text-blue-300" : "bg-green-900/50 text-green-300"
+                          }`}>{c.canal}</span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{c.descricao || "—"}</td>
+                        <td className="px-4 py-3 text-right font-bold text-yellow-400">{formatBRL(c.valor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-gray-700 bg-gray-800/50">
+                      <td colSpan={5} className="px-4 py-3 text-gray-300 font-semibold text-sm">Total</td>
+                      <td className="px-4 py-3 text-right font-bold text-yellow-400">{formatBRL(caixinhas.totalValor)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Cards mobile */}
+              <div className="md:hidden divide-y divide-gray-800">
+                {caixinhas.historico.map(c => (
+                  <div key={c.id} className="p-4 space-y-1.5">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-white font-medium text-sm">{c.clienteNome || "—"}</p>
+                        <p className="text-gray-500 text-xs font-mono">{c.pedidoId} · {formatDate(c.createdAt)}</p>
+                      </div>
+                      <span className="font-bold text-yellow-400">{formatBRL(c.valor)}</span>
+                    </div>
+                    {c.descricao && <p className="text-gray-400 text-xs">{c.descricao}</p>}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      c.canal === "BALCAO" ? "bg-blue-900/50 text-blue-300" : "bg-green-900/50 text-green-300"
+                    }`}>{c.canal}</span>
+                  </div>
+                ))}
+                <div className="p-4 border-t border-gray-700 flex justify-between items-center bg-gray-800/50">
+                  <span className="text-gray-300 font-semibold text-sm">Total</span>
+                  <span className="font-bold text-yellow-400">{formatBRL(caixinhas.totalValor)}</span>
+                </div>
+              </div>
             </>
           )}
         </div>

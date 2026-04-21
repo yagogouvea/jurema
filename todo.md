@@ -817,3 +817,9 @@
 - [x] Resumo do pedido mostra aviso "Apenas serviços serão lançados" quando carrinho vazio
 - [x] Backend pdvOrders.ts: isSomenteServico — grava na aba PEDIDOS e VENDAS_CAIXA mesmo sem itens
 - [x] Aba pedidos_itens e Lucro_produtos: não recebem linhas quando não há produtos
+
+## v107 — Relatório de caixinhas por vendedor + coluna vendedor na planilha
+- [x] Criar endpoint tRPC pdvOrders.caixinhasReport com filtro de período e sellerId
+- [x] Adicionar aba "Caixinhas" no PdvMeuPerfil (vendedor vê apenas as suas)
+- [x] Adicionar seção de caixinhas no PdvDashboard admin (visão ampla por vendedor)
+- [x] Adicionar coluna VENDEDOR na aba pedidos_itens da planilha (código + sincronização)

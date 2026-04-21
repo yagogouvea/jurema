@@ -445,7 +445,7 @@ export async function updateProductRowInSheet(product: {
 /**
  * Grava os itens de um pedido na aba pedidos_itens da planilha
  *
- * Colunas (13 no total):
+ * Colunas (14 no total):
  * A: pedido_id
  * B: cod (SKU)
  * C: produto (Linha Modelo Time Descrição Tamanho Tipo)
@@ -459,6 +459,7 @@ export async function updateProductRowInSheet(product: {
  * K: valor serviço extra (R$) — vazio para itens normais; valor do serviço para linha de extra
  * L: TOTAL (subtotal na modalidade para itens normais; valor do serviço para linha de extra)
  * M: comissao (comissaoUnitaria × quantidade para itens normais; vazio para linhas de serviço extra)
+ * N: VENDEDOR (nome do vendedor que realizou a venda)
  *
  * NOTA: Serviços extras são gravados como linhas dedicadas ao final (não rateados entre itens).
  */
@@ -467,6 +468,7 @@ export async function appendOrderItemsToSheet(params: {
   regime: string;
   services: Array<{ tipo: string; valor: number }>;
   comissaoUnitaria?: number;
+  sellerName?: string;
   items: Array<{
     codigo?: string | null;
     linha?: string | null;
@@ -518,6 +520,7 @@ export async function appendOrderItemsToSheet(params: {
         '',                                               // K: valor serviço extra (vazio para itens normais)
         parseFloat(totalItem.toFixed(2)),                 // L: TOTAL
         parseFloat((comissaoUnitaria * item.quantidade).toFixed(2)), // M: comissao
+        params.sellerName || '',                          // N: VENDEDOR
       ];
     });
 
@@ -538,11 +541,12 @@ export async function appendOrderItemsToSheet(params: {
         valorFmt,                   // K: valor serviço extra = valor do serviço
         valorFmt,                   // L: TOTAL = valor do serviço
         '',                         // M: comissao (vazio para serviços extras)
+        params.sellerName || '',    // N: VENDEDOR
       ];
     });
 
     const allRows = [...itemRows, ...serviceRows];
-    return await appendToSheet(`${ITEMS_SHEET}!A:M`, allRows);
+    return await appendToSheet(`${ITEMS_SHEET}!A:N`, allRows);
   } catch (err) {
     console.error('[SheetsWriter] appendOrderItemsToSheet error:', err);
     return false;
