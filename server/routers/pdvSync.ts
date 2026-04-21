@@ -25,14 +25,14 @@ async function requirePdvAdmin(ctx: any) {
 }
 
 const SHEET_ID = "1SGUr5Sh2gZ5nkYg0km-QhllQS4Jm2_aVxy6PuyATsLU"; // Nova planilha PDV JUREMA 5.0
-const SHEET_RANGE = "PRODUTOS!A2:O2000"; // Aba PRODUTOS (15 colunas: CODIGO,LINHA,MODELO,TIME,DESCRIÇÃO,TAM,TIPO,QTD,ATC,VAR,ATIVO,FOTO,TEMPORADA,PT ATAC,PT VAR)
+const SHEET_RANGE = "PRODUTOS!A2:P2000"; // Aba PRODUTOS (16 colunas: CODIGO,LINHA,MODELO,TIME,DESCRIÇÃO,TAM,TIPO,QTD,ATC,VAR,CUSTO,ATIVO,FOTO,TEMPORADA,PT ATAC,PT VAR)
 
-// Colunas obrigatórias — FOTO (11), TEMPORADA (12), PT ATAC (13), PT VAR (14) são IGNORADAS na validação
-// [0]CODIGO [1]LINHA [2]MODELO [3]TIME [4]DESCRIÇÃO [5]TAM [6]TIPO [7]QTD [8]ATC [9]VAR [10]ATIVO
-const REQUIRED_COLS = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10]; // DESCRIÇÃO (4) opcional na nova planilha
+// Colunas obrigatórias — CUSTO (10), FOTO (12), TEMPORADA (13), PT ATAC (14), PT VAR (15) são IGNORADAS na validação
+// [0]CODIGO [1]LINHA [2]MODELO [3]TIME [4]DESCRIÇÃO [5]TAM [6]TIPO [7]QTD [8]ATC [9]VAR [10]CUSTO [11]ATIVO
+const REQUIRED_COLS = [0, 1, 2, 3, 5, 6, 7, 8, 9, 11]; // DESCRIÇÃO (4) e CUSTO (10) opcionais
 const COL_NAMES: Record<number, string> = {
   0: "CODIGO", 1: "LINHA", 2: "MODELO", 3: "TIME", 4: "DESCRIÇÃO",
-  5: "TAM", 6: "TIPO", 7: "QTD", 8: "ATC", 9: "VAR", 10: "ATIVO",
+  5: "TAM", 6: "TIPO", 7: "QTD", 8: "ATC", 9: "VAR", 10: "CUSTO", 11: "ATIVO",
 };
 
 // Normaliza string: trim + uppercase
@@ -53,6 +53,7 @@ interface SheetProduct {
   isActive: number;
   ptAtacado?: number;
   ptVarejo?: number;
+  custo?: number;
 }
 
 // Buscar, validar e DEDUPLICAR dados da planilha
@@ -120,10 +121,13 @@ async function fetchSheetData(apiKey: string): Promise<{
       continue;
     }
 
-    const ativo = row[10]?.toString().toUpperCase().trim();
-    // Colunas N (13) = PT ATAC e O (14) = PT VAR — opcionais
-    const ptAtacadoRaw = row[13]?.toString().trim();
-    const ptVarejoRaw = row[14]?.toString().trim();
+    // Nova ordem: K(10)=CUSTO, L(11)=ATIVO, M(12)=FOTO, N(13)=TEMPORADA, O(14)=PT ATAC, P(15)=PT VAR
+    const custoRaw = row[10]?.toString().trim();
+    const custo = custoRaw ? parseFloat(custoRaw.replace(',', '.')) : 0;
+    const ativo = row[11]?.toString().toUpperCase().trim();
+    // Colunas O (14) = PT ATAC e P (15) = PT VAR — opcionais
+    const ptAtacadoRaw = row[14]?.toString().trim();
+    const ptVarejoRaw = row[15]?.toString().trim();
     const ptAtacado = ptAtacadoRaw ? parseFloat(ptAtacadoRaw.replace(',', '.')) : 0;
     const ptVarejo = ptVarejoRaw ? parseFloat(ptVarejoRaw.replace(',', '.')) : 0;
     validRaw.push({
@@ -139,6 +143,7 @@ async function fetchSheetData(apiKey: string): Promise<{
       isActive: ativo === "SIM" || ativo === "1" || ativo === "TRUE" ? 1 : 0,
       ptAtacado: isNaN(ptAtacado) ? 0 : ptAtacado,
       ptVarejo: isNaN(ptVarejo) ? 0 : ptVarejo,
+      custo: isNaN(custo) ? 0 : custo,
     });
   }
 
@@ -330,19 +335,18 @@ export const pdvSyncRouter = router({
       for (let i = 0; i < valid.length; i += CHUNK_SIZE) {
         const chunk = valid.slice(i, i + CHUNK_SIZE);
         try {
-          const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())").join(", ");
+          const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())").join(", ");
           const values: any[] = [];
           for (const p of chunk) {
             values.push(
               p.codigo, p.linha, p.modelo, p.time, p.descricao,
               p.tamanho, p.estoque, p.precoAtacado, p.precoVarejo, p.isActive,
-              p.ptAtacado ?? 0, p.ptVarejo ?? 0
+              p.ptAtacado ?? 0, p.ptVarejo ?? 0, p.custo ?? 0
             );
           }
-
           await db.execute(
             `INSERT INTO pdv_products
-              (codigo, linha, modelo, \`time\`, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, ptAtacado, ptVarejo, createdAt, updatedAt)
+              (codigo, linha, modelo, \`time\`, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, ptAtacado, ptVarejo, custo, createdAt, updatedAt)
              VALUES ${placeholders}
              ON DUPLICATE KEY UPDATE
                linha=VALUES(linha), modelo=VALUES(modelo), \`time\`=VALUES(\`time\`),
@@ -350,9 +354,10 @@ export const pdvSyncRouter = router({
                estoque=VALUES(estoque), precoAtacado=VALUES(precoAtacado),
                precoVarejo=VALUES(precoVarejo), isActive=VALUES(isActive),
                ptAtacado=VALUES(ptAtacado), ptVarejo=VALUES(ptVarejo),
+               custo=VALUES(custo),
                updatedAt=NOW()`,
             values
-          );
+          );;
 
           for (const p of chunk) {
             if (existingMap.has(p.codigo)) atualizados++;

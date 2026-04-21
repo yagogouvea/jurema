@@ -298,12 +298,12 @@ export async function appendProductToSheet(product: {
       product.estoque,                                   // H: QTD
       product.precoAtacado.toFixed(2),                   // I: ATC
       product.precoVarejo.toFixed(2),                    // J: VAR
-      product.isActive ? 'SIM' : 'NAO',                  // K: ATIVO
-      product.fotoUrl || '',                             // L: FOTO
-      product.temporada || '',                           // M: TEMPORADA
-      (product.ptAtacado ?? 0).toFixed(2),               // N: PT ATAC
-      (product.ptVarejo ?? 0).toFixed(2),                // O: PT VAR
-      (product.custo ?? 0).toFixed(2),                   // P: CUSTO
+      (product.custo ?? 0).toFixed(2),                   // K: CUSTO
+      product.isActive ? 'SIM' : 'NAO',                  // L: ATIVO
+      product.fotoUrl || '',                             // M: FOTO
+      product.temporada || '',                           // N: TEMPORADA
+      (product.ptAtacado ?? 0).toFixed(2),               // O: PT ATAC
+      (product.ptVarejo ?? 0).toFixed(2),                // P: PT VAR
     ];
     return await appendToSheet(`PRODUTOS!A:P`, [row]);
   } catch (err) {
@@ -413,12 +413,12 @@ export async function updateProductRowInSheet(product: {
       product.estoque !== undefined ? product.estoque : (parseInt(existing[7] || '0', 10)),  // H: QTD
       product.precoAtacado !== undefined ? parseFloat(product.precoAtacado.toFixed(2)) : (parseFloat(existing[8] || '0')), // I: ATC
       product.precoVarejo !== undefined ? parseFloat(product.precoVarejo.toFixed(2)) : (parseFloat(existing[9] || '0')),  // J: VAR
-      product.isActive !== undefined ? (product.isActive ? 'SIM' : 'NAO') : (existing[10] ?? 'SIM'), // K: ATIVO
-      existing[11] ?? '',                                                          // L: FOTO
-      existing[12] ?? '',                                                          // M: TEMPORADA
-      product.ptAtacado !== undefined ? parseFloat(product.ptAtacado.toFixed(2)) : (parseFloat(existing[13] || '0')), // N: PT ATAC
-      product.ptVarejo !== undefined ? parseFloat(product.ptVarejo.toFixed(2)) : (parseFloat(existing[14] || '0')),  // O: PT VAR
-      product.custo !== undefined ? parseFloat(product.custo.toFixed(2)) : (parseFloat(existing[15] || '0')),        // P: CUSTO
+      product.custo !== undefined ? parseFloat(product.custo.toFixed(2)) : (parseFloat(existing[10] || '0')),        // K: CUSTO
+      product.isActive !== undefined ? (product.isActive ? 'SIM' : 'NAO') : (existing[11] ?? 'SIM'), // L: ATIVO
+      existing[12] ?? '',                                                          // M: FOTO
+      existing[13] ?? '',                                                          // N: TEMPORADA
+      product.ptAtacado !== undefined ? parseFloat(product.ptAtacado.toFixed(2)) : (parseFloat(existing[14] || '0')), // O: PT ATAC
+      product.ptVarejo !== undefined ? parseFloat(product.ptVarejo.toFixed(2)) : (parseFloat(existing[15] || '0')),  // P: PT VAR
     ];
 
     const range = `PRODUTOS!A${sheetRow}:P${sheetRow}`;
