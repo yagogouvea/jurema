@@ -61,6 +61,7 @@ interface EditingRow {
   estoque: string;
   precoAtacado: string;
   precoVarejo: string;
+  custo: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -271,6 +272,7 @@ export default function PdvCadastroProdutos() {
       estoque: String(prod.estoque ?? 0),
       precoAtacado: String(prod.precoAtacado ?? 0),
       precoVarejo: String(prod.precoVarejo ?? 0),
+      custo: String(prod.custo ?? ""),
     });
   };
 
@@ -282,6 +284,7 @@ export default function PdvCadastroProdutos() {
       estoque: parseInt(editingRow.estoque) || 0,
       precoAtacado: parseFloat(editingRow.precoAtacado) || 0,
       precoVarejo: parseFloat(editingRow.precoVarejo) || 0,
+      custo: parseFloat(editingRow.custo) || 0,
       syncSheet: true,
     });
   };
@@ -817,7 +820,7 @@ export default function PdvCadastroProdutos() {
                               </div>
                             </div>
                             {isEditing ? (
-                              <div className="grid grid-cols-3 gap-2">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                                 <div>
                                   <p className="text-xs text-gray-500 mb-1">Estoque</p>
                                   <Input
@@ -843,6 +846,16 @@ export default function PdvCadastroProdutos() {
                                     onChange={e => setEditingRow(prev => prev ? { ...prev, precoVarejo: e.target.value } : null)}
                                     className="h-8 text-sm bg-[#1a1a1a] border-green-700/50 text-white"
                                     inputMode="decimal"
+                                  />
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-500 mb-1">Custo</p>
+                                  <Input
+                                    value={editingRow?.custo ?? ""}
+                                    onChange={e => setEditingRow(prev => prev ? { ...prev, custo: e.target.value } : null)}
+                                    className="h-8 text-sm bg-[#1a1a1a] border-yellow-700/50 text-white"
+                                    inputMode="decimal"
+                                    placeholder="0.00"
                                   />
                                 </div>
                               </div>
@@ -927,6 +940,13 @@ export default function PdvCadastroProdutos() {
                                   onChange={e => setEditingRow(prev => prev ? { ...prev, precoVarejo: e.target.value } : null)}
                                   className="h-8 text-sm bg-[#1a1a1a] border-green-700/50 text-white px-2"
                                   inputMode="decimal"
+                                />
+                                <Input
+                                  value={editingRow?.custo ?? ""}
+                                  onChange={e => setEditingRow(prev => prev ? { ...prev, custo: e.target.value } : null)}
+                                  className="h-8 text-sm bg-[#1a1a1a] border-yellow-700/50 text-white px-2"
+                                  inputMode="decimal"
+                                  placeholder="Custo"
                                 />
                               </>
                             ) : (

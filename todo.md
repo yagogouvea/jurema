@@ -794,3 +794,8 @@
 
 ## v103 — Reordenar coluna Custo para ao lado de VAR na planilha
 - [x] Mover coluna Custo para K (logo após VAR J), empurrando ATIVO para L e demais colunas (pdvSheetsWriter.ts + pdvSync.ts)
+
+## v104 — Campo Custo na edição inline de produtos
+- [x] Adicionar coluna Custo na tabela de listagem de produtos
+- [x] Adicionar campo Custo no modal/inline de edição de produto (desktop grid 4 colunas + mobile)
+- [x] Sincronizar custo com planilha ao editar produto (updateProduct já inclui custo)
