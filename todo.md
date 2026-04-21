@@ -804,3 +804,16 @@
 - [x] Criar aba Lucro_produtos com cabeçalho na planilha (verde, negrito, linha congelada)
 - [x] Criar função appendToLucroProdutos no pdvSheetsWriter.ts
 - [x] Chamar função ao finalizar pedido no pdvOrders.ts (exceto Sofia)
+
+## v106 — Pedido apenas com serviços (sem produtos)
+- [ ] Remover validação de mínimo 1 produto no frontend quando há serviço
+- [ ] Ajustar backend para aceitar items[] vazio com pelo menos 1 serviço
+- [ ] Integração planilha: pedido sem produtos registra linha com campos de produto vazios
+
+## v106 — Pedido apenas com serviços (sem produtos)
+- [x] Remover bloqueio de carrinho vazio no frontend (PdvMain: botão muda para "Lançar Serviço")
+- [x] Validar no PdvCheckout: se carrinho vazio, exige pelo menos 1 serviço antes de finalizar
+- [x] Título dinâmico no checkout: "Lançar Serviço" vs "Finalizar Venda"
+- [x] Resumo do pedido mostra aviso "Apenas serviços serão lançados" quando carrinho vazio
+- [x] Backend pdvOrders.ts: isSomenteServico — grava na aba PEDIDOS e VENDAS_CAIXA mesmo sem itens
+- [x] Aba pedidos_itens e Lucro_produtos: não recebem linhas quando não há produtos

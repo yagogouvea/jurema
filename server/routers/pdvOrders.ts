@@ -254,8 +254,9 @@ export const pdvOrdersRouter = router({
             const normalItems = itemsWithCodigo.filter(item => !item.isSofia);
             const sofiaItems = itemsWithCodigo.filter(item => item.isSofia);
 
-            // ── ABA PEDIDOS (geral) — somente se houver itens NÃO-Sofia ──
-            if (normalItems.length > 0) {
+            // ── ABA PEDIDOS (geral) — itens NÃO-Sofia OU apenas serviços ──
+            const isSomenteServico = normalItems.length === 0 && sofiaItems.length === 0 && input.services.length > 0;
+            if (normalItems.length > 0 || isSomenteServico) {
               const qtdItensNormais = normalItems.reduce((sum, item) => sum + item.quantidade, 0);
               const comissaoTotal = normalItems.reduce((sum, item) => {
                 return sum + (item.quantidade * comissaoUnitaria);
@@ -291,24 +292,23 @@ export const pdvOrdersRouter = router({
                 totalAplicado: totalAplicadoNormal,
                 payments: input.payments,
                 totalPendente: input.totalPendente,
-                // Coluna Q (justificativa) = apenas para pagamento pendente (totalPendente > 0)
-                // NÃO recebe a justificativa de atacado <6 peças
                 justificativa: (input.totalPendente > 0 && !isAtacadoMenos6Order) ? (input.justificativa || null) : null,
                 status: input.status,
-                qtdItens: qtdItensNormais,
-                comissaoTotal,
-                // Coluna V (justificativa_atac_menos6) = apenas para atacado com menos de 6 peças
+                qtdItens: isSomenteServico ? 0 : qtdItensNormais,
+                comissaoTotal: isSomenteServico ? 0 : comissaoTotal,
                 justificativaAtacado: isAtacadoMenos6Order ? (input.justificativa || '') : null,
               });
 
-              // ── ABA pedidos_itens (geral) — somente itens NÃO-Sofia ──
-              await appendOrderItemsToSheet({
-                pedidoId,
-                regime: input.regime,
-                services: input.services,
-                comissaoUnitaria,
-                items: normalItems,
-              });
+              // ── ABA pedidos_itens (geral) — somente se houver itens NÃO-Sofia ──
+              if (normalItems.length > 0) {
+                await appendOrderItemsToSheet({
+                  pedidoId,
+                  regime: input.regime,
+                  services: input.services,
+                  comissaoUnitaria,
+                  items: normalItems,
+                });
+              }
             }
 
             // ── ABA SOFIA_ITENS — somente itens Sofia ──
@@ -337,8 +337,8 @@ export const pdvOrdersRouter = router({
               }
             }
 
-            // ── Gravar na aba VENDAS_CAIXA (apenas pedidos não-Sofia) ──
-            if (normalItems.length > 0) {
+            // ── Gravar na aba VENDAS_CAIXA (pedidos não-Sofia, incluindo apenas serviços) ──
+            if (normalItems.length > 0 || isSomenteServico) {
               const qtdItensNormaisVendas = normalItems.reduce((sum, item) => sum + item.quantidade, 0);
               const totalComTaxaFinal = input.payments.reduce((s: number, p: any) => s + (parseFloat(p.valor) || 0), 0);
               // Verificar se é atacado com menos de 6 peças (para coluna Justificativa <6)

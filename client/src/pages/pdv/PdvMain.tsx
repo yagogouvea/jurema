@@ -233,10 +233,6 @@ export default function PdvMain() {
   const clearCart = () => setCart([]);
 
   const handleCheckout = () => {
-    if (cartWithPrices.length === 0) {
-      toast.error("Carrinho vazio");
-      return;
-    }
     setShowCheckout(true);
   };
 
@@ -966,27 +962,27 @@ function CartPanel({ cart, regime, totalPecas, totalAplicado, onUpdateQuantity, 
       {/* Cart Footer */}
       <div className="p-4 border-t border-gray-800 space-y-3">
         {cart.length > 0 && (
-          <>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">{totalPecas} peças</span>
-              <span className="text-white font-bold text-lg">
-                R$ {totalAplicado.toFixed(2).replace(".", ",")}
-              </span>
-            </div>
-            <button
-              onClick={onCheckout}
-              className="w-full bg-green-700 hover:bg-green-800 text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
-            >
-              Finalizar Venda
-              <ArrowRight className="w-4 h-4" />
-            </button>
-            <button
-              onClick={onClear}
-              className="w-full text-gray-500 hover:text-red-400 text-sm py-1 transition-colors"
-            >
-              Limpar carrinho
-            </button>
-          </>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400">{totalPecas} peças</span>
+            <span className="text-white font-bold text-lg">
+              R$ {totalAplicado.toFixed(2).replace(".", ",")}
+            </span>
+          </div>
+        )}
+        <button
+          onClick={onCheckout}
+          className="w-full bg-green-700 hover:bg-green-800 text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
+        >
+          {cart.length === 0 ? "Lançar Serviço" : "Finalizar Venda"}
+          <ArrowRight className="w-4 h-4" />
+        </button>
+        {cart.length > 0 && (
+          <button
+            onClick={onClear}
+            className="w-full text-gray-500 hover:text-red-400 text-sm py-1 transition-colors"
+          >
+            Limpar carrinho
+          </button>
         )}
       </div>
     </>

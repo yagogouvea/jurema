@@ -243,8 +243,15 @@ export default function PdvCheckout({
 
   // Regra: atacado com menos de 6 peças requer justificativa
   const isAtacadoMenos6 = regime === "ATACADO" && totalPecas < 6;
+  // Pedido apenas com serviços (sem produtos no carrinho)
+  const isSomenteServico = cart.length === 0;
 
   const handleFinalize = () => {
+    // Se carrinho vazio, precisa ter pelo menos 1 serviço
+    if (isSomenteServico && services.length === 0) {
+      toast.error("Adicione pelo menos um serviço (Caixinha, Carreto ou Correio)");
+      return;
+    }
     // Nome do cliente obrigatório
     if (!clienteNome.trim()) {
       toast.error("Nome do cliente é obrigatório");
@@ -304,9 +311,9 @@ export default function PdvCheckout({
           <span className="text-sm">Voltar</span>
         </button>
         <div>
-          <h1 className="text-white font-bold">Finalizar Venda</h1>
+          <h1 className="text-white font-bold">{isSomenteServico ? "Lançar Serviço" : "Finalizar Venda"}</h1>
           <p className="text-gray-400 text-xs">
-            {totalPecas} peças · {regime} · {canal}
+            {isSomenteServico ? "Apenas serviços" : `${totalPecas} peças`} · {regime} · {canal}
             {clienteNome && ` · ${clienteNome}`}
           </p>
         </div>
@@ -325,14 +332,19 @@ export default function PdvCheckout({
           {/* Order Summary */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
             <button
-              onClick={() => setShowItems(!showItems)}
+              onClick={() => !isSomenteServico && setShowItems(!showItems)}
               className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-800/50 transition-colors"
             >
               <div>
                 <h3 className="text-white font-semibold">Resumo do Pedido</h3>
-                <p className="text-gray-400 text-sm">{totalPecas} peças · R$ {fmt(totalAplicado)}</p>
+                <p className="text-gray-400 text-sm">
+                  {isSomenteServico
+                    ? <span className="text-orange-400 text-xs">Nenhum produto — apenas serviços serão lançados</span>
+                    : `${totalPecas} peças · R$ ${fmt(totalAplicado)}`
+                  }
+                </p>
               </div>
-              {showItems ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+              {!isSomenteServico && (showItems ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />)}
             </button>
             {showItems && (
               <div className="border-t border-gray-800 p-4 space-y-2">
