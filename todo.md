@@ -883,3 +883,10 @@
 - [x] 9 respostas rápidas criadas: /catalogo, /valores, /pedido, /troca, /frete, /pix, /horario, /endereco, /obrigada
 - [x] Painel PdvWhatsAppConfig já exibe e permite editar businessContext, catalogLink e respostas rápidas
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v115 — Base de conhecimento IA v2 + imagem de tamanhos
+- [x] Upload da imagem de tabela de tamanhos para o S3
+- [x] Storage proxy configurado no servidor (/manus-storage/*)
+- [x] businessContext atualizado: problema com mercadoria, formas de envio, mínimo atacado, formas de pagamento, aviso restrição WhatsApp Business, tabela de tamanhos
+- [x] 6 novas respostas rápidas: /problema, /envio, /tamanhos, /pagamento, /aviso (+ /atacado atualizado)
+- [x] 206/206 testes passando, 0 erros TypeScript
