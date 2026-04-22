@@ -450,80 +450,125 @@ export default function PdvWhatsAppConfig() {
               {/* Identidade */}
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
                 <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-                  <Bot className="w-4 h-4 text-green-400" /> Identidade da IA
+                  <Bot className="w-4 h-4 text-green-400" /> Identidade da Atendente
                 </h3>
-                <div className="space-y-1.5">
-                  <Label className="text-gray-300 text-xs">Nome da atendente virtual</Label>
-                  <Input
-                    value={aiForm.aiName}
-                    onChange={e => setAiForm(f => ({ ...f, aiName: e.target.value }))}
-                    placeholder="ex: Ju, Ana, Bia..."
-                    className="bg-gray-800 border-gray-700 text-white text-sm"
-                  />
-                  <p className="text-gray-500 text-xs">Este nome será usado no system prompt da IA.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-gray-300 text-xs">Nome da atendente</Label>
+                    <Input
+                      value={aiForm.aiName}
+                      onChange={e => setAiForm(f => ({ ...f, aiName: e.target.value }))}
+                      placeholder="ex: Ju"
+                      className="bg-gray-800 border-gray-700 text-white text-sm"
+                    />
+                    <p className="text-gray-500 text-xs">O nome so sera revelado se o cliente perguntar diretamente.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-gray-300 text-xs">Mensagem de boas-vindas</Label>
+                    <Input
+                      value={aiForm.greetingMessage}
+                      onChange={e => setAiForm(f => ({ ...f, greetingMessage: e.target.value }))}
+                      placeholder="ex: Ola, tudo bem?"
+                      className="bg-gray-800 border-gray-700 text-white text-sm"
+                    />
+                    <p className="text-gray-500 text-xs">Enviada apenas na primeira mensagem de cada conversa.</p>
+                  </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-gray-300 text-xs">Personalidade e tom de voz</Label>
+                  <Label className="text-gray-300 text-xs">Tom de voz e comportamento</Label>
                   <Textarea
                     value={aiForm.personality}
                     onChange={e => setAiForm(f => ({ ...f, personality: e.target.value }))}
-                    placeholder="Descreva como a IA deve se comportar. Ex: Sou uma atendente simpática, prestativa e bem-humorada. Uso linguagem informal mas profissional, com emojis moderados. Sempre trato os clientes pelo nome..."
-                    className="bg-gray-800 border-gray-700 text-white text-sm min-h-[100px]"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-gray-300 text-xs">Contexto da empresa e produtos</Label>
-                  <Textarea
-                    value={aiForm.businessContext}
-                    onChange={e => setAiForm(f => ({ ...f, businessContext: e.target.value }))}
-                    placeholder="Descreva a empresa, produtos, preços, políticas, horários de funcionamento, formas de pagamento, prazo de entrega, etc. Quanto mais detalhado, melhor a IA irá responder."
-                    className="bg-gray-800 border-gray-700 text-white text-sm min-h-[140px]"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-gray-300 text-xs">Mensagem de boas-vindas (novos contatos)</Label>
-                  <Textarea
-                    value={aiForm.greetingMessage}
-                    onChange={e => setAiForm(f => ({ ...f, greetingMessage: e.target.value }))}
-                    placeholder="Ex: Oi! Tudo bem? 😊 Aqui é a Ju da Jumera Sport! Como posso te ajudar hoje?"
                     className="bg-gray-800 border-gray-700 text-white text-sm min-h-[80px]"
                   />
+                  <p className="text-gray-500 text-xs">Descreva como a atendente deve se comportar: tom, linguagem, limites. Sem emojis, sem excessos de cordialidade.</p>
                 </div>
               </div>
 
-              {/* Links automáticos */}
+              {/* Base de conhecimento */}
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
                 <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-                  <Link2 className="w-4 h-4 text-green-400" /> Links Automáticos
+                  <Brain className="w-4 h-4 text-green-400" /> Base de Conhecimento
                 </h3>
-                <p className="text-gray-400 text-xs">A IA enviará estes links automaticamente quando o cliente pedir.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <p className="text-gray-400 text-xs">Tudo que a IA sabe sobre a Jumera Sport. Edite conforme necessario — quanto mais completo, melhor o atendimento.</p>
+                <Textarea
+                  value={aiForm.businessContext}
+                  onChange={e => setAiForm(f => ({ ...f, businessContext: e.target.value }))}
+                  className="bg-gray-800 border-gray-700 text-white text-sm min-h-[320px] font-mono text-xs leading-relaxed"
+                />
+                <div className="bg-gray-800/50 rounded-lg p-3 space-y-1">
+                  <p className="text-gray-400 text-xs font-medium">Topicos ja configurados:</p>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {["Tabela de precos","Catalogo","Como fazer pedido","Minimo atacado","Trocas e defeitos","Formas de envio","Pagamento (Pix/Credito/Debito)","Tamanhos e medidas","Horarios","Endereco","Grupo WhatsApp","Linktree","Mensagem pos-compra","Aviso WhatsApp Business"].map(t => (
+                      <span key={t} className="text-xs bg-green-950/40 text-green-400 border border-green-900/50 px-2 py-0.5 rounded">{t}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Links */}
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
+                <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-green-400" /> Links Automaticos
+                </h3>
+                <p className="text-gray-400 text-xs">A IA envia estes links automaticamente quando o cliente pedir. Atualize sempre que os links mudarem.</p>
+                <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label className="text-gray-300 text-xs">Link do Catálogo</Label>
-                    <Input
-                      value={aiForm.catalogLink}
-                      onChange={e => setAiForm(f => ({ ...f, catalogLink: e.target.value }))}
-                      placeholder="https://..."
-                      className="bg-gray-800 border-gray-700 text-white text-sm"
-                    />
+                    <Label className="text-gray-300 text-xs">Catalogo de Produtos</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={aiForm.catalogLink}
+                        onChange={e => setAiForm(f => ({ ...f, catalogLink: e.target.value }))}
+                        placeholder="https://drive.google.com/..."
+                        className="bg-gray-800 border-gray-700 text-white text-sm font-mono text-xs"
+                      />
+                      {aiForm.catalogLink && (
+                        <a href={aiForm.catalogLink} target="_blank" rel="noopener noreferrer">
+                          <Button variant="outline" size="icon" className="border-gray-700 text-gray-400 hover:text-white shrink-0 h-9 w-9">
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-gray-500 text-xs">Enviado quando o cliente pedir o catalogo ou perguntar sobre produtos.</p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-gray-300 text-xs">Link do Grupo WhatsApp</Label>
-                    <Input
-                      value={aiForm.groupLink}
-                      onChange={e => setAiForm(f => ({ ...f, groupLink: e.target.value }))}
-                      placeholder="https://chat.whatsapp.com/..."
-                      className="bg-gray-800 border-gray-700 text-white text-sm"
-                    />
+                    <Label className="text-gray-300 text-xs">Grupo WhatsApp VIP</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={aiForm.groupLink}
+                        onChange={e => setAiForm(f => ({ ...f, groupLink: e.target.value }))}
+                        placeholder="https://chat.whatsapp.com/..."
+                        className="bg-gray-800 border-gray-700 text-white text-sm font-mono text-xs"
+                      />
+                      {aiForm.groupLink && (
+                        <a href={aiForm.groupLink} target="_blank" rel="noopener noreferrer">
+                          <Button variant="outline" size="icon" className="border-gray-700 text-gray-400 hover:text-white shrink-0 h-9 w-9">
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-gray-500 text-xs">Enviado quando o cliente quiser entrar no grupo de novidades.</p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-gray-300 text-xs">Link do Instagram</Label>
-                    <Input
-                      value={aiForm.instagramLink}
-                      onChange={e => setAiForm(f => ({ ...f, instagramLink: e.target.value }))}
-                      placeholder="https://instagram.com/..."
-                      className="bg-gray-800 border-gray-700 text-white text-sm"
-                    />
+                    <Label className="text-gray-300 text-xs">Linktree (numeros atualizados)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={aiForm.instagramLink}
+                        onChange={e => setAiForm(f => ({ ...f, instagramLink: e.target.value }))}
+                        placeholder="https://linktr.ee/..."
+                        className="bg-gray-800 border-gray-700 text-white text-sm font-mono text-xs"
+                      />
+                      {aiForm.instagramLink && (
+                        <a href={aiForm.instagramLink} target="_blank" rel="noopener noreferrer">
+                          <Button variant="outline" size="icon" className="border-gray-700 text-gray-400 hover:text-white shrink-0 h-9 w-9">
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-gray-500 text-xs">Enviado no aviso de restricao do WhatsApp Business para o cliente encontrar outros numeros.</p>
                   </div>
                 </div>
               </div>
@@ -531,10 +576,10 @@ export default function PdvWhatsAppConfig() {
               {/* Escalamento para humano */}
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
                 <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-                  <Users className="w-4 h-4 text-green-400" /> Escalamento para Humano
+                  <Users className="w-4 h-4 text-green-400" /> Escalamento para Atendente
                 </h3>
                 <p className="text-gray-400 text-xs">
-                  Quando o cliente mencionar estas palavras, a IA avisará que vai chamar um atendente e a IA será pausada automaticamente.
+                  Quando o cliente mencionar estas palavras ou a IA nao souber responder, ela enviara "So um momento." e a conversa sera sinalizada para atendimento humano. Adicione palavras que indicam situacoes delicadas ou reclamacoes.
                 </p>
                 <div className="flex gap-2">
                   <Input
@@ -565,11 +610,11 @@ export default function PdvWhatsAppConfig() {
               {/* Configurações avançadas */}
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
                 <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-green-400" /> Configurações Avançadas
+                  <Settings className="w-4 h-4 text-green-400" /> Comportamento da IA
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <Label className="text-gray-300 text-xs">Mensagens de contexto</Label>
+                    <Label className="text-gray-300 text-xs">Memoria da conversa</Label>
                     <Input
                       type="number"
                       value={aiForm.maxContextMessages}
@@ -577,10 +622,10 @@ export default function PdvWhatsAppConfig() {
                       min={1} max={50}
                       className="bg-gray-800 border-gray-700 text-white text-sm"
                     />
-                    <p className="text-gray-500 text-xs">Quantas mensagens anteriores a IA lembra (1-50)</p>
+                    <p className="text-gray-500 text-xs">Quantas mensagens anteriores a IA lembra. Recomendado: 10 a 20.</p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-gray-300 text-xs">Delay mínimo (ms)</Label>
+                    <Label className="text-gray-300 text-xs">Delay minimo de resposta (ms)</Label>
                     <Input
                       type="number"
                       value={aiForm.responseDelayMin}
@@ -588,10 +633,10 @@ export default function PdvWhatsAppConfig() {
                       min={0} max={10000}
                       className="bg-gray-800 border-gray-700 text-white text-sm"
                     />
-                    <p className="text-gray-500 text-xs">Delay mínimo antes de responder (humanização)</p>
+                    <p className="text-gray-500 text-xs">Tempo minimo antes de responder. Simula digitacao humana. Recomendado: 1000ms.</p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-gray-300 text-xs">Delay máximo (ms)</Label>
+                    <Label className="text-gray-300 text-xs">Delay maximo de resposta (ms)</Label>
                     <Input
                       type="number"
                       value={aiForm.responseDelayMax}
@@ -599,8 +644,12 @@ export default function PdvWhatsAppConfig() {
                       min={0} max={30000}
                       className="bg-gray-800 border-gray-700 text-white text-sm"
                     />
-                    <p className="text-gray-500 text-xs">Delay máximo antes de responder</p>
+                    <p className="text-gray-500 text-xs">Tempo maximo antes de responder. Recomendado: 3000ms.</p>
                   </div>
+                </div>
+                <div className="bg-blue-950/20 border border-blue-900/30 rounded-lg p-3">
+                  <p className="text-blue-300 text-xs font-medium mb-1">Como funciona o delay</p>
+                  <p className="text-blue-400/70 text-xs">A IA aguarda um tempo aleatorio entre o delay minimo e maximo antes de enviar cada resposta. Isso simula o tempo de digitacao de uma pessoa real e torna o atendimento imperceptivel como automatizado.</p>
                 </div>
               </div>
 
@@ -608,9 +657,10 @@ export default function PdvWhatsAppConfig() {
               {systemPromptPreview && (
                 <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-3">
                   <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-green-400" /> Preview do System Prompt
+                    <Eye className="w-4 h-4 text-green-400" /> Instrucoes Enviadas para a IA (somente leitura)
                   </h3>
-                  <pre className="text-gray-400 text-xs whitespace-pre-wrap font-mono bg-gray-800 rounded-lg p-4 max-h-48 overflow-y-auto">
+                  <p className="text-gray-500 text-xs">Este e o texto completo que a IA recebe antes de cada conversa. E gerado automaticamente com base nas configuracoes acima. Nao e necessario editar manualmente.</p>
+                  <pre className="text-gray-400 text-xs whitespace-pre-wrap font-mono bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto leading-relaxed">
                     {systemPromptPreview}
                   </pre>
                 </div>
@@ -768,11 +818,17 @@ export default function PdvWhatsAppConfig() {
               </div>
 
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
+                <div className="bg-amber-950/20 border border-amber-900/30 rounded-lg p-3 mb-2">
+                  <p className="text-amber-300 text-xs font-medium">Horario configurado na base de conhecimento</p>
+                  <div className="text-amber-400/70 text-xs mt-1 space-y-0.5">
+                    <p>Shopping Stunt: segunda a sexta 06h-15h, sabado 08h-16h, domingo fechado</p>
+                  </div>
+                </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-white text-sm font-medium">Ativar mensagem de ausência</div>
+                    <div className="text-white text-sm font-medium">Ativar mensagem de ausencia automatica</div>
                     <div className="text-gray-400 text-xs mt-0.5">
-                      Fora do horário configurado, a IA enviará a mensagem de ausência
+                      Fora do horario configurado abaixo, a IA enviara a mensagem de ausencia
                     </div>
                   </div>
                   <Switch
@@ -804,13 +860,14 @@ export default function PdvWhatsAppConfig() {
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-gray-300 text-xs">Mensagem de ausência</Label>
+                      <Label className="text-gray-300 text-xs">Mensagem de ausencia</Label>
                       <Textarea
                         value={awayForm.awayMessage}
                         onChange={e => setAwayForm(f => ({ ...f, awayMessage: e.target.value }))}
-                        placeholder="Ex: Oi! No momento estamos fora do horário de atendimento 😊 Retornaremos em breve. Nosso horário é de segunda a sábado, das 8h às 18h. Até logo! 👋"
+                        placeholder="Ex: No momento estamos fora do horario de atendimento. Retornaremos em breve. Nosso horario e de segunda a sabado, das 6h as 15h."
                         className="bg-gray-800 border-gray-700 text-white text-sm min-h-[100px]"
                       />
+                      <p className="text-gray-500 text-xs">Sem emojis. Resposta direta informando o horario de retorno.</p>
                     </div>
                   </>
                 )}
