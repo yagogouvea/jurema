@@ -76,42 +76,49 @@ export default function PdvWhatsAppConfig() {
 
   const { data: instances = [], refetch: refetchInst } = trpc.wa.listInstances.useQuery();
 
-  const { data: aiConfig, refetch: refetchAiConfig } = trpc.wa.getAiConfig.useQuery(
+  const { data: aiConfig, isLoading: aiConfigLoading, refetch: refetchAiConfig } = trpc.wa.getAiConfig.useQuery(
     { instanceId: selectedInstanceId! },
-    { enabled: !!selectedInstanceId }
+    { enabled: !!selectedInstanceId, staleTime: 0 }
   );
 
   const { data: quickReplies = [], refetch: refetchQr } = trpc.wa.listQuickReplies.useQuery(
     { instanceId: selectedInstanceId ?? undefined }
   );
 
-  // Preenche o form quando a config da IA é carregada
+  // Preenche o form quando a config da IA é carregada — usa aiConfig?.id como chave para forçar reset
   useEffect(() => {
-    if (aiConfig) {
-      setAiForm({
-        enabled: aiConfig.enabled ?? false,
-        aiName: aiConfig.aiName ?? "Ju",
-        personality: aiConfig.personality ?? "",
-        businessContext: aiConfig.businessContext ?? "",
-        greetingMessage: aiConfig.greetingMessage ?? "",
-        catalogLink: aiConfig.catalogLink ?? "",
-        groupLink: aiConfig.groupLink ?? "",
-        instagramLink: aiConfig.instagramLink ?? "",
-        maxContextMessages: aiConfig.maxContextMessages ?? 10,
-        responseDelayMin: aiConfig.responseDelayMin ?? 1000,
-        responseDelayMax: aiConfig.responseDelayMax ?? 3000,
-        escalateKeywords: Array.isArray(aiConfig.escalateKeywords)
-          ? aiConfig.escalateKeywords
-          : (typeof aiConfig.escalateKeywords === "string" ? JSON.parse(aiConfig.escalateKeywords || "[]") : []),
-        newKeyword: "",
-      });
-      setAwayForm({
-        awayEnabled: aiConfig.awayEnabled ?? false,
-        awayStart: aiConfig.awayStart ?? "18:00",
-        awayEnd: aiConfig.awayEnd ?? "08:00",
-        awayMessage: aiConfig.awayMessage ?? "",
-      });
-      setSystemPromptPreview(aiConfig.systemPrompt ?? "");
+    if (aiConfig !== undefined) {
+      if (aiConfig === null) {
+        // Instância sem config ainda — resetar para defaults
+        setAiForm({ enabled: false, aiName: "Ju", personality: "", businessContext: "", greetingMessage: "", catalogLink: "", groupLink: "", instagramLink: "", maxContextMessages: 10, responseDelayMin: 1000, responseDelayMax: 3000, escalateKeywords: [], newKeyword: "" });
+        setAwayForm({ awayEnabled: false, awayStart: "18:00", awayEnd: "08:00", awayMessage: "" });
+        setSystemPromptPreview("");
+      } else {
+        setAiForm({
+          enabled: Boolean(aiConfig.enabled),
+          aiName: aiConfig.aiName ?? "Ju",
+          personality: aiConfig.personality ?? "",
+          businessContext: aiConfig.businessContext ?? "",
+          greetingMessage: aiConfig.greetingMessage ?? "",
+          catalogLink: aiConfig.catalogLink ?? "",
+          groupLink: aiConfig.groupLink ?? "",
+          instagramLink: aiConfig.instagramLink ?? "",
+          maxContextMessages: aiConfig.maxContextMessages ?? 10,
+          responseDelayMin: aiConfig.responseDelayMin ?? 1000,
+          responseDelayMax: aiConfig.responseDelayMax ?? 3000,
+          escalateKeywords: Array.isArray(aiConfig.escalateKeywords)
+            ? aiConfig.escalateKeywords
+            : (typeof aiConfig.escalateKeywords === "string" ? JSON.parse(aiConfig.escalateKeywords || "[]") : []),
+          newKeyword: "",
+        });
+        setAwayForm({
+          awayEnabled: Boolean(aiConfig.awayEnabled),
+          awayStart: aiConfig.awayStart ?? "18:00",
+          awayEnd: aiConfig.awayEnd ?? "08:00",
+          awayMessage: aiConfig.awayMessage ?? "",
+        });
+        setSystemPromptPreview(aiConfig.systemPrompt ?? "");
+      }
     }
   }, [aiConfig]);
 
@@ -419,8 +426,7 @@ export default function PdvWhatsAppConfig() {
               )}
             </div>
           )}
-
-          {/* ── Tab: Treinamento IA ─────────────────────────────────────────── */}
+          {/* ── Tab: Treinamento IA ────────────────────────────────────────────── */}
           {activeTab === "treinamento" && (
             <div className="max-w-3xl space-y-6">
               <div>
@@ -428,8 +434,27 @@ export default function PdvWhatsAppConfig() {
                 <p className="text-gray-400 text-sm mt-0.5">Configure como a IA deve se comportar e responder</p>
               </div>
 
-              {/* Toggle IA */}
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex items-center justify-between">
+              {/* Aviso sem instância */}
+              {!selectedInstanceId && (
+                <div className="bg-yellow-950/20 border border-yellow-800/40 rounded-xl p-4 flex gap-3">
+                  <AlertCircle className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
+                  <p className="text-yellow-300 text-xs">Selecione uma instância no seletor acima para ver e editar as configurações da IA.</p>
+                </div>
+              )}
+
+              {/* Skeleton de carregamento */}
+              {aiConfigLoading && selectedInstanceId && (
+                <div className="space-y-4 animate-pulse">
+                  <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-16" />
+                  <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 h-40" />
+                  <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 h-80" />
+                  <p className="text-center text-gray-500 text-sm py-2">Carregando configurações da IA...</p>
+                </div>
+              )}
+
+              {/* Conteúdo real — só renderiza após dados carregarem */}
+              {!aiConfigLoading && selectedInstanceId && (<>
+              {/* Toggle IA */}              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${aiForm.enabled ? "bg-green-900" : "bg-gray-800"}`}>
                     <Bot className={`w-5 h-5 ${aiForm.enabled ? "text-green-400" : "text-gray-500"}`} />
@@ -674,10 +699,10 @@ export default function PdvWhatsAppConfig() {
                 {saveAiConfig.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Salvar Configuração da IA
               </Button>
+              </>)} {/* fecha !aiConfigLoading && selectedInstanceId */}
             </div>
           )}
-
-          {/* ── Tab: Respostas Rápidas ──────────────────────────────────────── */}
+          {/* ── Tab: Respostas Rápidass ──────────────────────────────────────── */}
           {activeTab === "respostas" && (
             <div className="max-w-3xl space-y-4">
               <div className="flex items-center justify-between">
@@ -809,7 +834,7 @@ export default function PdvWhatsAppConfig() {
             </div>
           )}
 
-          {/* ── Tab: Horários ───────────────────────────────────────────────── */}
+            {/* ── Tab: Horários ────────────────────────────────────────────── */}
           {activeTab === "horarios" && (
             <div className="max-w-2xl space-y-6">
               <div>
@@ -817,6 +842,23 @@ export default function PdvWhatsAppConfig() {
                 <p className="text-gray-400 text-sm mt-0.5">Configure a mensagem de ausência fora do horário comercial</p>
               </div>
 
+              {/* Aviso sem instância */}
+              {!selectedInstanceId && (
+                <div className="bg-yellow-950/20 border border-yellow-800/40 rounded-xl p-4 flex gap-3">
+                  <AlertCircle className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
+                  <p className="text-yellow-300 text-xs">Selecione uma instância no seletor acima para ver e editar os horários.</p>
+                </div>
+              )}
+
+              {/* Skeleton */}
+              {aiConfigLoading && selectedInstanceId && (
+                <div className="space-y-4 animate-pulse">
+                  <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 h-48" />
+                  <p className="text-center text-gray-500 text-sm py-2">Carregando horários...</p>
+                </div>
+              )}
+
+              {!aiConfigLoading && selectedInstanceId && (<>
               {/* Aviso de integração com IA */}
               {aiForm.enabled && (
                 <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl p-4 flex gap-3">
@@ -905,6 +947,7 @@ export default function PdvWhatsAppConfig() {
                 {saveAiConfig.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Salvar Horários
               </Button>
+              </>)} {/* fecha !aiConfigLoading && selectedInstanceId */}
             </div>
           )}
         </div>

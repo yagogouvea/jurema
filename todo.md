@@ -913,3 +913,15 @@
 - [x] Backend: função checkAwayMessage() com anti-spam (não reenvia se última msg já era de ausência)
 - [x] receiveWebhook: mensagem de ausência tem prioridade sobre a IA — sem conflito entre os dois sistemas
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v122 — Correção race condition + UX Configurações WhatsApp IA
+- [x] Diagnóstico: race condition no useEffect (selectedInstanceId null na primeira render)
+- [x] Backend: confirmado que getAiConfig e saveAiConfig estão corretos
+- [x] Backend: confirmado que checkAwayMessage respeita awayEnabled=false
+- [x] Frontend: useEffect corrigido para tratar aiConfig===undefined vs null vs objeto
+- [x] Frontend: staleTime:0 adicionado para forçar refetch ao trocar instância
+- [x] Frontend: skeleton animado nas abas Treinamento IA e Horários
+- [x] Frontend: aviso amarelo quando nenhuma instância selecionada
+- [x] Frontend: aba Treinamento IA exibe todos os dados salvos (personalidade, base de conhecimento, links, keywords)
+- [x] Frontend: aba Horários exibe awayStart, awayEnd e awayMessage salvos
+- [x] 206/206 testes passando, 0 erros TypeScript
