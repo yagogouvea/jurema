@@ -382,3 +382,119 @@ export const pdvNotifications = mysqlTable("pdv_notifications", {
 
 export type PdvNotification = typeof pdvNotifications.$inferSelect;
 export type InsertPdvNotification = typeof pdvNotifications.$inferInsert;
+
+// ============================================================
+// MÓDULO WHATSAPP IA — Jumera Sport
+// ============================================================
+
+// Instâncias WhatsApp (uma por número de telefone)
+export const waInstances = mysqlTable("wa_instances", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(), // ex: "Jumera Principal", "Jumera Atacado"
+  phone: varchar("phone", { length: 20 }).notNull(), // número com DDI: 5511999999999
+  instanceId: varchar("instanceId", { length: 100 }), // ID retornado pelo evocloud.pro
+  apiKey: varchar("apiKey", { length: 255 }), // chave da instância no evocloud.pro
+  status: mysqlEnum("status", ["disconnected", "connecting", "connected", "error"]).default("disconnected").notNull(),
+  webhookUrl: varchar("webhookUrl", { length: 500 }), // URL do webhook configurado
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type WaInstance = typeof waInstances.$inferSelect;
+export type InsertWaInstance = typeof waInstances.$inferInsert;
+
+// Conversas (uma por contato por instância)
+export const waConversations = mysqlTable("wa_conversations", {
+  id: int("id").autoincrement().primaryKey(),
+  instanceId: int("instanceId").notNull(), // FK -> wa_instances.id
+  remoteJid: varchar("remoteJid", { length: 100 }).notNull(), // número do contato: 5511999999999@s.whatsapp.net
+  contactName: varchar("contactName", { length: 255 }), // nome salvo no WhatsApp
+  contactPhone: varchar("contactPhone", { length: 20 }), // número formatado para exibição
+  contactAvatar: text("contactAvatar"), // URL da foto do contato
+  lastMessage: text("lastMessage"), // preview da última mensagem
+  lastMessageAt: timestamp("lastMessageAt"), // horário da última mensagem
+  unreadCount: int("unreadCount").default(0).notNull(), // mensagens não lidas
+  aiEnabled: boolean("aiEnabled").default(true).notNull(), // IA ativa nesta conversa?
+  aiDisabledBy: varchar("aiDisabledBy", { length: 100 }), // quem desativou a IA
+  aiDisabledAt: timestamp("aiDisabledAt"), // quando foi desativada
+  status: mysqlEnum("status", ["open", "resolved", "archived"]).default("open").notNull(),
+  tags: json("tags"), // tags para organização: ["atacado", "cliente_vip", etc]
+  notes: text("notes"), // anotações internas sobre o contato
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type WaConversation = typeof waConversations.$inferSelect;
+export type InsertWaConversation = typeof waConversations.$inferInsert;
+
+// Mensagens de cada conversa
+export const waMessages = mysqlTable("wa_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull(), // FK -> wa_conversations.id
+  instanceId: int("instanceId").notNull(), // FK -> wa_instances.id
+  messageId: varchar("messageId", { length: 255 }), // ID da mensagem no WhatsApp
+  fromMe: boolean("fromMe").default(false).notNull(), // true = enviada por nós
+  senderType: mysqlEnum("senderType", ["ai", "human", "customer"]).default("customer").notNull(),
+  senderName: varchar("senderName", { length: 100 }), // nome do atendente ou "IA"
+  type: mysqlEnum("type", ["text", "image", "audio", "video", "document", "sticker", "location", "contact", "reaction"]).default("text").notNull(),
+  content: text("content"), // texto da mensagem
+  mediaUrl: text("mediaUrl"), // URL da mídia (imagem, áudio, etc.)
+  mediaCaption: text("mediaCaption"), // legenda da mídia
+  quotedMessageId: varchar("quotedMessageId", { length: 255 }), // ID da mensagem citada
+  status: mysqlEnum("status", ["pending", "sent", "delivered", "read", "failed"]).default("pending").notNull(),
+  timestamp: timestamp("timestamp").notNull(), // horário real da mensagem
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type WaMessage = typeof waMessages.$inferSelect;
+export type InsertWaMessage = typeof waMessages.$inferInsert;
+
+// Configuração da IA por instância
+export const waAiConfig = mysqlTable("wa_ai_config", {
+  id: int("id").autoincrement().primaryKey(),
+  instanceId: int("instanceId").notNull().unique(), // FK -> wa_instances.id (uma config por instância)
+  enabled: boolean("enabled").default(false).notNull(), // IA habilitada globalmente nesta instância?
+  aiName: varchar("aiName", { length: 100 }).default("Ju").notNull(), // nome da IA
+  personality: text("personality"), // descrição da personalidade e tom de voz
+  businessContext: text("businessContext"), // contexto da loja (produtos, preços, horários, etc.)
+  greetingMessage: text("greetingMessage"), // mensagem de boas-vindas para novos contatos
+  awayMessage: text("awayMessage"), // mensagem fora do horário de atendimento
+  awayEnabled: boolean("awayEnabled").default(false).notNull(),
+  awayStart: varchar("awayStart", { length: 5 }), // horário início ausência: "18:00"
+  awayEnd: varchar("awayEnd", { length: 5 }), // horário fim ausência: "08:00"
+  catalogLink: text("catalogLink"), // link do catálogo de produtos
+  groupLink: text("groupLink"), // link do grupo WhatsApp
+  instagramLink: text("instagramLink"), // link do Instagram
+  maxContextMessages: int("maxContextMessages").default(10).notNull(), // quantas mensagens anteriores enviar para a IA
+  responseDelayMin: int("responseDelayMin").default(1000).notNull(), // delay mínimo em ms (humanização)
+  responseDelayMax: int("responseDelayMax").default(3000).notNull(), // delay máximo em ms
+  escalateKeywords: json("escalateKeywords"), // palavras que transferem para humano: ["reclamação", "problema"]
+  systemPrompt: text("systemPrompt"), // prompt completo gerado automaticamente
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type WaAiConfig = typeof waAiConfig.$inferSelect;
+export type InsertWaAiConfig = typeof waAiConfig.$inferInsert;
+
+// Respostas rápidas (templates de mensagem)
+export const waQuickReplies = mysqlTable("wa_quick_replies", {
+  id: int("id").autoincrement().primaryKey(),
+  instanceId: int("instanceId"), // null = global para todas as instâncias
+  title: varchar("title", { length: 100 }).notNull(), // título interno: "Enviar catálogo"
+  shortcut: varchar("shortcut", { length: 50 }), // atalho: "/catalogo"
+  content: text("content").notNull(), // conteúdo da mensagem
+  category: varchar("category", { length: 50 }), // categoria: "catalogo", "pagamento", "entrega"
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type WaQuickReply = typeof waQuickReplies.$inferSelect;
+export type InsertWaQuickReply = typeof waQuickReplies.$inferInsert;
+
+// Log de ações da IA (auditoria)
+export const waAiLogs = mysqlTable("wa_ai_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull(),
+  action: mysqlEnum("action", ["ai_enabled", "ai_disabled", "ai_responded", "escalated_to_human", "error"]).notNull(),
+  performedBy: varchar("performedBy", { length: 100 }), // nome do atendente ou "system"
+  details: text("details"), // detalhes adicionais
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type WaAiLog = typeof waAiLogs.$inferSelect;

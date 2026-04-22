@@ -22,6 +22,7 @@ import { pdvSofiaRouter } from "./routers/pdvSofia";
 import { pdvDescontoFolhaRouter } from "./routers/pdvDescontoFolha";
 import { pdvRelatorioRouter } from "./routers/pdvRelatorio";
 import { pdvSiteSyncRouter } from "./routers/pdvSiteSync";
+import { waRouter } from "./routers/waRouter";
 import {
   getProducts, getProductBySlug, getProductById, createProduct, updateProduct, deleteProduct,
   createOrder, getOrders, getOrderById, updateOrderStatus, getDashboardStats,
@@ -70,6 +71,7 @@ export const appRouter = router({
   pdvDescontoFolha: pdvDescontoFolhaRouter,
   pdvRelatorio: pdvRelatorioRouter,
   pdvSiteSync: pdvSiteSyncRouter,
+  wa: waRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),

@@ -842,3 +842,18 @@
 - [x] PdvMeuPerfil: cards Pontuação, Peças, Bônus, Caixinha, Bônus+Caixinha
 - [x] PdvMeuPerfil: tabela de pedidos com coluna Caixinha (só aparece quando há caixinha no pedido)
 - [x] PdvMeuPerfil: bônus visível e calculado corretamente
+
+## v111 — Módulo WhatsApp IA (infraestrutura completa)
+- [x] Schema banco: tabelas wa_instances, wa_conversations, wa_messages, wa_ai_config, wa_quick_replies
+- [x] Migrations e aplicação no banco
+- [x] Endpoints tRPC: instâncias (listar, status), conversas (listar, buscar, marcar lida), mensagens (listar, enviar mock), config IA (ler, salvar)
+- [x] Painel de atendimento: layout WhatsApp Web (lista conversas + área de chat)
+- [x] Seletor de instância (3 números) no topo
+- [x] Toggle IA por conversa
+- [x] Envio de mensagem manual
+- [x] Painel de treinamento/configuração da IA (personalidade, base de conhecimento, links automáticos)
+- [x] Seção WhatsApp no menu do PDV (admin + atendentes)
+- [x] 206/206 testes passando, 0 erros TypeScript
+- [ ] Integração evocloud.pro (pendente credenciais)
+- [ ] Integração OpenAI (pendente credenciais)
+- [ ] Webhook para receber mensagens em tempo real
