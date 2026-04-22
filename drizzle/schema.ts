@@ -417,7 +417,7 @@ export const waConversations = mysqlTable("wa_conversations", {
   aiEnabled: boolean("aiEnabled").default(true).notNull(), // IA ativa nesta conversa?
   aiDisabledBy: varchar("aiDisabledBy", { length: 100 }), // quem desativou a IA
   aiDisabledAt: timestamp("aiDisabledAt"), // quando foi desativada
-  status: mysqlEnum("status", ["open", "resolved", "archived"]).default("open").notNull(),
+  status: mysqlEnum("status", ["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam"]).default("novo").notNull(),
   tags: json("tags"), // tags para organização: ["atacado", "cliente_vip", etc]
   notes: text("notes"), // anotações internas sobre o contato
   createdAt: timestamp("createdAt").defaultNow().notNull(),

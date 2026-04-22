@@ -1,79 +1,115 @@
-import { useState, useRef, useEffect, useMemo } from "react";
-import PdvLayout from "./PdvLayout";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
+import PdvLayout from "./PdvLayout";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
-import { toast } from "sonner";
-import {
-  Search, Send, Bot, BotOff, Phone, MoreVertical,
-  CheckCheck, Check, Clock, Wifi, WifiOff, Settings,
-  ChevronDown, Tag, StickyNote, Archive, CheckCircle2,
-  Zap, RefreshCw, MessageCircle, Plus, X
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
-} from "@/components/ui/dialog";
+  Search, Send, Bot, BotOff, Zap, Paperclip,
+  MessageCircle, Circle, CheckCircle2, Clock, Tag, Ban,
+  ChevronDown, AlertCircle, Settings,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Link } from "wouter";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
-function formatTime(ts: string | Date | null | undefined): string {
+type ConvStatus = "novo" | "em_atendimento" | "aguardando" | "proposta_enviada" | "finalizado" | "spam";
+
+// ─── Configuração de status ───────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<ConvStatus, { label: string; color: string; bg: string; border: string; Icon: React.FC<{ size?: number }> }> = {
+  novo:             { label: "Novo",             color: "#60a5fa", bg: "rgba(96,165,250,.12)",  border: "rgba(96,165,250,.3)",  Icon: Circle },
+  em_atendimento:   { label: "Em atendimento",   color: "#34d399", bg: "rgba(52,211,153,.12)",  border: "rgba(52,211,153,.3)",  Icon: MessageCircle },
+  aguardando:       { label: "Aguardando",       color: "#fbbf24", bg: "rgba(251,191,36,.12)",  border: "rgba(251,191,36,.3)",  Icon: Clock },
+  proposta_enviada: { label: "Proposta enviada", color: "#a78bfa", bg: "rgba(167,139,250,.12)", border: "rgba(167,139,250,.3)", Icon: Tag },
+  finalizado:       { label: "Finalizado",       color: "#6b7280", bg: "rgba(107,114,128,.12)", border: "rgba(107,114,128,.3)", Icon: CheckCircle2 },
+  spam:             { label: "Spam",             color: "#f87171", bg: "rgba(248,113,113,.12)", border: "rgba(248,113,113,.3)", Icon: Ban },
+};
+
+const INSTANCE_COLORS = ["#25D366", "#3B82F6", "#F59E0B", "#EC4899", "#8B5CF6"];
+const getInstColor = (idx: number) => INSTANCE_COLORS[idx % INSTANCE_COLORS.length];
+
+function formatTime(ts?: string | null) {
   if (!ts) return "";
   const d = new Date(ts);
-  const now = new Date();
-  const diff = now.getTime() - d.getTime();
-  if (diff < 86400000) {
-    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  }
-  if (diff < 604800000) {
-    return d.toLocaleDateString("pt-BR", { weekday: "short" });
-  }
+  const diff = Date.now() - d.getTime();
+  if (diff < 86400000) return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  if (diff < 172800000) return "Ontem";
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
-function formatMsgTime(ts: string | Date | null | undefined): string {
-  if (!ts) return "";
-  return new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function getInitials(name: string | null | undefined): string {
+function getInitials(name?: string | null) {
   if (!name) return "?";
-  return name.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase();
+  return name.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
 }
 
-function getAvatarColor(name: string | null | undefined): string {
-  const colors = ["bg-emerald-600", "bg-blue-600", "bg-purple-600", "bg-orange-600", "bg-pink-600", "bg-teal-600"];
-  if (!name) return colors[0];
-  return colors[name.charCodeAt(0) % colors.length];
+// ─── StatusBadge ─────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: ConvStatus }) {
+  const cfg = STATUS_CONFIG[status];
+  const { Icon } = cfg;
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap"
+      style={{ color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}
+    >
+      <Icon size={9} />
+      {cfg.label}
+    </span>
+  );
 }
 
-const STATUS_ICONS: Record<string, React.ReactNode> = {
-  pending: <Clock className="w-3 h-3 text-gray-400" />,
-  sent: <Check className="w-3 h-3 text-gray-400" />,
-  delivered: <CheckCheck className="w-3 h-3 text-gray-400" />,
-  read: <CheckCheck className="w-3 h-3 text-blue-400" />,
-  failed: <X className="w-3 h-3 text-red-400" />,
-};
+// ─── StatusDropdown ───────────────────────────────────────────────────────────
 
-// ─── Componente Principal ─────────────────────────────────────────────────────
+function StatusDropdown({ current, onChange }: { current: ConvStatus; onChange: (s: ConvStatus) => void }) {
+  const cfg = STATUS_CONFIG[current];
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="flex items-center gap-0.5 hover:opacity-80 transition-opacity">
+          <StatusBadge status={current} />
+          <ChevronDown size={10} style={{ color: cfg.color }} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44 bg-[#1a1a1a] border-[#2a2a2a] p-1">
+        {(Object.keys(STATUS_CONFIG) as ConvStatus[]).map(s => (
+          <DropdownMenuItem
+            key={s}
+            onClick={() => onChange(s)}
+            className="cursor-pointer rounded hover:bg-[#252525] focus:bg-[#252525] p-1"
+          >
+            <StatusBadge status={s} />
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function PdvWhatsApp() {
   const { isAdmin } = usePdvAuth();
-  const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
+
+  // Filtros
+  const [selectedInstanceId, setSelectedInstanceId] = useState<number>(0); // 0 = todos
+  const [selectedStatus, setSelectedStatus] = useState<ConvStatus | "">("");
+  const [filterAi, setFilterAi] = useState<"" | "on" | "off">("");
+  const [filterUnread, setFilterUnread] = useState(false);
+  const [search, setSearch] = useState("");
+
+  // Chat
   const [selectedConvId, setSelectedConvId] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [messageText, setMessageText] = useState("");
-  const [showQuickReplies, setShowQuickReplies] = useState(false);
-  const [notesDialog, setNotesDialog] = useState(false);
-  const [notesText, setNotesText] = useState("");
-  const [convFilter, setConvFilter] = useState<"open" | "resolved" | "archived">("open");
+  const [messageInput, setMessageInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const utils = trpc.useUtils();
 
   // ── Queries ──────────────────────────────────────────────────────────────────
@@ -82,536 +118,505 @@ export default function PdvWhatsApp() {
     refetchInterval: 30000,
   });
 
-  const activeInstanceId = selectedInstanceId ?? instances[0]?.id ?? null;
+  const convQuery = trpc.wa.listConversations.useQuery({
+    instanceId: selectedInstanceId || undefined,
+    status: (selectedStatus as ConvStatus) || undefined,
+    aiEnabled: filterAi === "on" ? true : filterAi === "off" ? false : undefined,
+    unreadOnly: filterUnread || undefined,
+    search: search || undefined,
+  }, { refetchInterval: 8000 });
 
-  const { data: metrics } = trpc.wa.getMetrics.useQuery(
-    { instanceId: activeInstanceId ?? undefined },
-    { enabled: !!activeInstanceId, refetchInterval: 15000 }
-  );
+  const conversations: any[] = convQuery.data ?? [];
 
-  const { data: conversations = [], refetch: refetchConvs } = trpc.wa.listConversations.useQuery(
-    { instanceId: activeInstanceId!, status: convFilter, search: searchQuery || undefined, limit: 50 },
-    { enabled: !!activeInstanceId, refetchInterval: 5000 }
-  );
-
-  const { data: messages = [], refetch: refetchMsgs } = trpc.wa.listMessages.useQuery(
-    { conversationId: selectedConvId!, limit: 100 },
-    { enabled: !!selectedConvId, refetchInterval: 3000 }
-  );
-
-  const { data: quickReplies = [] } = trpc.wa.listQuickReplies.useQuery(
-    { instanceId: activeInstanceId ?? undefined },
-    { enabled: !!activeInstanceId }
-  );
+  const countQuery = trpc.wa.countByStatus.useQuery({
+    instanceId: selectedInstanceId || undefined,
+  }, { refetchInterval: 15000 });
+  const counts: Record<string, { count: number; unread: number }> = countQuery.data ?? {};
 
   const selectedConv = useMemo(
-    () => conversations.find((c: any) => c.id === selectedConvId) ?? null,
+    () => conversations.find(c => c.id === selectedConvId) ?? null,
     [conversations, selectedConvId]
   );
 
+  const messagesQuery = trpc.wa.listMessages.useQuery(
+    { conversationId: selectedConvId! },
+    { enabled: selectedConvId !== null, refetchInterval: 4000 }
+  );
+  const messages: any[] = messagesQuery.data ?? [];
+
   // ── Mutations ─────────────────────────────────────────────────────────────────
 
-  const sendMsg = trpc.wa.sendMessage.useMutation({
-    onSuccess: () => {
-      setMessageText("");
-      refetchMsgs();
-      refetchConvs();
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const toggleAi = trpc.wa.toggleAi.useMutation({
+  const toggleAiMut = trpc.wa.toggleAi.useMutation({
     onSuccess: (_, vars) => {
-      toast.success(vars.enabled ? "IA reativada nesta conversa" : "IA pausada — você assumiu o atendimento");
-      refetchConvs();
+      toast(vars.enabled ? "IA reativada" : "IA pausada — você assumiu o atendimento");
+      utils.wa.listConversations.invalidate();
     },
-    onError: (e) => toast.error(e.message),
   });
 
-  const markRead = trpc.wa.markAsRead.useMutation({
-    onSuccess: () => refetchConvs(),
+  const updateConvMut = trpc.wa.updateConversation.useMutation({
+    onSuccess: () => utils.wa.listConversations.invalidate(),
   });
 
-  const updateConv = trpc.wa.updateConversation.useMutation({
-    onSuccess: () => { refetchConvs(); setNotesDialog(false); toast.success("Atualizado!"); },
+  const markReadMut = trpc.wa.markAsRead.useMutation({
+    onSuccess: () => utils.wa.listConversations.invalidate(),
+  });
+
+  const sendMsgMut = trpc.wa.sendMessage.useMutation({
+    onSuccess: () => {
+      setMessageInput("");
+      utils.wa.listMessages.invalidate({ conversationId: selectedConvId! });
+      utils.wa.listConversations.invalidate();
+    },
     onError: (e) => toast.error(e.message),
   });
 
   // ── Efeitos ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (instances.length > 0 && !selectedInstanceId) {
-      setSelectedInstanceId(instances[0].id);
-    }
-  }, [instances, selectedInstanceId]);
-
-  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
-    if (selectedConvId) {
-      markRead.mutate({ conversationId: selectedConvId });
+    if (selectedConvId && selectedConv?.unreadCount > 0) {
+      markReadMut.mutate({ conversationId: selectedConvId });
     }
   }, [selectedConvId]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────────
+  // ── Contagem de não lidas por instância ───────────────────────────────────────
 
-  function handleSend() {
-    if (!messageText.trim() || !selectedConvId) return;
-    sendMsg.mutate({ conversationId: selectedConvId, content: messageText.trim() });
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  const unreadByInstance = useMemo(() => {
+    const map: Record<number, number> = { 0: 0 };
+    for (const c of conversations) {
+      map[0] = (map[0] ?? 0) + (c.unreadCount ?? 0);
+      map[c.instanceId] = (map[c.instanceId] ?? 0) + (c.unreadCount ?? 0);
     }
-  }
+    return map;
+  }, [conversations]);
 
-  function handleQuickReply(content: string) {
-    setMessageText(content);
-    setShowQuickReplies(false);
-  }
-
-  function openNotes() {
-    setNotesText(selectedConv?.notes ?? "");
-    setNotesDialog(true);
-  }
+  const totalStatusCount = Object.values(counts).reduce((a, b) => a + b.count, 0);
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <PdvLayout>
-      <div className="h-[calc(100vh-0px)] flex flex-col bg-gray-950">
+      <div className="flex h-[calc(100vh-56px)] overflow-hidden" style={{ background: "#0d0d0d" }}>
 
-        {/* ── Barra de instâncias ─────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 border-b border-gray-800 overflow-x-auto shrink-0">
-          {instances.map((inst: any) => (
+        {/* ═══════════════════════════════════════════════════════════════════════
+            PAINEL ESQUERDO — Lista de conversas
+        ═══════════════════════════════════════════════════════════════════════ */}
+        <div className="flex flex-col w-80 min-w-[260px] border-r overflow-hidden" style={{ background: "#111", borderColor: "#1e1e1e" }}>
+
+          {/* Barra de instâncias */}
+          <div className="flex items-center gap-1.5 px-3 py-2.5 border-b overflow-x-auto" style={{ borderColor: "#1a1a1a" }}>
+            {/* Chip "Todos" */}
             <button
-              key={inst.id}
-              onClick={() => { setSelectedInstanceId(inst.id); setSelectedConvId(null); }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
-                activeInstanceId === inst.id
-                  ? "bg-green-700 text-white"
-                  : "text-gray-400 hover:text-white hover:bg-gray-800"
-              }`}
+              onClick={() => setSelectedInstanceId(0)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold whitespace-nowrap transition-all flex-shrink-0"
+              style={selectedInstanceId === 0
+                ? { borderColor: "#555", background: "#1a1a1a", color: "#fff" }
+                : { borderColor: "#2a2a2a", color: "#555" }
+              }
             >
-              {inst.status === "connected"
-                ? <Wifi className="w-3.5 h-3.5 text-green-400" />
-                : <WifiOff className="w-3.5 h-3.5 text-gray-500" />}
-              {inst.name}
-              {inst.status === "connected" && (
-                <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-              )}
-            </button>
-          ))}
-
-          {/* Métricas rápidas */}
-          {metrics && (
-            <div className="ml-auto flex items-center gap-3 text-xs text-gray-500 shrink-0">
-              <span className="flex items-center gap-1">
-                <MessageCircle className="w-3.5 h-3.5" />
-                {metrics.openConversations} abertas
-              </span>
-              {metrics.totalUnread > 0 && (
-                <span className="flex items-center gap-1 text-green-400">
-                  <span className="w-2 h-2 bg-green-400 rounded-full" />
-                  {metrics.totalUnread} não lidas
+              Todos
+              {(unreadByInstance[0] ?? 0) > 0 && (
+                <span className="rounded-full px-1.5 text-[9px] font-black" style={{ background: "#555", color: "#000" }}>
+                  {unreadByInstance[0]}
                 </span>
               )}
-              <span className="flex items-center gap-1">
-                <Bot className="w-3.5 h-3.5" />
-                {metrics.aiActiveConversations} com IA
-              </span>
-            </div>
-          )}
+            </button>
 
-          {isAdmin && (
-            <Link href="/pdv/whatsapp/config">
-              <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white shrink-0 ml-1">
-                <Settings className="w-4 h-4" />
-              </Button>
-            </Link>
-          )}
-        </div>
-
-        {/* ── Layout principal ────────────────────────────────────────────────── */}
-        <div className="flex flex-1 min-h-0">
-
-          {/* ── Lista de conversas ──────────────────────────────────────────── */}
-          <div className={`flex flex-col bg-gray-900 border-r border-gray-800 ${selectedConvId ? "hidden md:flex w-80 lg:w-96" : "flex w-full md:w-80 lg:w-96"}`}>
-
-            {/* Busca */}
-            <div className="p-3 border-b border-gray-800">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <Input
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Buscar conversa..."
-                  className="pl-9 bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 h-9 text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Filtros */}
-            <div className="flex gap-1 px-3 py-2 border-b border-gray-800">
-              {(["open", "resolved", "archived"] as const).map(f => (
+            {/* Chips por instância */}
+            {(instances as any[]).map((inst, idx) => {
+              const color = getInstColor(idx);
+              const unread = unreadByInstance[inst.id] ?? 0;
+              const isSelected = selectedInstanceId === inst.id;
+              return (
                 <button
-                  key={f}
-                  onClick={() => setConvFilter(f)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    convFilter === f ? "bg-green-700 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800"
-                  }`}
+                  key={inst.id}
+                  onClick={() => setSelectedInstanceId(inst.id)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold whitespace-nowrap transition-all flex-shrink-0"
+                  style={{
+                    color: isSelected ? color : "#555",
+                    borderColor: isSelected ? color : "#2a2a2a",
+                    background: isSelected ? `${color}14` : "transparent",
+                  }}
                 >
-                  {f === "open" ? "Abertas" : f === "resolved" ? "Resolvidas" : "Arquivadas"}
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: inst.status === "connected" ? color : "#3a3a3a" }}
+                  />
+                  {inst.name}
+                  {unread > 0 && (
+                    <span className="rounded-full px-1.5 text-[9px] font-black" style={{ background: color, color: "#000" }}>
+                      {unread}
+                    </span>
+                  )}
                 </button>
-              ))}
-            </div>
+              );
+            })}
 
-            {/* Lista */}
-            <div className="flex-1 overflow-y-auto">
-              {conversations.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3 p-8">
-                  <MessageCircle className="w-12 h-12 opacity-30" />
-                  <p className="text-sm text-center">
-                    {activeInstanceId
-                      ? "Nenhuma conversa encontrada.\nAs conversas aparecerão aqui quando chegarem mensagens."
-                      : "Selecione uma instância acima para ver as conversas."}
-                  </p>
-                </div>
-              ) : (
-                conversations.map((conv: any) => (
-                  <button
-                    key={conv.id}
-                    onClick={() => setSelectedConvId(conv.id)}
-                    className={`w-full flex items-start gap-3 px-4 py-3.5 border-b border-gray-800/50 transition-all text-left ${
-                      selectedConvId === conv.id
-                        ? "bg-gray-800"
-                        : "hover:bg-gray-800/50"
-                    }`}
-                  >
-                    {/* Avatar */}
-                    <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${getAvatarColor(conv.contactName)}`}>
-                      {getInitials(conv.contactName)}
-                    </div>
+            {instances.length === 0 && (
+              <span className="text-[11px] italic" style={{ color: "#444" }}>Nenhum número configurado</span>
+            )}
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-white text-sm font-semibold truncate">
-                          {conv.contactName ?? conv.contactPhone ?? conv.remoteJid}
-                        </span>
-                        <span className="text-gray-500 text-xs shrink-0">
-                          {formatTime(conv.lastMessageAt)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <span className="text-gray-400 text-xs truncate">
-                          {conv.lastMessage ?? "Sem mensagens"}
-                        </span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {conv.aiEnabled
-                            ? <Bot className="w-3.5 h-3.5 text-green-500" />
-                            : <BotOff className="w-3.5 h-3.5 text-orange-400" />}
-                          {conv.unreadCount > 0 && (
-                            <span className="bg-green-600 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                              {conv.unreadCount > 99 ? "99+" : conv.unreadCount}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                ))
-              )}
+            {isAdmin && (
+              <Link href="/pdv/whatsapp/config" className="ml-auto flex-shrink-0">
+                <button className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors" style={{ color: "#555" }}>
+                  <Settings size={14} />
+                </button>
+              </Link>
+            )}
+          </div>
+
+          {/* Busca */}
+          <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: "#1a1a1a" }}>
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "#444" }} />
+              <Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar conversa..."
+                className="pl-8 h-8 text-xs border focus-visible:ring-0"
+                style={{ background: "#1a1a1a", borderColor: "#2a2a2a", color: "#ccc" }}
+              />
             </div>
           </div>
 
-          {/* ── Área de chat ────────────────────────────────────────────────── */}
-          {selectedConvId && selectedConv ? (
-            <div className="flex-1 flex flex-col min-w-0">
-
-              {/* Header da conversa */}
-              <div className="flex items-center gap-3 px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
-                {/* Botão voltar (mobile) */}
+          {/* Filtros de status */}
+          <div className="flex items-center gap-1 px-3 py-2 border-b overflow-x-auto flex-shrink-0" style={{ borderColor: "#1a1a1a" }}>
+            <button
+              onClick={() => setSelectedStatus("")}
+              className="px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap transition-all flex-shrink-0"
+              style={selectedStatus === ""
+                ? { background: "#1e1e1e", color: "#fff", borderColor: "#333" }
+                : { color: "#555", borderColor: "#2a2a2a" }
+              }
+            >
+              Todas {totalStatusCount > 0 ? `(${totalStatusCount})` : ""}
+            </button>
+            {(Object.keys(STATUS_CONFIG) as ConvStatus[]).map(s => {
+              const cfg = STATUS_CONFIG[s];
+              const cnt = counts[s]?.count ?? 0;
+              return (
                 <button
-                  onClick={() => setSelectedConvId(null)}
-                  className="md:hidden text-gray-400 hover:text-white p-1 -ml-1"
+                  key={s}
+                  onClick={() => setSelectedStatus(selectedStatus === s ? "" : s)}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap transition-all flex-shrink-0"
+                  style={selectedStatus === s
+                    ? { color: cfg.color, background: cfg.bg, borderColor: cfg.border }
+                    : { color: "#555", borderColor: "#2a2a2a" }
+                  }
                 >
-                  <ChevronDown className="w-5 h-5 rotate-90" />
+                  {cfg.label}{cnt > 0 ? ` (${cnt})` : ""}
                 </button>
+              );
+            })}
+          </div>
 
-                {/* Avatar */}
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${getAvatarColor(selectedConv.contactName)}`}>
+          {/* Filtros adicionais */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 border-b flex-shrink-0" style={{ borderColor: "#1a1a1a" }}>
+            <button
+              onClick={() => setFilterAi(filterAi === "on" ? "" : "on")}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all"
+              style={filterAi === "on"
+                ? { color: "#25D366", borderColor: "#25D366", background: "#25D36614" }
+                : { color: "#555", borderColor: "#2a2a2a" }
+              }
+            >
+              <Bot size={9} /> IA ativa
+            </button>
+            <button
+              onClick={() => setFilterAi(filterAi === "off" ? "" : "off")}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all"
+              style={filterAi === "off"
+                ? { color: "#f87171", borderColor: "#f87171", background: "#f8717114" }
+                : { color: "#555", borderColor: "#2a2a2a" }
+              }
+            >
+              <BotOff size={9} /> Humano
+            </button>
+            <button
+              onClick={() => setFilterUnread(!filterUnread)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all"
+              style={filterUnread
+                ? { color: "#fbbf24", borderColor: "#fbbf24", background: "#fbbf2414" }
+                : { color: "#555", borderColor: "#2a2a2a" }
+              }
+            >
+              <AlertCircle size={9} /> Não lidas
+            </button>
+          </div>
+
+          {/* Lista de conversas */}
+          <div className="flex-1 overflow-y-auto">
+            {convQuery.isLoading && (
+              <div className="flex items-center justify-center h-16 text-[11px]" style={{ color: "#444" }}>Carregando...</div>
+            )}
+            {!convQuery.isLoading && conversations.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-32 gap-2" style={{ color: "#444" }}>
+                <MessageCircle size={22} />
+                <span className="text-xs">Nenhuma conversa encontrada</span>
+              </div>
+            )}
+            {conversations.map((conv: any) => {
+              const instIdx = (instances as any[]).findIndex(i => i.id === conv.instanceId);
+              const instColor = getInstColor(instIdx >= 0 ? instIdx : 0);
+              const isSelected = selectedConvId === conv.id;
+
+              return (
+                <div
+                  key={conv.id}
+                  onClick={() => setSelectedConvId(conv.id)}
+                  className="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer border-b transition-colors"
+                  style={{
+                    borderColor: "#161616",
+                    background: isSelected ? "#1a1a1a" : undefined,
+                  }}
+                  onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = "#161616"; }}
+                  onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = ""; }}
+                >
+                  {/* Avatar com bolinha da instância */}
+                  <div className="relative flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold" style={{ background: "#2a2a2a", color: "#888" }}>
+                      {getInitials(conv.contactName)}
+                    </div>
+                    <div
+                      className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center text-[8px] font-black"
+                      style={{ background: instColor, color: "#000", borderColor: "#111" }}
+                    >
+                      {instIdx + 1}
+                    </div>
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <span className="text-[13px] font-semibold truncate" style={{ color: "#e0e0e0" }}>
+                        {conv.contactName || conv.contactPhone || "Desconhecido"}
+                      </span>
+                      <span className="text-[10px] flex-shrink-0" style={{ color: "#444" }}>{formatTime(conv.lastMessageAt)}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="text-[11px] truncate" style={{ color: conv.aiEnabled ? "#25D36699" : "#555" }}>
+                        {conv.aiEnabled ? "🤖 " : ""}{conv.lastMessage || "Sem mensagens"}
+                      </span>
+                      {(conv.unreadCount ?? 0) > 0 && (
+                        <span className="w-4 h-4 rounded-full text-black text-[10px] font-black flex items-center justify-center flex-shrink-0" style={{ background: "#25D366" }}>
+                          {conv.unreadCount > 9 ? "9+" : conv.unreadCount}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Status badge */}
+                    <StatusBadge status={conv.status as ConvStatus} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════════════
+            ÁREA CENTRAL — Chat
+        ═══════════════════════════════════════════════════════════════════════ */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {!selectedConv ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3" style={{ color: "#333" }}>
+              <MessageCircle size={48} />
+              <p className="text-sm">Selecione uma conversa para começar</p>
+            </div>
+          ) : (
+            <>
+              {/* Header do chat */}
+              <div className="flex items-center gap-3 px-4 py-2.5 border-b flex-shrink-0" style={{ background: "#111", borderColor: "#1e1e1e" }}>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0" style={{ background: "#2a2a2a", color: "#888" }}>
                   {getInitials(selectedConv.contactName)}
                 </div>
 
-                {/* Nome e status */}
                 <div className="flex-1 min-w-0">
-                  <div className="text-white font-semibold text-sm truncate">
-                    {selectedConv.contactName ?? selectedConv.contactPhone ?? selectedConv.remoteJid}
+                  <div className="text-sm font-bold text-white truncate">
+                    {selectedConv.contactName || selectedConv.contactPhone || "Desconhecido"}
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    {selectedConv.contactPhone && (
-                      <span>{selectedConv.contactPhone}</span>
-                    )}
-                    <span className={`flex items-center gap-1 ${selectedConv.aiEnabled ? "text-green-400" : "text-orange-400"}`}>
-                      {selectedConv.aiEnabled ? <Bot className="w-3 h-3" /> : <BotOff className="w-3 h-3" />}
-                      {selectedConv.aiEnabled ? "IA ativa" : `IA pausada por ${selectedConv.aiDisabledBy ?? "atendente"}`}
-                    </span>
-                  </div>
+                  <div className="text-[11px]" style={{ color: "#555" }}>{selectedConv.contactPhone}</div>
                 </div>
 
-                {/* Ações */}
-                <div className="flex items-center gap-1 shrink-0">
-                  {/* Toggle IA */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleAi.mutate({ conversationId: selectedConvId, enabled: !selectedConv.aiEnabled })}
-                    disabled={toggleAi.isPending}
-                    className={`gap-1.5 text-xs h-8 px-3 ${
-                      selectedConv.aiEnabled
-                        ? "text-green-400 hover:text-green-300 hover:bg-green-950/30"
-                        : "text-orange-400 hover:text-orange-300 hover:bg-orange-950/30"
-                    }`}
-                    title={selectedConv.aiEnabled ? "Pausar IA e assumir atendimento" : "Reativar IA"}
-                  >
-                    {selectedConv.aiEnabled ? <BotOff className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                    <span className="hidden sm:inline">
-                      {selectedConv.aiEnabled ? "Pausar IA" : "Ativar IA"}
+                {/* Tag da instância */}
+                {(() => {
+                  const instIdx = (instances as any[]).findIndex(i => i.id === selectedConv.instanceId);
+                  const color = getInstColor(instIdx >= 0 ? instIdx : 0);
+                  const inst = (instances as any[])[instIdx];
+                  return inst ? (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold flex-shrink-0" style={{ color, background: `${color}14` }}>
+                      {inst.name}
                     </span>
-                  </Button>
+                  ) : null;
+                })()}
 
-                  {/* Menu de opções */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white h-8 w-8">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="bg-gray-800 border-gray-700 text-white">
-                      <DropdownMenuItem
-                        onClick={openNotes}
-                        className="hover:bg-gray-700 cursor-pointer gap-2"
-                      >
-                        <StickyNote className="w-4 h-4" /> Anotações
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => updateConv.mutate({ id: selectedConvId, status: "resolved" })}
-                        className="hover:bg-gray-700 cursor-pointer gap-2"
-                      >
-                        <CheckCircle2 className="w-4 h-4" /> Marcar como resolvida
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => updateConv.mutate({ id: selectedConvId, status: "archived" })}
-                        className="hover:bg-gray-700 cursor-pointer gap-2"
-                      >
-                        <Archive className="w-4 h-4" /> Arquivar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                {/* Status dropdown */}
+                <StatusDropdown
+                  current={selectedConv.status as ConvStatus}
+                  onChange={s => updateConvMut.mutate({ id: selectedConv.id, status: s })}
+                />
+
+                {/* Toggle IA */}
+                <button
+                  onClick={() => toggleAiMut.mutate({ conversationId: selectedConv.id, enabled: !selectedConv.aiEnabled })}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all flex-shrink-0"
+                  style={selectedConv.aiEnabled
+                    ? { color: "#25D366", borderColor: "#25D366", background: "#25D36614" }
+                    : { color: "#555", borderColor: "#2a2a2a" }
+                  }
+                >
+                  {selectedConv.aiEnabled ? <Bot size={13} /> : <BotOff size={13} />}
+                  {selectedConv.aiEnabled ? "IA Ativa" : "IA Off"}
+                </button>
               </div>
 
-              {/* Aviso IA desativada */}
-              {!selectedConv.aiEnabled && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-orange-950/30 border-b border-orange-900/30 text-orange-300 text-xs shrink-0">
-                  <BotOff className="w-4 h-4 shrink-0" />
-                  <span>
-                    IA pausada por <strong>{selectedConv.aiDisabledBy ?? "atendente"}</strong>. Você está respondendo manualmente.
-                    <button
-                      onClick={() => toggleAi.mutate({ conversationId: selectedConvId, enabled: true })}
-                      className="ml-2 underline hover:text-orange-200"
-                    >
-                      Reativar IA
-                    </button>
-                  </span>
-                </div>
-              )}
-
               {/* Mensagens */}
-              <div
-                className="flex-1 overflow-y-auto p-4 space-y-2"
-                style={{
-                  backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0)",
-                  backgroundSize: "24px 24px",
-                }}
-              >
-                {messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-600 gap-2">
-                    <MessageCircle className="w-10 h-10 opacity-30" />
-                    <p className="text-sm">Nenhuma mensagem ainda</p>
-                  </div>
-                ) : (
-                  messages.map((msg: any) => {
-                    const isFromMe = msg.fromMe;
-                    const isAi = msg.senderType === "ai";
-                    return (
-                      <div
-                        key={msg.id}
-                        className={`flex ${isFromMe ? "justify-end" : "justify-start"}`}
-                      >
-                        <div
-                          className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm ${
-                            isFromMe
-                              ? isAi
-                                ? "bg-green-800 text-white rounded-br-sm"
-                                : "bg-green-700 text-white rounded-br-sm"
-                              : "bg-gray-700 text-white rounded-bl-sm"
-                          }`}
-                        >
-                          {/* Badge IA */}
-                          {isAi && (
-                            <div className="flex items-center gap-1 mb-1">
-                              <Bot className="w-3 h-3 text-green-300" />
-                              <span className="text-green-300 text-xs font-medium">IA</span>
-                            </div>
-                          )}
-                          {/* Conteúdo */}
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                            {msg.content}
-                          </p>
-                          {/* Rodapé */}
-                          <div className={`flex items-center gap-1 mt-1 ${isFromMe ? "justify-end" : "justify-start"}`}>
-                            <span className="text-xs opacity-60">{formatMsgTime(msg.timestamp)}</span>
-                            {isFromMe && STATUS_ICONS[msg.status]}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+                {messagesQuery.isLoading && (
+                  <div className="flex items-center justify-center h-16 text-xs" style={{ color: "#444" }}>Carregando mensagens...</div>
                 )}
+                {messages.length === 0 && !messagesQuery.isLoading && (
+                  <div className="flex items-center justify-center h-16 text-xs" style={{ color: "#444" }}>Nenhuma mensagem ainda</div>
+                )}
+                {messages.map((msg: any) => (
+                  <div key={msg.id} className={`flex ${msg.fromMe ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className="max-w-[65%] px-3 py-2 rounded-xl text-xs leading-relaxed"
+                      style={msg.fromMe
+                        ? msg.senderType === "ai"
+                          ? { background: "#0f2a1a", border: "1px solid #25D36633", color: "#d0d0d0", borderRadius: "12px 12px 2px 12px" }
+                          : { background: "#1d3a2a", color: "#d0d0d0", borderRadius: "12px 12px 2px 12px" }
+                        : { background: "#1a1a1a", color: "#d0d0d0", borderRadius: "12px 12px 12px 2px" }
+                      }
+                    >
+                      {msg.fromMe && msg.senderType === "ai" && (
+                        <div className="flex items-center gap-1 text-[10px] mb-1" style={{ color: "#25D36699" }}>
+                          <Bot size={9} /> Respondido pela IA
+                        </div>
+                      )}
+                      {msg.content}
+                      <div className="text-[10px] mt-1 text-right" style={{ color: "#555" }}>
+                        {new Date(msg.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
                 <div ref={messagesEndRef} />
               </div>
 
               {/* Input de mensagem */}
-              <div className="px-4 py-3 bg-gray-900 border-t border-gray-800 shrink-0">
-                {/* Respostas rápidas */}
-                {showQuickReplies && quickReplies.length > 0 && (
-                  <div className="mb-3 bg-gray-800 rounded-xl border border-gray-700 max-h-48 overflow-y-auto">
-                    <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
-                      <span className="text-xs text-gray-400 font-medium">Respostas rápidas</span>
-                      <button onClick={() => setShowQuickReplies(false)} className="text-gray-500 hover:text-white">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {quickReplies.map((qr: any) => (
-                      <button
-                        key={qr.id}
-                        onClick={() => handleQuickReply(qr.content)}
-                        className="w-full text-left px-3 py-2.5 hover:bg-gray-700 transition-colors border-b border-gray-700/50 last:border-0"
-                      >
-                        <div className="flex items-center gap-2">
-                          {qr.shortcut && (
-                            <span className="text-green-400 text-xs font-mono bg-green-950/30 px-1.5 py-0.5 rounded">
-                              {qr.shortcut}
-                            </span>
-                          )}
-                          <span className="text-white text-sm font-medium">{qr.title}</span>
-                        </div>
-                        <p className="text-gray-400 text-xs mt-0.5 truncate">{qr.content}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex items-end gap-2">
-                  {/* Botão respostas rápidas */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowQuickReplies(v => !v)}
-                    className={`shrink-0 h-10 w-10 ${showQuickReplies ? "text-green-400" : "text-gray-400 hover:text-white"}`}
-                    title="Respostas rápidas"
-                  >
-                    <Zap className="w-5 h-5" />
-                  </Button>
-
-                  {/* Textarea */}
-                  <Textarea
-                    value={messageText}
-                    onChange={e => setMessageText(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Digite uma mensagem... (Enter para enviar)"
-                    className="flex-1 bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 resize-none min-h-[42px] max-h-32 text-sm rounded-xl"
-                    rows={1}
-                  />
-
-                  {/* Botão enviar */}
-                  <Button
-                    onClick={handleSend}
-                    disabled={!messageText.trim() || sendMsg.isPending}
-                    className="shrink-0 h-10 w-10 bg-green-700 hover:bg-green-600 rounded-xl p-0"
-                    title="Enviar mensagem"
-                  >
-                    {sendMsg.isPending
-                      ? <RefreshCw className="w-4 h-4 animate-spin" />
-                      : <Send className="w-4 h-4" />}
-                  </Button>
-                </div>
+              <div className="flex items-center gap-2 px-3 py-2.5 border-t flex-shrink-0" style={{ background: "#111", borderColor: "#1e1e1e" }}>
+                <button className="w-8 h-8 rounded-lg border flex items-center justify-center transition-colors flex-shrink-0" style={{ background: "#1a1a1a", borderColor: "#2a2a2a", color: "#555" }}>
+                  <Zap size={14} />
+                </button>
+                <button className="w-8 h-8 rounded-lg border flex items-center justify-center transition-colors flex-shrink-0" style={{ background: "#1a1a1a", borderColor: "#2a2a2a", color: "#555" }}>
+                  <Paperclip size={14} />
+                </button>
+                <Input
+                  value={messageInput}
+                  onChange={e => setMessageInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (messageInput.trim() && selectedConvId) sendMsgMut.mutate({ conversationId: selectedConvId, content: messageInput.trim() }); } }}
+                  placeholder={selectedConv.aiEnabled ? "IA está respondendo — ou escreva para assumir..." : "Digite uma mensagem..."}
+                  className="flex-1 h-9 text-xs border focus-visible:ring-0"
+                  style={{ background: "#1a1a1a", borderColor: "#2a2a2a", color: "#ccc" }}
+                />
+                <Button
+                  onClick={() => { if (messageInput.trim() && selectedConvId) sendMsgMut.mutate({ conversationId: selectedConvId, content: messageInput.trim() }); }}
+                  disabled={!messageInput.trim() || sendMsgMut.isPending}
+                  size="sm"
+                  className="w-9 h-9 p-0 rounded-full flex-shrink-0"
+                  style={{ background: "#25D366" }}
+                >
+                  <Send size={14} className="text-black" />
+                </Button>
               </div>
-            </div>
-          ) : (
-            /* Tela vazia quando nenhuma conversa está selecionada */
-            <div className="hidden md:flex flex-1 flex-col items-center justify-center text-gray-600 gap-4">
-              <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center">
-                <MessageCircle className="w-10 h-10 opacity-40" />
-              </div>
-              <div className="text-center">
-                <p className="text-gray-400 font-medium">WhatsApp IA — Jumera Sport</p>
-                <p className="text-sm mt-1">Selecione uma conversa para começar o atendimento</p>
-              </div>
-              {instances.every((i: any) => i.status !== "connected") && (
-                <div className="bg-gray-800/50 rounded-xl p-4 max-w-sm text-center">
-                  <WifiOff className="w-6 h-6 text-orange-400 mx-auto mb-2" />
-                  <p className="text-orange-300 text-sm font-medium">Nenhuma instância conectada</p>
-                  <p className="text-gray-500 text-xs mt-1">
-                    Configure as credenciais do evocloud.pro nas configurações para conectar os números.
-                  </p>
-                  {isAdmin && (
-                    <Link href="/pdv/whatsapp/config">
-                      <Button variant="outline" size="sm" className="mt-3 text-xs border-gray-600">
-                        <Settings className="w-3.5 h-3.5 mr-1.5" /> Configurar
-                      </Button>
-                    </Link>
-                  )}
-                </div>
-              )}
-            </div>
+            </>
           )}
         </div>
-      </div>
 
-      {/* Dialog de anotações */}
-      <Dialog open={notesDialog} onOpenChange={setNotesDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <StickyNote className="w-5 h-5" />
-              Anotações — {selectedConv?.contactName ?? selectedConv?.contactPhone}
-            </DialogTitle>
-          </DialogHeader>
-          <Textarea
-            value={notesText}
-            onChange={e => setNotesText(e.target.value)}
-            placeholder="Adicione notas internas sobre este contato (não são enviadas ao cliente)..."
-            className="bg-gray-800 border-gray-700 text-white min-h-[120px]"
-          />
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setNotesDialog(false)}>Cancelar</Button>
-            <Button
-              onClick={() => updateConv.mutate({ id: selectedConvId!, notes: notesText })}
-              disabled={updateConv.isPending}
-              className="bg-green-700 hover:bg-green-600"
-            >
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        {/* ═══════════════════════════════════════════════════════════════════════
+            PAINEL DIREITO — Detalhes
+        ═══════════════════════════════════════════════════════════════════════ */}
+        {selectedConv && (
+          <div className="w-52 flex-shrink-0 border-l flex flex-col overflow-y-auto p-3 gap-4" style={{ background: "#111", borderColor: "#1e1e1e" }}>
+
+            {/* Contato */}
+            <div>
+              <h4 className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#444" }}>Contato</h4>
+              <div className="space-y-1.5 text-[11px]">
+                {[
+                  ["Nome", selectedConv.contactName || "—"],
+                  ["Número", selectedConv.contactPhone || "—"],
+                  ["Via", (instances as any[]).find(i => i.id === selectedConv.instanceId)?.name || "—"],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-2">
+                    <span style={{ color: "#555" }}>{label}</span>
+                    <span className="font-semibold truncate max-w-[110px]" style={{ color: "#ccc" }}>{value}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between items-center gap-2">
+                  <span style={{ color: "#555" }}>Status</span>
+                  <StatusDropdown
+                    current={selectedConv.status as ConvStatus}
+                    onChange={s => updateConvMut.mutate({ id: selectedConv.id, status: s })}
+                  />
+                </div>
+                <div className="flex justify-between items-center">
+                  <span style={{ color: "#555" }}>IA</span>
+                  <span className="text-[10px] font-bold" style={{ color: selectedConv.aiEnabled ? "#25D366" : "#555" }}>
+                    {selectedConv.aiEnabled ? "Ativa" : "Desativada"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Anotações */}
+            <div>
+              <h4 className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#444" }}>Anotação interna</h4>
+              <textarea
+                defaultValue={selectedConv.notes ?? ""}
+                onBlur={e => updateConvMut.mutate({ id: selectedConv.id, notes: e.target.value })}
+                placeholder="Adicionar anotação..."
+                className="w-full rounded-lg p-2 text-[11px] resize-none h-20 focus:outline-none"
+                style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888" }}
+              />
+            </div>
+
+            {/* Ações rápidas */}
+            <div>
+              <h4 className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#444" }}>Ações</h4>
+              <div className="space-y-1.5">
+                {[
+                  { label: '📋 Criar pedido no PDV', onClick: () => toast('Em breve: Integração com PDV') },
+                  { label: '🔗 Enviar catálogo', onClick: () => toast('Em breve: Link do catálogo') },
+                  { label: '👥 Enviar link grupo', onClick: () => toast('Em breve: Link do grupo') },
+                ].map(({ label, onClick }) => (
+                  <button
+                    key={label}
+                    onClick={onClick}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] border transition-all"
+                    style={{ color: "#666", borderColor: "#2a2a2a" }}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => updateConvMut.mutate({ id: selectedConv.id, status: "spam" })}
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] border transition-all"
+                  style={{ color: "#f87171", borderColor: "#f8717122" }}
+                >
+                  🚫 Marcar como spam
+                </button>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+      </div>
     </PdvLayout>
   );
 }

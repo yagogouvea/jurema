@@ -865,3 +865,13 @@
 - [x] Remover imports de getLoginUrl e useAuth do Manus do Admin.tsx
 - [x] Confirmar que DashboardLayout e ManusDialog não são usados em nenhuma página
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v113 — Painel WhatsApp multi-número completo
+- [x] Schema: expandir enum status da wa_conversations (novo, em_atendimento, aguardando, proposta_enviada, finalizado, spam)
+- [x] Migration SQL aplicada no banco
+- [x] Backend: countByStatus por instância, listConversations com filtros por instância/status/aiEnabled/unreadOnly/search
+- [x] Frontend: barra de instâncias colorida (Jurema 1/2/3) com contadores de não lidas
+- [x] Frontend: status badge nos cards de conversa com dropdown para mudar manualmente
+- [x] Frontend: filtros por status, IA ativa/off, não lidas
+- [x] Frontend: painel de detalhes com contato, anotações internas, ações rápidas
+- [x] 206/206 testes passando, 0 erros TypeScript

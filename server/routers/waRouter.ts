@@ -101,27 +101,60 @@ export const waRouter = router({
 
   listConversations: protectedProcedure
     .input(z.object({
-      instanceId: z.number(),
-      status: z.enum(["open", "resolved", "archived"]).optional(),
+      instanceId: z.number().optional(), // 0 ou undefined = todos os números
+      status: z.enum(["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam"]).optional(),
+      aiEnabled: z.boolean().optional(),
+      unreadOnly: z.boolean().optional(),
       search: z.string().optional(),
-      limit: z.number().min(1).max(100).default(50),
+      limit: z.number().min(1).max(200).default(100),
       offset: z.number().default(0),
     }))
     .query(async ({ ctx, input }) => {
       await requireWaAccess(ctx);
       const db = await getDb();
       try {
-        let sql = "SELECT * FROM wa_conversations WHERE instanceId=?";
-        const params: any[] = [input.instanceId];
-        if (input.status) { sql += " AND status=?"; params.push(input.status); }
+        let sql = `
+          SELECT c.*, i.name AS instanceName, i.phone AS instancePhone
+          FROM wa_conversations c
+          LEFT JOIN wa_instances i ON i.id = c.instanceId
+          WHERE 1=1
+        `;
+        const params: any[] = [];
+        if (input.instanceId && input.instanceId > 0) {
+          sql += " AND c.instanceId=?";
+          params.push(input.instanceId);
+        }
+        if (input.status) { sql += " AND c.status=?"; params.push(input.status); }
+        if (input.aiEnabled !== undefined) { sql += " AND c.aiEnabled=?"; params.push(input.aiEnabled); }
+        if (input.unreadOnly) { sql += " AND c.unreadCount > 0"; }
         if (input.search) {
-          sql += " AND (contactName LIKE ? OR contactPhone LIKE ?)";
+          sql += " AND (c.contactName LIKE ? OR c.contactPhone LIKE ?)";
           params.push(`%${input.search}%`, `%${input.search}%`);
         }
-        sql += " ORDER BY lastMessageAt DESC LIMIT ? OFFSET ?";
+        sql += " ORDER BY c.lastMessageAt DESC LIMIT ? OFFSET ?";
         params.push(input.limit, input.offset);
         const [rows] = await db.execute(sql, params);
         return rows as any[];
+      } finally { await db.end(); }
+    }),
+
+  // Contagem de conversas por status (para badges nos filtros)
+  countByStatus: protectedProcedure
+    .input(z.object({ instanceId: z.number().optional() }))
+    .query(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const db = await getDb();
+      try {
+        let sql = "SELECT status, COUNT(*) as count, SUM(unreadCount) as unread FROM wa_conversations WHERE 1=1";
+        const params: any[] = [];
+        if (input.instanceId && input.instanceId > 0) { sql += " AND instanceId=?"; params.push(input.instanceId); }
+        sql += " GROUP BY status";
+        const [rows] = await db.execute(sql, params) as any;
+        const result: Record<string, { count: number; unread: number }> = {};
+        for (const row of rows) {
+          result[row.status] = { count: Number(row.count), unread: Number(row.unread ?? 0) };
+        }
+        return result;
       } finally { await db.end(); }
     }),
 
@@ -180,7 +213,7 @@ export const waRouter = router({
   updateConversation: protectedProcedure
     .input(z.object({
       id: z.number(),
-      status: z.enum(["open", "resolved", "archived"]).optional(),
+      status: z.enum(["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam"]).optional(),
       notes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
