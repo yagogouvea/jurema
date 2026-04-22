@@ -1,5 +1,4 @@
 import { useState, useRef } from "react";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { getLoginUrl } from "@/const";
 import {
   LayoutDashboard, Package, ShoppingBag, Image, Settings, LogOut,
   Plus, Edit, Trash2, Eye, EyeOff, Star, Upload, Wand2, X, Menu,
@@ -804,45 +802,8 @@ function SettingsTab() {
 
 // ─── Main Admin Component ─────────────────────────────────────────────────────
 export default function Admin() {
-  const { user, loading, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#1B8C3D] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center">
-        <div className="text-center bg-[#111111] rounded-2xl p-8 border border-[#1E1E1E] max-w-sm w-full mx-4">
-          <img src={LOGO_URL} alt="Jurema Sport" className="h-16 w-16 mx-auto mb-4 rounded-full" />
-          <h1 className="font-['Bebas_Neue'] text-3xl text-white tracking-wider mb-2">PAINEL ADMIN</h1>
-          <p className="text-gray-500 text-sm mb-6">Faça login para acessar o painel administrativo</p>
-          <a href={getLoginUrl()}>
-            <Button className="w-full bg-[#1B8C3D] hover:bg-green-700 text-white font-bold py-3">
-              Fazer Login
-            </Button>
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  if (user?.role !== 'admin') {
-    return (
-      <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-400 text-xl mb-2">Acesso Negado</p>
-          <p className="text-gray-600 text-sm">Você não tem permissão para acessar esta área.</p>
-        </div>
-      </div>
-    );
-  }
 
   const navItems: { key: AdminTab; label: string; icon: any }[] = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -880,7 +841,6 @@ export default function Admin() {
           ))}
         </nav>
         <div className="p-3 border-t border-[#1E1E1E]">
-          <p className="text-gray-600 text-xs px-3 mb-2">{user.name || user.email}</p>
           <a href="/" className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-[#1A1A1A] transition-colors">
             <LogOut size={16} /> Voltar à Loja
           </a>

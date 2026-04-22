@@ -857,3 +857,11 @@
 - [ ] Integração evocloud.pro (pendente credenciais)
 - [ ] Integração OpenAI (pendente credenciais)
 - [ ] Webhook para receber mensagens em tempo real
+
+## v112 — Remover integração Manus OAuth
+- [x] Mapear todos os pontos com login/OAuth do Manus no código
+- [x] Remover redirect automático do main.tsx (redirectToLoginIfUnauthorized)
+- [x] Remover botão "Fazer Login" do Admin.tsx que apontava para portal Manus
+- [x] Remover imports de getLoginUrl e useAuth do Manus do Admin.tsx
+- [x] Confirmar que DashboardLayout e ManusDialog não são usados em nenhuma página
+- [x] 206/206 testes passando, 0 erros TypeScript
