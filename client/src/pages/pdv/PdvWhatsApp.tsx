@@ -13,7 +13,7 @@ import {
 import {
   Search, Send, Bot, BotOff, Zap, Paperclip,
   MessageCircle, Circle, CheckCircle2, Clock, Tag, Ban,
-  ChevronDown, AlertCircle, Settings,
+  ChevronDown, AlertCircle, Settings, Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "wouter";
@@ -157,6 +157,14 @@ export default function PdvWhatsApp() {
 
   const updateConvMut = trpc.wa.updateConversation.useMutation({
     onSuccess: () => utils.wa.listConversations.invalidate(),
+  });
+
+  const unlockAiMut = trpc.wa.unlockAiStatus.useMutation({
+    onSuccess: () => {
+      toast.success("Classificação automática reativada — a IA vai reclassificar o status.");
+      utils.wa.listConversations.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
   });
 
   const markReadMut = trpc.wa.markAsRead.useMutation({
@@ -572,6 +580,21 @@ export default function PdvWhatsApp() {
                     {selectedConv.aiEnabled ? "Ativa" : "Desativada"}
                   </span>
                 </div>
+                {/* Indicador de lock manual de status */}
+                <div className="flex justify-between items-center">
+                  <span style={{ color: "#555" }}>Status por</span>
+                  <span
+                    className="text-[10px] font-bold flex items-center gap-1"
+                    style={{ color: selectedConv.statusSetBy === "human" ? "#fbbf24" : "#25D36699" }}
+                    title={selectedConv.statusSetBy === "human" && selectedConv.statusLockedUntil
+                      ? `Travado até ${new Date(selectedConv.statusLockedUntil).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+                      : "Classificado automaticamente pela IA"}
+                  >
+                    {selectedConv.statusSetBy === "human"
+                      ? <><AlertCircle size={9} /> Manual</>
+                      : <><Bot size={9} /> IA</>}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -605,6 +628,19 @@ export default function PdvWhatsApp() {
                     {label}
                   </button>
                 ))}
+                {/* Botão Reativar IA — só aparece quando status foi travado manualmente */}
+                {selectedConv.statusSetBy === "human" && (
+                  <button
+                    onClick={() => unlockAiMut.mutate({ id: selectedConv.id })}
+                    disabled={unlockAiMut.isPending}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] border font-bold transition-all"
+                    style={{ color: "#25D366", borderColor: "#25D36633", background: "#25D36610" }}
+                    title="Libera o lock manual e deixa a IA classificar o status automaticamente"
+                  >
+                    <Unlock size={11} />
+                    {unlockAiMut.isPending ? "Reativando..." : "Reativar classificação por IA"}
+                  </button>
+                )}
                 <button
                   onClick={() => updateConvMut.mutate({ id: selectedConv.id, status: "spam" })}
                   className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] border transition-all"

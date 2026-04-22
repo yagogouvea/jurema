@@ -898,3 +898,9 @@
 - [x] Frontend: badge de status com ícone Bot (lucide) quando statusSetBy === 'ai'
 - [x] receiveWebhook migrado para publicProcedure (sem auth) e corrigido status inicial 'novo' (era 'open')
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v120 — Botão "Reativar IA" para liberar lock manual de status
+- [x] Backend: endpoint unlockAiStatus que zera statusSetBy='ai' e statusLockedUntil=NULL + reclassifica imediatamente
+- [x] Frontend: botão "Reativar classificação por IA" visível no painel de detalhes quando statusSetBy === 'human'
+- [x] Frontend: badge "Status por: Manual (amarelo) / IA (verde)" com tooltip mostrando horário de expiração do lock
+- [x] 206/206 testes passando, 0 erros TypeScript

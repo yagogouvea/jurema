@@ -237,8 +237,29 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
-  // ── Mensagens ───────────────────────────────────────────────────────────────
+  // Libera o lock manual e devolve o controle de status para a IA
+  unlockAiStatus: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const db = await getDb();
+      try {
+        await db.execute(
+          `UPDATE wa_conversations
+           SET statusSetBy = 'ai', statusLockedUntil = NULL, updatedAt = NOW()
+           WHERE id = ?`,
+          [input.id]
+        );
+        // Reclassificar imediatamente via IA
+        const { applyAiStatus } = await import("./waStatusClassifier");
+        applyAiStatus(db as any, input.id).catch(e =>
+          console.error("[unlockAiStatus] Erro ao reclassificar:", e)
+        );
+        return { success: true };
+      } finally { await db.end(); }
+    }),
 
+  // ── Mensagens ───────────────────────────────────────────────────────────────
   listMessages: protectedProcedure
     .input(z.object({
       conversationId: z.number(),
