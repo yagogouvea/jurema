@@ -875,3 +875,11 @@
 - [x] Frontend: filtros por status, IA ativa/off, não lidas
 - [x] Frontend: painel de detalhes com contato, anotações internas, ações rápidas
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v114 — Base de conhecimento da IA WhatsApp
+- [x] Salvar base de conhecimento no banco (wa_ai_config) via script
+- [x] Personalidade da IA: Ju, atendente virtual da Jumera Sport, humanizada e natural
+- [x] Contexto do negócio: catálogo, tabela de valores, como fazer pedido, trocas, frete, pagamento, endereços, horários
+- [x] 9 respostas rápidas criadas: /catalogo, /valores, /pedido, /troca, /frete, /pix, /horario, /endereco, /obrigada
+- [x] Painel PdvWhatsAppConfig já exibe e permite editar businessContext, catalogLink e respostas rápidas
+- [x] 206/206 testes passando, 0 erros TypeScript
