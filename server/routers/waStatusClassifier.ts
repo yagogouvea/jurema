@@ -172,6 +172,73 @@ export async function applyAiStatus(
 }
 
 /**
+ * Verifica se o horário atual está dentro do período de atendimento.
+ * awayStart = horário em que a loja FECHA (ex: "15:00")
+ * awayEnd   = horário em que a loja ABRE  (ex: "06:00")
+ *
+ * Exemplo: awayStart=15:00, awayEnd=06:00
+ *   - Loja aberta: 06:00 – 15:00
+ *   - Loja fechada: 15:00 – 06:00 (período noturno que cruza meia-noite)
+ */
+export function isWithinBusinessHours(awayStart: string, awayEnd: string): boolean {
+  const now = new Date();
+  const [startH, startM] = awayStart.split(":").map(Number);
+  const [endH, endM] = awayEnd.split(":").map(Number);
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const closeMinutes = startH * 60 + startM; // loja fecha
+  const openMinutes  = endH * 60 + endM;     // loja abre
+
+  if (openMinutes < closeMinutes) {
+    // Caso normal: abre 06:00, fecha 15:00 → aberto se currentMinutes está entre os dois
+    return currentMinutes >= openMinutes && currentMinutes < closeMinutes;
+  } else {
+    // Caso noturno: abre 22:00, fecha 06:00 → aberto se está após abertura OU antes do fechamento
+    return currentMinutes >= openMinutes || currentMinutes < closeMinutes;
+  }
+}
+
+/**
+ * Verifica se deve enviar mensagem de ausência para esta conversa.
+ * Retorna a mensagem de ausência se deve ser enviada, ou null caso contrário.
+ *
+ * Regras:
+ * 1. awayEnabled deve ser true
+ * 2. Deve estar fora do horário de atendimento
+ * 3. A última mensagem enviada (fromMe) não deve ser de ausência (evita reenvio)
+ */
+export async function checkAwayMessage(
+  db: mysql.Connection,
+  conversationId: number,
+  instanceId: number
+): Promise<string | null> {
+  // Buscar config da IA para esta instância
+  const [configRows] = await db.execute<any[]>(
+    `SELECT awayEnabled, awayStart, awayEnd, awayMessage FROM wa_ai_config WHERE instanceId = ?`,
+    [instanceId]
+  );
+  if (!configRows.length) return null;
+  const config = configRows[0];
+  if (!config.awayEnabled || !config.awayStart || !config.awayEnd || !config.awayMessage) return null;
+
+  // Verificar se está fora do horário
+  const isOpen = isWithinBusinessHours(config.awayStart, config.awayEnd);
+  if (isOpen) return null; // Dentro do horário — IA responde normalmente
+
+  // Verificar se a última mensagem enviada já foi a de ausência (evita spam)
+  const [lastMsgRows] = await db.execute<any[]>(
+    `SELECT content FROM wa_messages
+     WHERE conversationId = ? AND fromMe = 1
+     ORDER BY timestamp DESC LIMIT 1`,
+    [conversationId]
+  );
+  if (lastMsgRows.length && lastMsgRows[0].content === config.awayMessage) {
+    return null; // Já enviou a mensagem de ausência recentemente
+  }
+
+  return config.awayMessage as string;
+}
+
+/**
  * Marca o status como definido por humano e bloqueia por 30 minutos.
  */
 export async function lockStatusByHuman(

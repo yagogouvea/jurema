@@ -904,3 +904,12 @@
 - [x] Frontend: botão "Reativar classificação por IA" visível no painel de detalhes quando statusSetBy === 'human'
 - [x] Frontend: badge "Status por: Manual (amarelo) / IA (verde)" com tooltip mostrando horário de expiração do lock
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v121 — Correção aba Horários + anti-conflito mensagem ausência vs IA
+- [x] Aba Horários: campos sempre visíveis (opacidade reduzida quando toggle desativado)
+- [x] Aba Horários: aviso azul de integração com IA quando aiEnabled=true
+- [x] Aba Horários: resumo dinâmico do horário configurado ("A loja estará aberta das X às Y")
+- [x] Backend: função isWithinBusinessHours() com suporte a horários noturnos (ex: 22:00–06:00)
+- [x] Backend: função checkAwayMessage() com anti-spam (não reenvia se última msg já era de ausência)
+- [x] receiveWebhook: mensagem de ausência tem prioridade sobre a IA — sem conflito entre os dois sistemas
+- [x] 206/206 testes passando, 0 erros TypeScript

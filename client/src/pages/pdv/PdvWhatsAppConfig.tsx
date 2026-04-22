@@ -817,18 +817,26 @@ export default function PdvWhatsAppConfig() {
                 <p className="text-gray-400 text-sm mt-0.5">Configure a mensagem de ausência fora do horário comercial</p>
               </div>
 
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
-                <div className="bg-amber-950/20 border border-amber-900/30 rounded-lg p-3 mb-2">
-                  <p className="text-amber-300 text-xs font-medium">Horario configurado na base de conhecimento</p>
-                  <div className="text-amber-400/70 text-xs mt-1 space-y-0.5">
-                    <p>Shopping Stunt: segunda a sexta 06h-15h, sabado 08h-16h, domingo fechado</p>
+              {/* Aviso de integração com IA */}
+              {aiForm.enabled && (
+                <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl p-4 flex gap-3">
+                  <Bot className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-blue-300 text-xs font-medium">Integração com a IA ativa</p>
+                    <p className="text-blue-400/70 text-xs mt-0.5">
+                      Quando a mensagem de ausência estiver ativada, a IA <strong className="text-blue-300">não responderá</strong> fora do horário configurado — apenas a mensagem de ausência será enviada. Não há conflito entre os dois sistemas.
+                    </p>
                   </div>
                 </div>
+              )}
+
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-5">
+                {/* Toggle principal */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-white text-sm font-medium">Ativar mensagem de ausencia automatica</div>
+                    <div className="text-white text-sm font-medium">Ativar mensagem de ausência automática</div>
                     <div className="text-gray-400 text-xs mt-0.5">
-                      Fora do horario configurado abaixo, a IA enviara a mensagem de ausencia
+                      Fora do horário configurado abaixo, será enviada a mensagem de ausência
                     </div>
                   </div>
                   <Switch
@@ -837,40 +845,56 @@ export default function PdvWhatsAppConfig() {
                   />
                 </div>
 
-                {awayForm.awayEnabled && (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <Label className="text-gray-300 text-xs">Início da ausência</Label>
-                        <Input
-                          type="time"
-                          value={awayForm.awayStart}
-                          onChange={e => setAwayForm(f => ({ ...f, awayStart: e.target.value }))}
-                          className="bg-gray-800 border-gray-700 text-white text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-gray-300 text-xs">Fim da ausência</Label>
-                        <Input
-                          type="time"
-                          value={awayForm.awayEnd}
-                          onChange={e => setAwayForm(f => ({ ...f, awayEnd: e.target.value }))}
-                          className="bg-gray-800 border-gray-700 text-white text-sm"
-                        />
-                      </div>
+                <div className={`space-y-4 transition-opacity duration-200 ${awayForm.awayEnabled ? "opacity-100" : "opacity-40 pointer-events-none"}`}>
+                  {/* Horários */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-gray-300 text-xs">Início da ausência (loja fecha)</Label>
+                      <Input
+                        type="time"
+                        value={awayForm.awayStart}
+                        onChange={e => setAwayForm(f => ({ ...f, awayStart: e.target.value }))}
+                        className="bg-gray-800 border-gray-700 text-white text-sm"
+                      />
+                      <p className="text-gray-500 text-xs">Horário em que a loja encerra o atendimento</p>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-gray-300 text-xs">Mensagem de ausencia</Label>
-                      <Textarea
-                        value={awayForm.awayMessage}
-                        onChange={e => setAwayForm(f => ({ ...f, awayMessage: e.target.value }))}
-                        placeholder="Ex: No momento estamos fora do horario de atendimento. Retornaremos em breve. Nosso horario e de segunda a sabado, das 6h as 15h."
-                        className="bg-gray-800 border-gray-700 text-white text-sm min-h-[100px]"
+                      <Label className="text-gray-300 text-xs">Fim da ausência (loja abre)</Label>
+                      <Input
+                        type="time"
+                        value={awayForm.awayEnd}
+                        onChange={e => setAwayForm(f => ({ ...f, awayEnd: e.target.value }))}
+                        className="bg-gray-800 border-gray-700 text-white text-sm"
                       />
-                      <p className="text-gray-500 text-xs">Sem emojis. Resposta direta informando o horario de retorno.</p>
+                      <p className="text-gray-500 text-xs">Horário em que o atendimento é retomado</p>
                     </div>
-                  </>
-                )}
+                  </div>
+
+                  {/* Mensagem de ausência */}
+                  <div className="space-y-1.5">
+                    <Label className="text-gray-300 text-xs">Mensagem de ausência</Label>
+                    <Textarea
+                      value={awayForm.awayMessage}
+                      onChange={e => setAwayForm(f => ({ ...f, awayMessage: e.target.value }))}
+                      placeholder="Ex: No momento estamos fora do horário de atendimento. Retornaremos em breve. Nosso horário é de segunda a sábado, das 6h às 15h."
+                      className="bg-gray-800 border-gray-700 text-white text-sm min-h-[100px]"
+                    />
+                    <p className="text-gray-500 text-xs">Sem emojis. Resposta direta informando o horário de retorno.</p>
+                  </div>
+
+                  {/* Preview do horário atual */}
+                  {awayForm.awayStart && awayForm.awayEnd && (
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <p className="text-gray-400 text-xs">
+                        <span className="text-gray-300 font-medium">Resumo: </span>
+                        A loja estará <span className="text-green-400">aberta</span> das{" "}
+                        <span className="text-white font-mono">{awayForm.awayEnd}</span> às{" "}
+                        <span className="text-white font-mono">{awayForm.awayStart}</span>.
+                        Fora desse período, a mensagem de ausência será enviada automaticamente.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <Button

@@ -360,9 +360,28 @@ export const waRouter = router({
           [conversationId, input.instanceId, input.messageId, input.fromMe, input.fromMe ? "human" : "customer", input.type, input.content ?? null, input.mediaUrl ?? null, "delivered", msgTimestamp]
         );
 
-        // Classificar status via IA de forma assíncrona (não bloqueia a resposta ao evocloud)
+        // Processar mensagem do cliente de forma assíncrona
         if (!input.fromMe) {
-          const { applyAiStatus } = await import("./waStatusClassifier");
+          const { applyAiStatus, checkAwayMessage } = await import("./waStatusClassifier");
+
+          // 1. Verificar se deve enviar mensagem de ausência (tem prioridade sobre a IA)
+          const awayMsg = await checkAwayMessage(db as any, conversationId, input.instanceId).catch(() => null);
+          if (awayMsg) {
+            // Registrar a mensagem de ausência no banco (fromMe=true, senderType='ai')
+            await db.execute(
+              "INSERT INTO wa_messages (conversationId, instanceId, fromMe, senderType, senderName, type, content, status, timestamp) VALUES (?,?,?,?,?,?,?,?,?)",
+              [conversationId, input.instanceId, true, "ai", "Ju", "text", awayMsg, "delivered", new Date()]
+            );
+            await db.execute(
+              "UPDATE wa_conversations SET lastMessage=?, lastMessageAt=NOW() WHERE id=?",
+              [awayMsg.substring(0, 100), conversationId]
+            );
+            // TODO: Enviar via Evolution API quando evocloud estiver conectado
+            // await evolutionSendMessage({ instanceId: input.instanceId, remoteJid: input.remoteJid, content: awayMsg });
+            console.log(`[webhook] Mensagem de ausência enviada para conversa ${conversationId}`);
+          }
+
+          // 2. Classificar status via IA (independente da mensagem de ausência)
           applyAiStatus(db as any, conversationId).catch(e =>
             console.error("[webhook] Erro ao classificar status via IA:", e)
           );
