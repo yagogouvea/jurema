@@ -52,16 +52,18 @@ function getInitials(name?: string | null) {
 
 // ─── StatusBadge ─────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: ConvStatus }) {
+function StatusBadge({ status, byAi }: { status: ConvStatus; byAi?: boolean }) {
   const cfg = STATUS_CONFIG[status];
   const { Icon } = cfg;
   return (
     <span
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap"
       style={{ color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}
+      title={byAi ? "Status classificado automaticamente pela IA" : "Status definido manualmente"}
     >
       <Icon size={9} />
       {cfg.label}
+      {byAi && <Bot size={8} style={{ opacity: 0.65 }} />}
     </span>
   );
 }
@@ -408,8 +410,8 @@ export default function PdvWhatsApp() {
                       )}
                     </div>
 
-                    {/* Status badge */}
-                    <StatusBadge status={conv.status as ConvStatus} />
+                    {/* Status badge — ícone Bot quando classificado pela IA */}
+                    <StatusBadge status={conv.status as ConvStatus} byAi={conv.statusSetBy === "ai"} />
                   </div>
                 </div>
               );

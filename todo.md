@@ -890,3 +890,11 @@
 - [x] businessContext atualizado: problema com mercadoria, formas de envio, mínimo atacado, formas de pagamento, aviso restrição WhatsApp Business, tabela de tamanhos
 - [x] 6 novas respostas rápidas: /problema, /envio, /tamanhos, /pagamento, /aviso (+ /atacado atualizado)
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v119 — Classificador automático de status via IA
+- [x] Schema: adicionar statusLockedUntil e statusSetBy na wa_conversations
+- [x] Serviço waStatusClassifier.ts com 4 regras de controle (só msgs cliente, máx 20 msgs, respeita manual 30min, GPT-4o mini)
+- [x] Integrar classificador no webhook (receiveWebhook) e no endpoint updateConversation (lockStatusByHuman)
+- [x] Frontend: badge de status com ícone Bot (lucide) quando statusSetBy === 'ai'
+- [x] receiveWebhook migrado para publicProcedure (sem auth) e corrigido status inicial 'novo' (era 'open')
+- [x] 206/206 testes passando, 0 erros TypeScript

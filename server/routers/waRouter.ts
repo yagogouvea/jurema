@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { router, protectedProcedure, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import type { Request } from "express";
@@ -210,6 +210,7 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
+  // Atualiza status (com lock de 30min) e/ou anotações de uma conversa
   updateConversation: protectedProcedure
     .input(z.object({
       id: z.number(),
@@ -220,13 +221,18 @@ export const waRouter = router({
       await requireWaAccess(ctx);
       const db = await getDb();
       try {
-        const sets: string[] = [];
-        const params: any[] = [];
-        if (input.status !== undefined) { sets.push("status=?"); params.push(input.status); }
-        if (input.notes !== undefined) { sets.push("notes=?"); params.push(input.notes); }
-        if (sets.length === 0) return { success: true };
-        params.push(input.id);
-        await db.execute(`UPDATE wa_conversations SET ${sets.join(",")} WHERE id=?`, params);
+        // Se status foi alterado manualmente, usar lockStatusByHuman (bloqueia IA por 30min)
+        if (input.status !== undefined) {
+          const { lockStatusByHuman } = await import("./waStatusClassifier");
+          await lockStatusByHuman(db as any, input.id, input.status);
+        }
+        // Atualizar anotações separadamente (não afeta o lock de status)
+        if (input.notes !== undefined) {
+          await db.execute(
+            "UPDATE wa_conversations SET notes=?, updatedAt=NOW() WHERE id=?",
+            [input.notes, input.id]
+          );
+        }
         return { success: true };
       } finally { await db.end(); }
     }),
@@ -287,7 +293,8 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
-  receiveWebhook: protectedProcedure
+  // Webhook público para receber mensagens do evocloud.pro (sem autenticação)
+  receiveWebhook: publicProcedure
     .input(z.object({
       instanceId: z.number(),
       remoteJid: z.string(),
@@ -300,7 +307,7 @@ export const waRouter = router({
       contactName: z.string().optional(),
       contactPhone: z.string().optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       const db = await getDb();
       try {
         const [convRows] = await db.execute(
@@ -312,9 +319,10 @@ export const waRouter = router({
         let conversationId: number;
 
         if (!convRows[0]) {
+          // Nova conversa — status inicial 'novo', classificado por IA
           const [newConv] = await db.execute(
-            "INSERT INTO wa_conversations (instanceId, remoteJid, contactName, contactPhone, lastMessage, lastMessageAt, unreadCount, aiEnabled, status) VALUES (?,?,?,?,?,?,?,?,?)",
-            [input.instanceId, input.remoteJid, input.contactName ?? null, input.contactPhone ?? null, input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? 0 : 1, true, "open"]
+            "INSERT INTO wa_conversations (instanceId, remoteJid, contactName, contactPhone, lastMessage, lastMessageAt, unreadCount, aiEnabled, status, statusSetBy) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            [input.instanceId, input.remoteJid, input.contactName ?? null, input.contactPhone ?? null, input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? 0 : 1, true, "novo", "ai"]
           ) as any;
           conversationId = newConv.insertId;
         } else {
@@ -331,8 +339,13 @@ export const waRouter = router({
           [conversationId, input.instanceId, input.messageId, input.fromMe, input.fromMe ? "human" : "customer", input.type, input.content ?? null, input.mediaUrl ?? null, "delivered", msgTimestamp]
         );
 
-        // TODO: Se IA ativa e mensagem do cliente, chamar OpenAI
-        // if (!input.fromMe) { await processAiResponse(conversationId, input.content); }
+        // Classificar status via IA de forma assíncrona (não bloqueia a resposta ao evocloud)
+        if (!input.fromMe) {
+          const { applyAiStatus } = await import("./waStatusClassifier");
+          applyAiStatus(db as any, conversationId).catch(e =>
+            console.error("[webhook] Erro ao classificar status via IA:", e)
+          );
+        }
 
         return { success: true, conversationId };
       } finally { await db.end(); }
@@ -467,12 +480,14 @@ export const waRouter = router({
         const cond = input.instanceId ? "WHERE instanceId=?" : "";
         const params = input.instanceId ? [input.instanceId] : [];
         const [[total]] = await db.execute(`SELECT COUNT(*) as cnt FROM wa_conversations ${cond}`, params) as any;
-        const [[open]] = await db.execute(`SELECT COUNT(*) as cnt FROM wa_conversations ${cond ? cond + " AND" : "WHERE"} status='open'`, params) as any;
         const [[aiActive]] = await db.execute(`SELECT COUNT(*) as cnt FROM wa_conversations ${cond ? cond + " AND" : "WHERE"} aiEnabled=true`, params) as any;
         const [[unread]] = await db.execute(`SELECT COALESCE(SUM(unreadCount),0) as total FROM wa_conversations ${cond}`, params) as any;
+        const [[novo]] = await db.execute(`SELECT COUNT(*) as cnt FROM wa_conversations ${cond ? cond + " AND" : "WHERE"} status='novo'`, params) as any;
+        const [[emAtendimento]] = await db.execute(`SELECT COUNT(*) as cnt FROM wa_conversations ${cond ? cond + " AND" : "WHERE"} status='em_atendimento'`, params) as any;
         return {
           totalConversations: total.cnt,
-          openConversations: open.cnt,
+          novoConversations: novo.cnt,
+          emAtendimentoConversations: emAtendimento.cnt,
           aiActiveConversations: aiActive.cnt,
           totalUnread: unread.total,
         };
@@ -522,7 +537,7 @@ REGRAS IMPORTANTES:
     prompt += `\n\nINSTAGRAM: ${config.instagramLink}\n- Mencione o Instagram quando relevante`;
   }
   if (config.escalateKeywords?.length) {
-    prompt += `\n\nESCALAMENTO PARA HUMANO:\n- Se o cliente mencionar: ${config.escalateKeywords.join(", ")}\n- Diga: "Vou chamar um de nossos atendentes para te ajudar melhor. Um momento! 😊"`;
+    prompt += `\n\nESCALAMENTO PARA HUMANO:\n- Se o cliente mencionar: ${config.escalateKeywords.join(", ")}\n- Diga: "Só um momento."`;
   }
 
   return prompt;
