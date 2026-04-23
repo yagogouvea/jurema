@@ -943,3 +943,9 @@
 - [x] Sync automático com aba FLUXO_CAIXA da planilha (fire-and-forget)
 - [x] Suporte a pagamentos mistos: só o valor em DINHEIRO vira suprimento
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v126 — Correção parsing valor suprimento/sangria (formato BR)
+- [x] Bug localizado: linha 130 do PdvDashboard.tsx usava apenas replace(",",".") sem remover pontos de milhar
+- [x] Corrigido: cashValor.replace(/\./g, "").replace(",", ".") — "2.155,68" → 2155.68
+- [x] Backend confirmado correto (recebe z.number() via tRPC, não faz parsing de string)
+- [x] 206/206 testes passando, 0 erros TypeScript

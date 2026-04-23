@@ -127,7 +127,10 @@ export default function PdvDashboard() {
   };
 
   const handleCashFlow = () => {
-    const valor = parseFloat(cashValor.replace(",", "."));
+    // Suporte ao formato brasileiro: "2.155,68" → 2155.68
+    // Remove pontos de milhar, troca vírgula decimal por ponto
+    const valorNormalizado = cashValor.replace(/\./g, "").replace(",", ".");
+    const valor = parseFloat(valorNormalizado);
     if (!cashDesc.trim() || isNaN(valor) || valor <= 0) {
       toast.error("Preencha descrição e valor");
       return;
