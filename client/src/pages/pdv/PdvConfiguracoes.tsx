@@ -367,9 +367,18 @@ function TabSync() {
   const [showPreview, setShowPreview] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ updated: number; skipped: number; errors: number; message: string } | null>(null);
+  const [backfillSuprResult, setBackfillSuprResult] = useState<{ inseridos: number; jaExistiam: number; erros: number; message: string } | null>(null);
 
   const { data: syncStatus, refetch: refetchStatus } = trpc.pdvSync.status.useQuery(undefined, { enabled: isAdmin });
   const { data: syncPreview, isLoading: previewLoading } = trpc.pdvSync.preview.useQuery(undefined, { enabled: isAdmin && showPreview });
+
+  const backfillSuprMutation = trpc.pdvSync.backfillSuprimentosDinheiro.useMutation({
+    onSuccess: (result: any) => {
+      setBackfillSuprResult(result);
+      toast.success(result.message);
+    },
+    onError: (err: any) => { toast.error(`Erro: ${err.message}`); },
+  });
 
   const backfillMutation = trpc.pdvSync.backfillPedidosItens.useMutation({
     onSuccess: (result: any) => {
@@ -573,6 +582,63 @@ function TabSync() {
         </button>
         <p className="text-gray-600 text-xs">
           Execute apenas uma vez. Linhas já preenchidas serão ignoradas automaticamente.
+        </p>
+      </div>
+
+      {/* Backfill suprimentos de dinheiro */}
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-green-950/50 border border-green-900/50 rounded-xl flex items-center justify-center">
+            <Database className="w-4 h-4 text-green-400" />
+          </div>
+          <div>
+            <h3 className="text-white font-bold text-sm">Gerar Suprimentos Retroativos (Dinheiro)</h3>
+            <p className="text-gray-500 text-xs">Cria suprimentos no caixa para pedidos antigos pagos em dinheiro</p>
+          </div>
+        </div>
+
+        <div className="bg-green-950/20 border border-green-900/30 rounded-xl p-3">
+          <p className="text-green-300 text-xs">
+            <strong>O que faz:</strong> Verifica todos os pedidos com pagamento em <strong>DINHEIRO</strong> que ainda não têm suprimento correspondente no fluxo de caixa e os gera automaticamente. Pedidos já processados são ignorados.
+          </p>
+        </div>
+
+        {backfillSuprResult && (
+          <div className="bg-green-950/30 border border-green-900/50 rounded-xl p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle className="w-4 h-4 text-green-400" />
+              <span className="text-green-400 text-sm font-semibold">Concluído</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs mt-2">
+              <div className="text-center">
+                <p className="text-green-400 font-bold text-base">{backfillSuprResult.inseridos}</p>
+                <p className="text-gray-400">Gerados</p>
+              </div>
+              <div className="text-center">
+                <p className="text-gray-300 font-bold text-base">{backfillSuprResult.jaExistiam}</p>
+                <p className="text-gray-400">Já existiam</p>
+              </div>
+              <div className="text-center">
+                <p className="text-red-400 font-bold text-base">{backfillSuprResult.erros}</p>
+                <p className="text-gray-400">Erros</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => { setBackfillSuprResult(null); backfillSuprMutation.mutate(); }}
+          disabled={backfillSuprMutation.isPending}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-800 hover:bg-green-700 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+        >
+          {backfillSuprMutation.isPending ? (
+            <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Processando...</>
+          ) : (
+            <><RefreshCw className="w-4 h-4" /> Gerar Suprimentos Retroativos</>
+          )}
+        </button>
+        <p className="text-gray-600 text-xs">
+          Pedidos já com suprimento gerado não serão duplicados.
         </p>
       </div>
     </div>

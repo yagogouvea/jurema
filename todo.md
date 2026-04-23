@@ -949,3 +949,16 @@
 - [x] Corrigido: cashValor.replace(/\./g, "").replace(",", ".") — "2.155,68" → 2155.68
 - [x] Backend confirmado correto (recebe z.number() via tRPC, não faz parsing de string)
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v127 — Suprimentos retroativos para pedidos em dinheiro
+- [ ] Diagnosticar pedidos com DINHEIRO sem suprimento correspondente
+- [ ] Criar script de backfill retroativo
+- [ ] Executar backfill e verificar resultado
+- [ ] 0 erros TypeScript, testes passando
+
+## v127 — Suprimentos retroativos para pedidos em dinheiro
+- [x] Diagnóstico: 15 pedidos com DINHEIRO sem suprimento no pdv_cash_flow
+- [x] Script de backfill executado diretamente: 15 suprimentos inseridos com data original do pedido
+- [x] pdvSync.ts: endpoint backfillSuprimentosDinheiro (admin only) com detecção de duplicatas
+- [x] PdvConfiguracoes.tsx: seção verde "Gerar Suprimentos Retroativos (Dinheiro)" na aba Sincronização
+- [x] 0 erros TypeScript, 206/206 testes passando

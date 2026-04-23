@@ -669,6 +669,63 @@ export const pdvSyncRouter = router({
     }
   }),
 
+  // Backfill retroativo: gerar suprimentos para pedidos antigos com DINHEIRO sem suprimento
+  backfillSuprimentosDinheiro: publicProcedure.mutation(async ({ ctx }) => {
+    await requirePdvAdmin(ctx);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco de dados indisponível' });
+    try {
+      // Buscar pedidos com DINHEIRO
+      const [pedidosDinheiro] = await db.execute(`
+        SELECT o.pedidoId, o.clienteNome, o.createdAt, SUM(p.valor) as totalDinheiro
+        FROM pdv_orders o
+        JOIN pdv_order_payments p ON p.pedidoId = o.pedidoId
+        WHERE p.formaPagamento = 'DINHEIRO'
+        GROUP BY o.pedidoId, o.clienteNome, o.createdAt
+      `) as any[][];
+      // Suprimentos já existentes de pedidos
+      const [suprsExistentes] = await db.execute(`
+        SELECT descricao FROM pdv_cash_flow
+        WHERE tipo = 'SUPRIMENTO' AND descricao LIKE 'Venda PED-%'
+      `) as any[][];
+      const pedidosComSuprimento = new Set(
+        (suprsExistentes as any[]).map((s: any) => {
+          const match = (s.descricao as string).match(/Venda (PED-\w+)/);
+          return match ? match[1] : null;
+        }).filter(Boolean)
+      );
+      const pedidosSemSuprimento = (pedidosDinheiro as any[]).filter(
+        (p: any) => !pedidosComSuprimento.has(p.pedidoId)
+      );
+      let inseridos = 0;
+      let erros = 0;
+      for (const pedido of pedidosSemSuprimento) {
+        try {
+          const descricao = `Venda ${pedido.pedidoId}${pedido.clienteNome ? ` - ${pedido.clienteNome}` : ''}`;
+          const valor = parseFloat(pedido.totalDinheiro);
+          await db.execute(
+            `INSERT INTO pdv_cash_flow (tipo, descricao, valor, createdAt) VALUES ('SUPRIMENTO', ?, ?, ?)`,
+            [descricao, valor, pedido.createdAt]
+          );
+          inseridos++;
+        } catch {
+          erros++;
+        }
+      }
+      await db.end();
+      return {
+        inseridos,
+        erros,
+        jaExistiam: pedidosComSuprimento.size,
+        message: `${inseridos} suprimentos gerados, ${pedidosComSuprimento.size} já existiam, ${erros} erros`,
+      };
+    } catch (err) {
+      try { await db.end(); } catch {}
+      console.error('[PDV Sync] backfillSuprimentosDinheiro error:', err);
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro no backfill de suprimentos' });
+    }
+  }),
+
   // Status atual do catálogo
   status: publicProcedure.query(async ({ ctx }) => {
     await requirePdvAuth(ctx);
