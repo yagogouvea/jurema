@@ -388,6 +388,23 @@ export const pdvProductsRouter = router({
       return { exists: found.length > 0, count: found.length, tamanhos: found.map(r => r.tamanho) };
     }),
 
+  // Verificar se código COMPLETO (ex: TAIL-BRASIL-AZUL-G) já existe no banco
+  checkExactCode: publicProcedure
+    .input(z.object({ codigo: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      await requirePdvAuth(ctx);
+      const db = await getDb();
+      if (!db) return { exists: false };
+      const cod = input.codigo.trim().toUpperCase();
+      const [rows] = await db.execute(
+        "SELECT id, codigo, time, tamanho FROM pdv_products WHERE codigo = ? AND isActive = 1 LIMIT 1",
+        [cod]
+      );
+      await db.end();
+      const found = rows as any[];
+      return { exists: found.length > 0, produto: found[0] || null };
+    }),
+
   // Atualizar produto (estoque, preço, ativo) e sincronizar planilha
   updateProduct: publicProcedure
     .input(z.object({
@@ -538,6 +555,8 @@ export const pdvProductsRouter = router({
       tamanhos: z.array(z.object({
         tamanho: z.string().min(1),
         estoque: z.number().int().min(0).default(0),
+        // Código completo gerado/editado pelo usuário para este tamanho
+        codigoCompleto: z.string().optional(),
         // Permite sobrescrever preços por tamanho (ex: 2XL mais caro)
         precoAtacado: z.number().optional(),
         precoVarejo: z.number().optional(),
@@ -554,11 +573,14 @@ export const pdvProductsRouter = router({
 
       try {
         for (const tam of input.tamanhos) {
-          // Gerar código completo: codigoBase + "-" + tamanho (uppercase)
+          // Gerar código completo: usa codigoCompleto do tamanho se fornecido,
+          // senão usa codigoBase + "-" + tamanho (uppercase)
           const tamUp = tam.tamanho.toUpperCase();
-          const codigo = input.codigoBase
-            ? `${input.codigoBase}-${tamUp}`
-            : null;
+          const codigo = tam.codigoCompleto
+            ? tam.codigoCompleto.trim().toUpperCase()
+            : input.codigoBase
+              ? `${input.codigoBase}-${tamUp}`
+              : null;
 
           const precoAtacado = tam.precoAtacado ?? input.precoAtacado;
           const precoVarejo = tam.precoVarejo ?? input.precoVarejo;
@@ -660,7 +682,7 @@ async function appendProductsBatchToSheet(
     tipo: string; precoAtacado: number; precoVarejo: number;
     isSofia: boolean; temporada?: string; ptAtacado: number; ptVarejo: number;
     fotoUrl?: string; codigoBase?: string;
-    tamanhos: { tamanho: string; estoque: number; precoAtacado?: number; precoVarejo?: number }[];
+    tamanhos: { tamanho: string; estoque: number; codigoCompleto?: string; precoAtacado?: number; precoVarejo?: number }[];
   },
   _created: { id: number; tamanho: string; codigo: string }[]
 ) {
@@ -669,7 +691,9 @@ async function appendProductsBatchToSheet(
   // Envia uma linha por tamanho usando a função já existente
   for (const tam of input.tamanhos) {
     const tamUp = tam.tamanho.toUpperCase();
-    const codigo = input.codigoBase ? `${input.codigoBase}-${tamUp}` : '';
+    const codigo = tam.codigoCompleto
+      ? tam.codigoCompleto.trim().toUpperCase()
+      : input.codigoBase ? `${input.codigoBase}-${tamUp}` : '';
     const precoAtacado = tam.precoAtacado ?? input.precoAtacado;
     const precoVarejo = tam.precoVarejo ?? input.precoVarejo;
 

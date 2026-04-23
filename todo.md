@@ -976,3 +976,17 @@
 - [x] Frontend: badge roxo com ícone Wrench "Serviço" na coluna Regime da tabela do histórico
 - [x] Cancelamento: botão já disponível para todos os pedidos não cancelados (admin only) — pedidos de serviço agora aparecem no histórico
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v130 — Geração automática de código no cadastro de produtos PDV
+- [x] Removido campo "Código Base" manual do formulário de cadastro
+- [x] Código gerado automaticamente no formato {LINHA}-{TIME}-{MODELO}-{TAMANHO} ao adicionar cada tamanho
+- [x] Campos ausentes são omitidos do código (ex: sem time → {LINHA}-{MODELO}-{TAMANHO})
+- [x] Regeneração automática ao alterar Linha, Time ou Modelo (exceto linhas em modo edição manual)
+- [x] Backend: endpoint checkExactCode para verificar código completo no banco
+- [x] Backend: createBatch aceita codigoCompleto por tamanho (codigoBase ainda compatível)
+- [x] Frontend: código gerado exibido em badge verde abaixo de cada linha de tamanho
+- [x] Frontend: botão lápis para editar código manualmente (campo amber) + botão refresh para restaurar gerado
+- [x] Frontend: verificação de duplicidade ao sair do campo (onBlur) com indicador de carregamento
+- [x] Frontend: aviso vermelho "Já cadastrado" ou verde "Disponível" por linha de tamanho
+- [x] Frontend: bloqueia envio se houver códigos duplicados não resolvidos
+- [x] 206/206 testes passando, 0 erros TypeScript

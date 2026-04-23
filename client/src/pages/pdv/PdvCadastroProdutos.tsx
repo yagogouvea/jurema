@@ -11,7 +11,6 @@ import { ProductPhotoAvatar, ProductPhotoLightbox } from "@/components/ProductPh
 import {
   Plus,
   Trash2,
-  Upload,
   Package,
   CheckCircle2,
   ChevronDown,
@@ -27,6 +26,7 @@ import {
   PlusCircle,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
@@ -34,10 +34,14 @@ interface LoteRow {
   id: number;
   tamanho: string;
   quantidade: string;
+  codigoGerado: string;   // código gerado automaticamente
+  codigoEditado: string;  // código editado manualmente (vazio = usa gerado)
+  modoEdicao: boolean;    // se o usuário está editando o código manualmente
+  duplicado: boolean | null; // null=não verificado, true=duplicado, false=livre
+  verificando: boolean;
 }
 
 interface FormState {
-  codigo: string;
   linha: string;
   modelo: string;
   time: string;
@@ -52,8 +56,6 @@ interface FormState {
   ptVarejo: string;
   custo: string;
   fotoUrl: string;
-  fotoBase64?: string;
-  fotoMime?: string;
 }
 
 interface EditingRow {
@@ -65,7 +67,6 @@ interface EditingRow {
 }
 
 const EMPTY_FORM: FormState = {
-  codigo: "",
   linha: "",
   modelo: "",
   time: "",
@@ -83,7 +84,35 @@ const EMPTY_FORM: FormState = {
 };
 
 let nextId = 1;
-const newRow = (): LoteRow => ({ id: nextId++, tamanho: "", quantidade: "" });
+const newRow = (): LoteRow => ({
+  id: nextId++,
+  tamanho: "",
+  quantidade: "",
+  codigoGerado: "",
+  codigoEditado: "",
+  modoEdicao: false,
+  duplicado: null,
+  verificando: false,
+});
+
+// ─── Geração de código automático ─────────────────────────────────────────────
+function slugify(s: string): string {
+  return s.trim().toUpperCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove acentos
+    .replace(/[^A-Z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function gerarCodigo(linha: string, time: string, modelo: string, tamanho: string): string {
+  const partes: string[] = [];
+  if (linha.trim()) partes.push(slugify(linha));
+  if (time.trim()) partes.push(slugify(time));
+  if (modelo.trim()) partes.push(slugify(modelo));
+  if (tamanho.trim()) partes.push(slugify(tamanho));
+  return partes.join("-");
+}
 
 // ─── Máscara monetária ─────────────────────────────────────────────────────────
 function formatMoney(raw: string): string {
@@ -101,18 +130,13 @@ const PAGE_SIZE = 20;
 
 // ─── Componente principal ──────────────────────────────────────────────────────
 export default function PdvCadastroProdutos() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<"cadastrar" | "listar">("cadastrar");
 
   // ── Estado do formulário de cadastro ──
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [lote, setLote] = useState<LoteRow[]>([newRow()]);
   const [showExtra, setShowExtra] = useState(false);
-  const [showFoto, setShowFoto] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [lastCreated, setLastCreated] = useState<{ tamanho: string; codigo: string }[] | null>(null);
-  const [codeCheck, setCodeCheck] = useState<{ exists: boolean; count: number; tamanhos: string[] } | null>(null);
-  const [codeCheckTimer, setCodeCheckTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Estado da listagem ──
   const [search, setSearch] = useState("");
@@ -120,8 +144,8 @@ export default function PdvCadastroProdutos() {
   const [page, setPage] = useState(1);
   const [editingRow, setEditingRow] = useState<EditingRow | null>(null);
   const [savingId, setSavingId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null); // id sendo deletado
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null); // id aguardando confirm
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   // ── Lightbox de foto ──
   const [lightbox, setLightbox] = useState<{ src: string; name: string } | null>(null);
@@ -136,12 +160,7 @@ export default function PdvCadastroProdutos() {
     { enabled: activeTab === "listar" }
   );
 
-  const checkCodeQuery = trpc.pdvProducts.checkCodeExists.useQuery(
-    { codigoBase: form.codigo.trim().toUpperCase() },
-    {
-      enabled: false, // só dispara manualmente
-    }
-  );
+  const utils = trpc.useUtils();
 
   // ─── Mutations ────────────────────────────────────────────────────────────────
   const createBatch = trpc.pdvProducts.createBatch.useMutation({
@@ -158,7 +177,6 @@ export default function PdvCadastroProdutos() {
         temporada: prev.temporada,
       }));
       setLote([newRow()]);
-      setCodeCheck(null);
     },
     onError: (err) => {
       toast.error(err.message || "Erro ao cadastrar produtos");
@@ -192,58 +210,113 @@ export default function PdvCadastroProdutos() {
     },
   });
 
-  // ─── Validação de código duplicado (debounce) ─────────────────────────────────
+  // ─── Regenerar códigos ao mudar campos base ───────────────────────────────────
   useEffect(() => {
-    const base = form.codigo.trim().toUpperCase();
-    if (!base || base.length < 3) {
-      setCodeCheck(null);
+    setLote(prev => prev.map(row => {
+      // Só regenera se não está em modo edição manual
+      if (row.modoEdicao) return row;
+      const novo = gerarCodigo(form.linha, form.time, form.modelo, row.tamanho);
+      if (novo === row.codigoGerado) return row;
+      return { ...row, codigoGerado: novo, duplicado: null, verificando: false };
+    }));
+  }, [form.linha, form.time, form.modelo]);
+
+  // ─── Verificar duplicidade de um código no banco ──────────────────────────────
+  const verificarCodigo = useCallback(async (rowId: number, codigo: string) => {
+    if (!codigo || codigo.length < 3) {
+      setLote(prev => prev.map(r => r.id === rowId ? { ...r, duplicado: null, verificando: false } : r));
       return;
     }
-    if (codeCheckTimer) clearTimeout(codeCheckTimer);
-    const timer = setTimeout(async () => {
-      try {
-        const result = await checkCodeQuery.refetch();
-        if (result.data) setCodeCheck(result.data);
-      } catch {
-        // silencioso
-      }
-    }, 600);
-    setCodeCheckTimer(timer);
-    return () => clearTimeout(timer);
-  }, [form.codigo]);
+    setLote(prev => prev.map(r => r.id === rowId ? { ...r, verificando: true } : r));
+    try {
+      const result = await utils.pdvProducts.checkExactCode.fetch({ codigo: codigo.trim().toUpperCase() });
+      setLote(prev => prev.map(r => r.id === rowId ? { ...r, duplicado: result.exists, verificando: false } : r));
+    } catch {
+      setLote(prev => prev.map(r => r.id === rowId ? { ...r, verificando: false } : r));
+    }
+  }, [utils]);
 
   // ─── Lote handlers ────────────────────────────────────────────────────────────
   const addRow = () => setLote(prev => [...prev, newRow()]);
+
   const removeRow = (id: number) => {
     setLote(prev => prev.length > 1 ? prev.filter(r => r.id !== id) : prev);
   };
-  const updateRow = (id: number, field: keyof LoteRow, value: string) => {
-    setLote(prev => prev.map(r => r.id === id ? { ...r, [field]: field === "tamanho" ? value.toUpperCase() : value } : r));
+
+  const updateTamanho = (id: number, tamanho: string) => {
+    const tam = tamanho.toUpperCase();
+    setLote(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      const novo = gerarCodigo(form.linha, form.time, form.modelo, tam);
+      return { ...r, tamanho: tam, codigoGerado: novo, duplicado: null, verificando: false };
+    }));
+    // Verificar duplicidade após debounce
+    const timer = setTimeout(() => {
+      const row = lote.find(r => r.id === id);
+      const cod = row?.modoEdicao ? row.codigoEditado : gerarCodigo(form.linha, form.time, form.modelo, tam);
+      if (cod) verificarCodigo(id, cod);
+    }, 600);
+    return () => clearTimeout(timer);
   };
 
-  // ─── Foto handler ─────────────────────────────────────────────────────────────
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast.error("Foto muito grande. Máximo 5MB."); return; }
-    setUploadingPhoto(true);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      const base64 = dataUrl.split(",")[1];
-      setForm(prev => ({ ...prev, fotoUrl: dataUrl, fotoBase64: base64, fotoMime: file.type }));
-      setUploadingPhoto(false);
-    };
-    reader.readAsDataURL(file);
+  const updateQuantidade = (id: number, quantidade: string) => {
+    setLote(prev => prev.map(r => r.id === id ? { ...r, quantidade: quantidade.replace(/\D/g, "") } : r));
+  };
+
+  const updateCodigoManual = (id: number, codigo: string) => {
+    const cod = codigo.toUpperCase();
+    setLote(prev => prev.map(r => r.id === id ? { ...r, codigoEditado: cod, duplicado: null } : r));
+  };
+
+  const toggleModoEdicao = (id: number) => {
+    setLote(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      if (r.modoEdicao) {
+        // Sair do modo edição: restaurar código gerado
+        return { ...r, modoEdicao: false, codigoEditado: "", duplicado: null };
+      } else {
+        // Entrar no modo edição: pré-preencher com o código gerado
+        return { ...r, modoEdicao: true, codigoEditado: r.codigoGerado };
+      }
+    }));
+  };
+
+  const confirmarCodigoManual = (id: number) => {
+    const row = lote.find(r => r.id === id);
+    if (!row) return;
+    verificarCodigo(id, row.codigoEditado);
   };
 
   // ─── Submit cadastro ──────────────────────────────────────────────────────────
   const handleSubmit = () => {
     if (!form.time.trim()) { toast.error("Informe o Time / Nome do produto"); return; }
+
     const tamanhos = lote
       .filter(r => r.tamanho.trim() && r.quantidade.trim())
-      .map(r => ({ tamanho: r.tamanho.trim().toUpperCase(), estoque: parseInt(r.quantidade) || 0 }));
+      .map(r => {
+        const cod = r.modoEdicao ? r.codigoEditado : r.codigoGerado;
+        return {
+          tamanho: r.tamanho.trim().toUpperCase(),
+          estoque: parseInt(r.quantidade) || 0,
+          codigoCompleto: cod || undefined,
+        };
+      });
+
     if (tamanhos.length === 0) { toast.error("Adicione pelo menos um tamanho com quantidade"); return; }
+
+    // Verificar se há duplicados não resolvidos
+    const comDuplicado = lote.filter(r => r.tamanho.trim() && r.quantidade.trim() && r.duplicado === true);
+    if (comDuplicado.length > 0) {
+      toast.error(`${comDuplicado.length} código(s) já cadastrado(s). Edite os códigos duplicados antes de salvar.`);
+      return;
+    }
+
+    // Verificar se há tamanhos sem código
+    const semCodigo = tamanhos.filter(t => !t.codigoCompleto);
+    if (semCodigo.length > 0) {
+      toast.error("Preencha o Time para gerar os códigos automaticamente");
+      return;
+    }
 
     createBatch.mutate({
       linha: form.linha.trim().toUpperCase() || "GERAL",
@@ -258,7 +331,6 @@ export default function PdvCadastroProdutos() {
       custo: parseMoney(form.custo),
       isSofia: form.isSofia,
       temporada: form.temporada.trim() || undefined,
-      codigoBase: form.codigo.trim().toUpperCase() || undefined,
       fotoUrl: form.fotoUrl.startsWith("http") ? form.fotoUrl : undefined,
       tamanhos,
       syncSheet: true,
@@ -288,10 +360,6 @@ export default function PdvCadastroProdutos() {
       syncSheet: true,
     });
   };
-
-  // ─── Prévia dos códigos ───────────────────────────────────────────────────────
-  const validRows = lote.filter(r => r.tamanho.trim());
-  const codigoBase = form.codigo.trim().toUpperCase();
 
   const products = (productsQuery.data as any)?.products ?? [];
   const totalCount = (productsQuery.data as any)?.total ?? 0;
@@ -373,40 +441,11 @@ export default function PdvCadastroProdutos() {
                   <h2 className="font-semibold text-gray-100 text-sm uppercase tracking-wider">
                     1 · Dados do Produto
                   </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    O código será gerado automaticamente: <span className="font-mono text-gray-400">LINHA-TIME-MODELO-TAMANHO</span>
+                  </p>
                 </div>
                 <div className="px-5 py-4 space-y-4">
-
-                  {/* CÓDIGO */}
-                  <div>
-                    <Label className="text-gray-300 text-sm font-medium">
-                      Código Base <span className="text-gray-500 font-normal">(sem sufixo de tamanho)</span>
-                    </Label>
-                    <Input
-                      value={form.codigo}
-                      onChange={e => set("codigo", e.target.value.toUpperCase())}
-                      placeholder="Ex: CA-T-TO-ALH-VERM"
-                      className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600 font-mono"
-                    />
-                    {/* Aviso de código duplicado */}
-                    {codeCheck && codeCheck.exists && (
-                      <div className="mt-2 flex items-start gap-2 bg-amber-950/40 border border-amber-700/50 rounded-lg px-3 py-2">
-                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-amber-300 text-xs font-medium">
-                            Código já existe no sistema ({codeCheck.count} variante{codeCheck.count > 1 ? "s" : ""})
-                          </p>
-                          <p className="text-amber-400/70 text-xs mt-0.5">
-                            Tamanhos: {codeCheck.tamanhos.join(", ")}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    {codeCheck && !codeCheck.exists && form.codigo.trim().length >= 3 && (
-                      <p className="mt-1.5 text-green-500 text-xs flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" /> Código disponível
-                      </p>
-                    )}
-                  </div>
 
                   {/* LINHA + MODELO */}
                   <div className="grid grid-cols-2 gap-3">
@@ -490,17 +529,15 @@ export default function PdvCadastroProdutos() {
                   </div>
 
                   {/* CUSTO */}
-                  <div className="grid grid-cols-1 gap-3">
-                    <div>
-                      <Label className="text-gray-300 text-sm font-medium">Custo (R$)</Label>
-                      <Input
-                        value={form.custo}
-                        onChange={e => set("custo", formatMoney(e.target.value))}
-                        placeholder="0,00"
-                        inputMode="numeric"
-                        className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-yellow-600"
-                      />
-                    </div>
+                  <div>
+                    <Label className="text-gray-300 text-sm font-medium">Custo (R$)</Label>
+                    <Input
+                      value={form.custo}
+                      onChange={e => set("custo", formatMoney(e.target.value))}
+                      placeholder="0,00"
+                      inputMode="numeric"
+                      className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-yellow-600"
+                    />
                   </div>
 
                   {/* PONTOS */}
@@ -541,7 +578,6 @@ export default function PdvCadastroProdutos() {
                       <Switch
                         checked={form.ativo}
                         onCheckedChange={v => set("ativo", v)}
-                        className="data-[state=checked]:bg-green-600"
                       />
                     </div>
                     <div className={`flex-1 flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
@@ -562,7 +598,7 @@ export default function PdvCadastroProdutos() {
                 </div>
               </section>
 
-              {/* ── SEÇÃO 2 — ADICIONAR EM LOTE ── */}
+              {/* ── SEÇÃO 2 — TAMANHOS E QUANTIDADES ── */}
               <section className="bg-[#141414] border border-[#252525] rounded-2xl overflow-hidden mb-4">
                 <div className="px-5 py-4 border-b border-[#1e1e1e] flex items-center justify-between">
                   <div>
@@ -570,7 +606,7 @@ export default function PdvCadastroProdutos() {
                       2 · Tamanhos e Quantidades
                     </h2>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Cada linha gera uma variante com código completo
+                      O código é gerado automaticamente. Clique no lápis para editar manualmente.
                     </p>
                   </div>
                   <Button
@@ -584,43 +620,102 @@ export default function PdvCadastroProdutos() {
                   </Button>
                 </div>
 
-                <div className="px-5 py-4 space-y-2">
-                  {/* Cabeçalho da tabela */}
-                  <div className="grid grid-cols-[1fr_1fr_auto_2fr] gap-2 px-1 mb-1">
-                    <span className="text-xs text-gray-500 font-medium uppercase">TAM</span>
-                    <span className="text-xs text-gray-500 font-medium uppercase">QTD</span>
-                    <span className="w-8" />
-                    <span className="text-xs text-gray-500 font-medium uppercase">Código gerado</span>
-                  </div>
-
+                <div className="px-5 py-4 space-y-3">
                   {lote.map((row) => {
-                    const codigoGerado = codigoBase
-                      ? `${codigoBase}-${row.tamanho || "?"}`
-                      : row.tamanho ? `...-${row.tamanho}` : "—";
+                    const codigoAtivo = row.modoEdicao ? row.codigoEditado : row.codigoGerado;
+                    const temTamanho = row.tamanho.trim().length > 0;
+
                     return (
-                      <div key={row.id} className="grid grid-cols-[1fr_1fr_auto_2fr] gap-2 items-center">
-                        <Input
-                          value={row.tamanho}
-                          onChange={e => updateRow(row.id, "tamanho", e.target.value)}
-                          placeholder="M"
-                          className="bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600 h-9 text-sm font-mono"
-                        />
-                        <Input
-                          value={row.quantidade}
-                          onChange={e => updateRow(row.id, "quantidade", e.target.value.replace(/\D/g, ""))}
-                          placeholder="0"
-                          inputMode="numeric"
-                          className="bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600 h-9 text-sm"
-                        />
-                        <button
-                          onClick={() => removeRow(row.id)}
-                          className="w-8 h-9 flex items-center justify-center text-gray-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-950/20"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                        <span className={`text-xs font-mono truncate ${row.tamanho ? "text-green-400" : "text-gray-600"}`}>
-                          {codigoGerado}
-                        </span>
+                      <div key={row.id} className="space-y-1.5">
+                        {/* Linha 1: Tamanho + Quantidade + Botão remover */}
+                        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                          <Input
+                            value={row.tamanho}
+                            onChange={e => updateTamanho(row.id, e.target.value)}
+                            onBlur={() => {
+                              const cod = row.modoEdicao ? row.codigoEditado : row.codigoGerado;
+                              if (cod) verificarCodigo(row.id, cod);
+                            }}
+                            placeholder="TAM (ex: M, G, 42)"
+                            className="bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600 h-9 text-sm font-mono"
+                          />
+                          <Input
+                            value={row.quantidade}
+                            onChange={e => updateQuantidade(row.id, e.target.value)}
+                            placeholder="Qtd"
+                            inputMode="numeric"
+                            className="bg-[#1a1a1a] border-[#2e2e2e] text-white placeholder:text-gray-600 focus:border-green-600 h-9 text-sm"
+                          />
+                          <button
+                            onClick={() => removeRow(row.id)}
+                            className="w-9 h-9 flex items-center justify-center text-gray-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-950/20"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Linha 2: Código gerado/editável */}
+                        {temTamanho && (
+                          <div className="flex items-center gap-2 pl-0">
+                            {row.modoEdicao ? (
+                              // Modo edição manual
+                              <div className="flex-1 flex items-center gap-1.5">
+                                <Input
+                                  value={row.codigoEditado}
+                                  onChange={e => updateCodigoManual(row.id, e.target.value)}
+                                  onBlur={() => confirmarCodigoManual(row.id)}
+                                  placeholder="Código personalizado"
+                                  className="h-8 text-xs font-mono bg-[#1e1e1e] border-amber-700/50 text-amber-300 placeholder:text-gray-600 focus:border-amber-500"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => toggleModoEdicao(row.id)}
+                                  title="Restaurar código gerado automaticamente"
+                                  className="shrink-0 w-7 h-7 flex items-center justify-center text-gray-500 hover:text-green-400 rounded-lg hover:bg-green-950/20 transition-colors"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              // Modo visualização (código gerado)
+                              <div className="flex-1 flex items-center gap-1.5">
+                                <span className={`flex-1 text-xs font-mono px-2 py-1 rounded-lg border ${
+                                  codigoAtivo
+                                    ? "bg-[#1a1a1a] border-[#2e2e2e] text-green-400"
+                                    : "bg-[#1a1a1a] border-[#2e2e2e] text-gray-600"
+                                }`}>
+                                  {codigoAtivo || "— preencha o Time para gerar o código —"}
+                                </span>
+                                {codigoAtivo && (
+                                  <button
+                                    onClick={() => toggleModoEdicao(row.id)}
+                                    title="Editar código manualmente"
+                                    className="shrink-0 w-7 h-7 flex items-center justify-center text-gray-500 hover:text-amber-400 rounded-lg hover:bg-amber-950/20 transition-colors"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Status de verificação */}
+                            {row.verificando && (
+                              <span className="shrink-0 w-5 h-5 border-2 border-gray-600 border-t-green-500 rounded-full animate-spin" />
+                            )}
+                            {!row.verificando && row.duplicado === true && (
+                              <div className="flex items-center gap-1 text-red-400 text-xs shrink-0">
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                <span>Já cadastrado</span>
+                              </div>
+                            )}
+                            {!row.verificando && row.duplicado === false && codigoAtivo && (
+                              <div className="flex items-center gap-1 text-green-500 text-xs shrink-0">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Disponível</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -634,20 +729,6 @@ export default function PdvCadastroProdutos() {
                     Adicionar tamanho
                   </button>
                 </div>
-
-                {/* Prévia dos códigos que serão gerados */}
-                {validRows.length > 0 && (
-                  <div className="px-5 pb-4">
-                    <p className="text-xs text-gray-500 mb-2">Variantes que serão criadas:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {validRows.map(r => (
-                        <Badge key={r.id} variant="outline" className="text-xs border-green-800/50 text-green-400 font-mono">
-                          {codigoBase ? `${codigoBase}-${r.tamanho}` : r.tamanho}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </section>
 
               {/* ── SEÇÃO 3 — FOTO (informativo) ── */}
@@ -667,7 +748,7 @@ export default function PdvCadastroProdutos() {
                 </div>
               </section>
 
-                            {/* ── SEÇÃO 4 — CAMPOS ADICIONAIS ── */}
+              {/* ── SEÇÃO 4 — CAMPOS ADICIONAIS ── */}
               <section className="bg-[#141414] border border-[#252525] rounded-2xl overflow-hidden mb-6">
                 <button
                   onClick={() => setShowExtra(!showExtra)}
@@ -901,7 +982,6 @@ export default function PdvCadastroProdutos() {
 
                           {/* Desktop layout */}
                           <div className="hidden md:grid grid-cols-[24px_2fr_1fr_1fr_0.8fr_0.8fr_0.8fr_auto] gap-3 px-4 py-3 items-center">
-                            {/* Avatar foto */}
                             <ProductPhotoAvatar
                               fotoUrl={prod.fotoUrl}
                               productName={`${prod.time}${prod.modelo ? ` ${prod.modelo}` : ""}`}
@@ -968,7 +1048,6 @@ export default function PdvCadastroProdutos() {
                                   </button>
                                 </>
                               ) : confirmDeleteId === prod.id ? (
-                                // Confirmação de deleção inline
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs text-red-400 whitespace-nowrap">Confirmar?</span>
                                   <button
