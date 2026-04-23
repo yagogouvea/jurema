@@ -307,6 +307,9 @@ export const pdvOrdersRouter = router({
                   services: input.services,
                   comissaoUnitaria,
                   sellerName: seller.name,
+                  clienteNome: input.clienteNome,
+                  createdAt: new Date(),
+                  cepCorreio: correioService?.cep || null,
                   items: normalItems,
                 });
               }

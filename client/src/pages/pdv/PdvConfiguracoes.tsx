@@ -366,9 +366,18 @@ function TabSync() {
   const { isAdmin } = usePdvAuth();
   const [showPreview, setShowPreview] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ updated: number; skipped: number; errors: number; message: string } | null>(null);
 
   const { data: syncStatus, refetch: refetchStatus } = trpc.pdvSync.status.useQuery(undefined, { enabled: isAdmin });
   const { data: syncPreview, isLoading: previewLoading } = trpc.pdvSync.preview.useQuery(undefined, { enabled: isAdmin && showPreview });
+
+  const backfillMutation = trpc.pdvSync.backfillPedidosItens.useMutation({
+    onSuccess: (result: any) => {
+      setBackfillResult(result);
+      toast.success(result.message);
+    },
+    onError: (err: any) => { toast.error(`Erro no backfill: ${err.message}`); },
+  });
 
   const syncMutation = trpc.pdvSync.sync.useMutation({
     onSuccess: (result: any) => {
@@ -505,6 +514,65 @@ function TabSync() {
 
         <p className="text-gray-600 text-xs">
           A sincronização é somente leitura — o sistema nunca modifica a planilha.
+        </p>
+      </div>
+
+      {/* Backfill pedidos_itens */}
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-blue-950/50 border border-blue-900/50 rounded-xl flex items-center justify-center">
+            <Database className="w-4 h-4 text-blue-400" />
+          </div>
+          <div>
+            <h3 className="text-white font-bold text-sm">Preencher Dados Retroativos</h3>
+            <p className="text-gray-500 text-xs">Adiciona Data, Cliente e CEP nas linhas antigas da aba pedidos_itens</p>
+          </div>
+        </div>
+
+        <div className="bg-blue-950/20 border border-blue-900/30 rounded-xl p-3">
+          <p className="text-blue-300 text-xs">
+            <strong>O que faz:</strong> Percorre todas as linhas da aba <code className="bg-gray-800 px-1 rounded">pedidos_itens</code> que ainda
+            não têm as colunas O (data), P (cliente) e Q (CEP) preenchidas, busca os dados no banco e atualiza a planilha.
+            Linhas já preenchidas não são alteradas.
+          </p>
+        </div>
+
+        {backfillResult && (
+          <div className="bg-green-950/30 border border-green-900/50 rounded-xl p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle className="w-4 h-4 text-green-400" />
+              <span className="text-green-400 text-sm font-semibold">Backfill concluído</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs mt-2">
+              <div className="text-center">
+                <p className="text-green-400 font-bold text-base">{backfillResult.updated}</p>
+                <p className="text-gray-400">Atualizadas</p>
+              </div>
+              <div className="text-center">
+                <p className="text-gray-300 font-bold text-base">{backfillResult.skipped}</p>
+                <p className="text-gray-400">Já preenchidas</p>
+              </div>
+              <div className="text-center">
+                <p className="text-red-400 font-bold text-base">{backfillResult.errors}</p>
+                <p className="text-gray-400">Erros</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => { setBackfillResult(null); backfillMutation.mutate(); }}
+          disabled={backfillMutation.isPending}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-800 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+        >
+          {backfillMutation.isPending ? (
+            <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Processando...</>
+          ) : (
+            <><RefreshCw className="w-4 h-4" /> Preencher Dados Retroativos</>
+          )}
+        </button>
+        <p className="text-gray-600 text-xs">
+          Execute apenas uma vez. Linhas já preenchidas serão ignoradas automaticamente.
         </p>
       </div>
     </div>

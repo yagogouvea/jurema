@@ -5,6 +5,7 @@ import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import { savePdvNotification } from "./pdvNotifications";
 import { autoSyncProductToSite } from "./pdvSiteSync";
+import { backfillOrderItemsColumns } from "./pdvSheetsWriter";
 import type { Request } from "express";
 
 async function getDb() {
@@ -648,6 +649,25 @@ export const pdvSyncRouter = router({
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro na reconciliação' });
       }
     }),
+
+  // Backfill retroativo das colunas O (data), P (cliente), Q (cep) na aba pedidos_itens
+  backfillPedidosItens: publicProcedure.mutation(async ({ ctx }) => {
+    await requirePdvAdmin(ctx);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco de dados indisponível' });
+    try {
+      const result = await backfillOrderItemsColumns(db);
+      await db.end();
+      return {
+        ...result,
+        message: `Backfill concluído: ${result.updated} linhas atualizadas, ${result.skipped} já preenchidas, ${result.errors} erros`,
+      };
+    } catch (err) {
+      try { await db.end(); } catch {}
+      console.error('[PDV Sync] backfillPedidosItens error:', err);
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro no backfill' });
+    }
+  }),
 
   // Status atual do catálogo
   status: publicProcedure.query(async ({ ctx }) => {

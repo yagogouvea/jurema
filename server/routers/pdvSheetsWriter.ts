@@ -492,7 +492,7 @@ export async function updateProductRowInSheet(product: {
 /**
  * Grava os itens de um pedido na aba pedidos_itens da planilha
  *
- * Colunas (14 no total):
+ * Colunas (17 no total):
  * A: pedido_id
  * B: cod (SKU)
  * C: produto (Linha Modelo Time Descrição Tamanho Tipo)
@@ -507,6 +507,9 @@ export async function updateProductRowInSheet(product: {
  * L: TOTAL (subtotal na modalidade para itens normais; valor do serviço para linha de extra)
  * M: comissao (comissaoUnitaria × quantidade para itens normais; vazio para linhas de serviço extra)
  * N: VENDEDOR (nome do vendedor que realizou a venda)
+ * O: data (DD/MM/YYYY HH:MM do pedido)
+ * P: cliente (nome do cliente)
+ * Q: cep (CEP do Correio, se houver)
  *
  * NOTA: Serviços extras são gravados como linhas dedicadas ao final (não rateados entre itens).
  */
@@ -516,6 +519,9 @@ export async function appendOrderItemsToSheet(params: {
   services: Array<{ tipo: string; valor: number }>;
   comissaoUnitaria?: number;
   sellerName?: string;
+  clienteNome?: string | null;
+  createdAt?: Date | null;
+  cepCorreio?: string | null;
   items: Array<{
     codigo?: string | null;
     linha?: string | null;
@@ -534,6 +540,17 @@ export async function appendOrderItemsToSheet(params: {
   try {
     const { pedidoId, regime, services, items, comissaoUnitaria = 0 } = params;
     const modalidade = regime === 'ATACADO' ? 'Atacado' : 'Varejo';
+
+    // Formatar data
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    let dataFormatada = '';
+    if (params.createdAt) {
+      const dt = new Date(params.createdAt);
+      const dtBR = new Date(dt.getTime() - 3 * 60 * 60 * 1000);
+      dataFormatada = `${pad(dtBR.getUTCDate())}/${pad(dtBR.getUTCMonth() + 1)}/${dtBR.getUTCFullYear()} ${pad(dtBR.getUTCHours())}:${pad(dtBR.getUTCMinutes())}`;
+    }
+    const clienteNome = params.clienteNome || '';
+    const cepCorreio = params.cepCorreio || '';
 
     // ── Linhas dos itens normais (sem rateio de extras) ──
     const itemRows = items.map(item => {
@@ -568,6 +585,9 @@ export async function appendOrderItemsToSheet(params: {
         parseFloat(totalItem.toFixed(2)),                 // L: TOTAL
         parseFloat((comissaoUnitaria * item.quantidade).toFixed(2)), // M: comissao
         params.sellerName || '',                          // N: VENDEDOR
+        dataFormatada,                                    // O: data
+        clienteNome,                                      // P: cliente
+        cepCorreio,                                       // Q: cep
       ];
     });
 
@@ -589,11 +609,14 @@ export async function appendOrderItemsToSheet(params: {
         valorFmt,                   // L: TOTAL = valor do serviço
         '',                         // M: comissao (vazio para serviços extras)
         params.sellerName || '',    // N: VENDEDOR
+        dataFormatada,              // O: data
+        clienteNome,                // P: cliente
+        cepCorreio,                 // Q: cep
       ];
     });
 
     const allRows = [...itemRows, ...serviceRows];
-    return await appendToSheet(`${ITEMS_SHEET}!A:N`, allRows);
+    return await appendToSheet(`${ITEMS_SHEET}!A:Q`, allRows);
   } catch (err) {
     console.error('[SheetsWriter] appendOrderItemsToSheet error:', err);
     return false;
@@ -1316,5 +1339,155 @@ export async function appendToLucroProdutos(items: LucroItem[]): Promise<boolean
   } catch (err) {
     console.error('[SheetsWriter] appendToLucroProdutos error:', err);
     return false;
+  }
+}
+
+/**
+ * Preenche retroativamente as colunas O (data), P (cliente) e Q (cep)
+ * na aba pedidos_itens para todos os pedidos já existentes na planilha.
+ *
+ * Estratégia:
+ * 1. Lê todas as linhas da aba pedidos_itens (colunas A:Q)
+ * 2. Para cada linha que tenha pedido_id na coluna A e colunas O/P/Q vazias,
+ *    busca os dados no banco e atualiza via batchUpdate
+ * 3. Retorna { updated, skipped, errors }
+ */
+export async function backfillOrderItemsColumns(db: import('mysql2/promise').Connection): Promise<{
+  updated: number;
+  skipped: number;
+  errors: number;
+}> {
+  const result = { updated: 0, skipped: 0, errors: 0 };
+
+  try {
+    const token = await getServiceAccountToken();
+    if (!token) {
+      console.warn('[SheetsWriter] backfillOrderItemsColumns: no service account token');
+      return result;
+    }
+
+    // Ler todas as linhas da aba pedidos_itens (A:Q)
+    const rows = await readSheet(`${ITEMS_SHEET}!A2:Q10000`);
+    if (rows.length === 0) return result;
+
+    // Identificar linhas que precisam de backfill (O ou P vazias)
+    const linhasParaAtualizar: Array<{ sheetRow: number; pedidoId: string }> = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const pedidoId = row[0]?.toString().trim();
+      if (!pedidoId) continue;
+      const colO = row[14]?.toString().trim() || '';
+      const colP = row[15]?.toString().trim() || '';
+      if (!colO || !colP) {
+        // linha 2 = índice 0, então sheetRow = i + 2
+        linhasParaAtualizar.push({ sheetRow: i + 2, pedidoId });
+      } else {
+        result.skipped++;
+      }
+    }
+
+    if (linhasParaAtualizar.length === 0) return result;
+
+    // Buscar dados únicos por pedidoId no banco
+    const pedidoIds = Array.from(new Set(linhasParaAtualizar.map(l => l.pedidoId)));
+    const pedidoMap = new Map<string, { data: string; cliente: string; cep: string }>();
+
+    const pad = (n: number) => n.toString().padStart(2, '0');
+
+    for (const pedidoId of pedidoIds) {
+      try {
+        const [orderRows] = await db.execute(
+          `SELECT o.clienteNome, o.createdAt,
+                  (SELECT s.cep FROM pdv_order_services s
+                   WHERE s.pedidoId = o.pedidoId AND s.tipo = 'CORREIO' AND s.cep IS NOT NULL
+                   LIMIT 1) AS cepCorreio
+           FROM pdv_orders o
+           WHERE o.pedidoId = ? AND o.isSofia = 0
+           LIMIT 1`,
+          [pedidoId]
+        );
+        const order = (orderRows as any[])[0];
+        if (!order) continue;
+
+        const dt = new Date(order.createdAt);
+        const dtBR = new Date(dt.getTime() - 3 * 60 * 60 * 1000);
+        const dataFormatada = `${pad(dtBR.getUTCDate())}/${pad(dtBR.getUTCMonth() + 1)}/${dtBR.getUTCFullYear()} ${pad(dtBR.getUTCHours())}:${pad(dtBR.getUTCMinutes())}`;
+
+        pedidoMap.set(pedidoId, {
+          data: dataFormatada,
+          cliente: order.clienteNome || '',
+          cep: order.cepCorreio || '',
+        });
+      } catch (e) {
+        console.error(`[SheetsWriter] backfill: erro ao buscar pedido ${pedidoId}:`, e);
+      }
+    }
+
+    // Montar batchUpdate com todas as células a atualizar
+    const requests: any[] = [];
+    const sheetId = await getSheetId(ITEMS_SHEET);
+    if (sheetId === null || sheetId === undefined) {
+      console.error('[SheetsWriter] backfill: sheetId não encontrado para', ITEMS_SHEET);
+      return result;
+    }
+
+    for (const { sheetRow, pedidoId } of linhasParaAtualizar) {
+      const dados = pedidoMap.get(pedidoId);
+      if (!dados) {
+        result.skipped++;
+        continue;
+      }
+      // Colunas O=14, P=15, Q=16 (0-indexed)
+      // sheetRow é 1-indexed (linha real na planilha)
+      const rowIdx = sheetRow - 1; // 0-indexed para a API
+      requests.push({
+        updateCells: {
+          range: {
+            sheetId,
+            startRowIndex: rowIdx,
+            endRowIndex: rowIdx + 1,
+            startColumnIndex: 14, // coluna O
+            endColumnIndex: 17,   // até coluna Q (exclusive)
+          },
+          rows: [{
+            values: [
+              { userEnteredValue: { stringValue: dados.data } },
+              { userEnteredValue: { stringValue: dados.cliente } },
+              { userEnteredValue: { stringValue: dados.cep } },
+            ],
+          }],
+          fields: 'userEnteredValue',
+        },
+      });
+      result.updated++;
+    }
+
+    if (requests.length === 0) return result;
+
+    // Enviar batchUpdate em lotes de 500 para evitar timeout
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < requests.length; i += BATCH_SIZE) {
+      const batch = requests.slice(i, i + BATCH_SIZE);
+      const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`;
+      const res = await fetch(batchUrl, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: batch }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        console.error('[SheetsWriter] backfill batchUpdate failed:', err);
+        result.errors += batch.length;
+        result.updated -= batch.length;
+      } else {
+        console.log(`[SheetsWriter] backfill: lote ${Math.floor(i / BATCH_SIZE) + 1} — ${batch.length} linhas atualizadas`);
+      }
+    }
+
+    return result;
+  } catch (err) {
+    console.error('[SheetsWriter] backfillOrderItemsColumns error:', err);
+    result.errors++;
+    return result;
   }
 }

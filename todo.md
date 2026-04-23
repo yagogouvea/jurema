@@ -925,3 +925,13 @@
 - [x] Frontend: aba Treinamento IA exibe todos os dados salvos (personalidade, base de conhecimento, links, keywords)
 - [x] Frontend: aba Horários exibe awayStart, awayEnd e awayMessage salvos
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v123 — Adicionar CEP, Nome do Cliente e Data na aba PEDIDOS_ITENS
+- [x] Analisar estrutura atual da aba PEDIDOS_ITENS (14 colunas A–N)
+- [x] Confirmar que CEP está em pdv_order_services (tipo=CORREIO), nome em pdv_orders.clienteNome, data em pdv_orders.createdAt
+- [x] appendOrderItemsToSheet: colunas O (data DD/MM/YYYY HH:MM), P (cliente), Q (cep) adicionadas
+- [x] pdvOrders.ts: chamada atualizada para passar clienteNome, createdAt e cepCorreio
+- [x] backfillOrderItemsColumns: percorre aba pedidos_itens, identifica linhas com O/P vazias, busca dados no banco e atualiza via batchUpdate (lotes de 500)
+- [x] pdvSync.ts: endpoint backfillPedidosItens (admin only)
+- [x] PdvConfiguracoes.tsx: botão azul "Preencher Dados Retroativos" na aba Sincronização com resultado detalhado
+- [x] 206/206 testes passando, 0 erros TypeScript
