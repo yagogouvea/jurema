@@ -995,3 +995,11 @@
 - [x] Corrigido missing key prop: <option key="all"> adicionado no option estático do select de vendedores no PdvDashboard
 - [x] Corrigido "Incorrect arguments to LIMIT": waRouter.ts usa interpolação direta (LIMIT ${safeLimit}) em vez de placeholder ? para LIMIT/OFFSET
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v132 — Redesenho da edição de produtos PDV
+- [x] Modal de edição dedicado: abre ao clicar no lápis, sem sobreposição na tabela
+- [x] Campos com máscara monetária: Estoque, Preço Atacado, Preço Varejo, Custo
+- [x] Botão Excluir Produto com confirmação dentro do modal
+- [x] Mobile layout simplificado: dados visíveis em linha, botão lápis abre o mesmo modal
+- [x] Desktop layout limpo: apenas colunas de leitura + botão lápis
+- [x] 206/206 testes passando, 0 erros TypeScript

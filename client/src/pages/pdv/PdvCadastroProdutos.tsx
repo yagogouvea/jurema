@@ -60,6 +60,10 @@ interface FormState {
 
 interface EditingRow {
   id: number;
+  codigo: string;
+  time: string;
+  modelo: string;
+  tamanho: string;
   estoque: string;
   precoAtacado: string;
   precoVarejo: string;
@@ -341,10 +345,14 @@ export default function PdvCadastroProdutos() {
   const startEdit = (prod: any) => {
     setEditingRow({
       id: prod.id,
+      codigo: prod.codigo ?? "",
+      time: prod.time ?? "",
+      modelo: prod.modelo ?? "",
+      tamanho: prod.tamanho ?? "",
       estoque: String(prod.estoque ?? 0),
-      precoAtacado: String(prod.precoAtacado ?? 0),
-      precoVarejo: String(prod.precoVarejo ?? 0),
-      custo: String(prod.custo ?? ""),
+      precoAtacado: formatMoney(String(Math.round((prod.precoAtacado ?? 0) * 100))),
+      precoVarejo: formatMoney(String(Math.round((prod.precoVarejo ?? 0) * 100))),
+      custo: formatMoney(String(Math.round((prod.custo ?? 0) * 100))),
     });
   };
 
@@ -354,9 +362,9 @@ export default function PdvCadastroProdutos() {
     updateProduct.mutate({
       id: editingRow.id,
       estoque: parseInt(editingRow.estoque) || 0,
-      precoAtacado: parseFloat(editingRow.precoAtacado) || 0,
-      precoVarejo: parseFloat(editingRow.precoVarejo) || 0,
-      custo: parseFloat(editingRow.custo) || 0,
+      precoAtacado: parseMoney(editingRow.precoAtacado),
+      precoVarejo: parseMoney(editingRow.precoVarejo),
+      custo: parseMoney(editingRow.custo),
       syncSheet: true,
     });
   };
@@ -868,12 +876,10 @@ export default function PdvCadastroProdutos() {
                       return (
                         <div
                           key={prod.id}
-                          className={`border-b border-[#1a1a1a] last:border-0 transition-colors ${
-                            isEditing ? "bg-green-950/10" : "hover:bg-[#1a1a1a]"
-                          }`}
+                          className="border-b border-[#1a1a1a] last:border-0 hover:bg-[#1a1a1a] transition-colors"
                         >
                           {/* Mobile layout */}
-                          <div className="md:hidden px-4 py-3 space-y-2">
+                          <div className="md:hidden px-4 py-3">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-start gap-2 min-w-0 flex-1">
                                 <div className="shrink-0 mt-0.5">
@@ -884,99 +890,25 @@ export default function PdvCadastroProdutos() {
                                     onOpenLightbox={(src, name) => setLightbox({ src, name })}
                                   />
                                 </div>
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex-1">
                                   <p className="text-sm font-medium text-white truncate">
                                     {prod.time} {prod.modelo && `· ${prod.modelo}`}
                                   </p>
-                                  <p className="text-xs text-gray-500 font-mono mt-0.5">{prod.codigo}</p>
+                                  <p className="text-xs text-gray-500 font-mono mt-0.5">{prod.codigo} · Tam: {prod.tamanho}</p>
+                                  <div className="flex items-center gap-3 mt-1 text-xs">
+                                    <span className={`font-medium ${prod.estoque > 0 ? "text-green-400" : "text-red-400"}`}>Estoque: {prod.estoque}</span>
+                                    <span className="text-gray-400">ATC: R$ {Number(prod.precoAtacado).toFixed(2)}</span>
+                                    <span className="text-gray-400">VAR: R$ {Number(prod.precoVarejo).toFixed(2)}</span>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                {!prod.isActive && (
-                                  <Badge variant="outline" className="text-xs border-red-800/50 text-red-400">Inativo</Badge>
-                                )}
-                                {prod.isSofia && (
-                                  <Badge variant="outline" className="text-xs border-purple-800/50 text-purple-400">Sofia</Badge>
-                                )}
-                              </div>
-                            </div>
-                            {isEditing ? (
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                <div>
-                                  <p className="text-xs text-gray-500 mb-1">Estoque</p>
-                                  <Input
-                                    value={editingRow?.estoque ?? ""}
-                                    onChange={e => setEditingRow(prev => prev ? { ...prev, estoque: e.target.value.replace(/\D/g, "") } : null)}
-                                    className="h-8 text-sm bg-[#1a1a1a] border-green-700/50 text-white"
-                                    inputMode="numeric"
-                                  />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500 mb-1">ATC</p>
-                                  <Input
-                                    value={editingRow?.precoAtacado ?? ""}
-                                    onChange={e => setEditingRow(prev => prev ? { ...prev, precoAtacado: e.target.value } : null)}
-                                    className="h-8 text-sm bg-[#1a1a1a] border-green-700/50 text-white"
-                                    inputMode="decimal"
-                                  />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500 mb-1">VAR</p>
-                                  <Input
-                                    value={editingRow?.precoVarejo ?? ""}
-                                    onChange={e => setEditingRow(prev => prev ? { ...prev, precoVarejo: e.target.value } : null)}
-                                    className="h-8 text-sm bg-[#1a1a1a] border-green-700/50 text-white"
-                                    inputMode="decimal"
-                                  />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500 mb-1">Custo</p>
-                                  <Input
-                                    value={editingRow?.custo ?? ""}
-                                    onChange={e => setEditingRow(prev => prev ? { ...prev, custo: e.target.value } : null)}
-                                    className="h-8 text-sm bg-[#1a1a1a] border-yellow-700/50 text-white"
-                                    inputMode="decimal"
-                                    placeholder="0.00"
-                                  />
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-4 text-sm">
-                                <span className="text-gray-400">Tam: <span className="text-white font-mono">{prod.tamanho}</span></span>
-                                <span className="text-gray-400">Estoque: <span className={`font-medium ${prod.estoque > 0 ? "text-green-400" : "text-red-400"}`}>{prod.estoque}</span></span>
-                                <span className="text-gray-400">ATC: <span className="text-white">R$ {Number(prod.precoAtacado).toFixed(2)}</span></span>
-                              </div>
-                            )}
-                            <div className="flex gap-2 justify-end flex-wrap">
-                              {isEditing ? (
-                                <>
-                                  <Button size="sm" variant="outline" onClick={() => setEditingRow(null)} className="h-7 text-xs border-[#2e2e2e] text-gray-400">
-                                    Cancelar
-                                  </Button>
-                                  <Button size="sm" onClick={saveEdit} disabled={isSaving} className="h-7 text-xs bg-green-700 hover:bg-green-600 text-white">
-                                    {isSaving ? <span className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" /> : <><Save className="w-3 h-3 mr-1" />Salvar</>}
-                                  </Button>
-                                </>
-                              ) : confirmDeleteId === prod.id ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs text-red-400">Confirmar?</span>
-                                  <Button size="sm" onClick={() => { setDeletingId(prod.id); deleteProduct.mutate({ id: prod.id }); }} disabled={deletingId === prod.id} className="h-7 text-xs bg-red-800 hover:bg-red-700 text-white">
-                                    {deletingId === prod.id ? <span className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" /> : <><Trash2 className="w-3 h-3 mr-1" />Sim</>}
-                                  </Button>
-                                  <Button size="sm" variant="outline" onClick={() => setConfirmDeleteId(null)} className="h-7 text-xs border-[#2e2e2e] text-gray-400">
-                                    Não
-                                  </Button>
-                                </div>
-                              ) : (
-                                <>
-                                  <Button size="sm" variant="outline" onClick={() => startEdit(prod)} className="h-7 text-xs border-[#2e2e2e] text-gray-400 hover:text-white hover:border-green-700/50">
-                                    <Edit2 className="w-3 h-3 mr-1" /> Editar
-                                  </Button>
-                                  <Button size="sm" variant="outline" onClick={() => setConfirmDeleteId(prod.id)} className="h-7 text-xs border-[#2e2e2e] text-gray-600 hover:text-red-400 hover:border-red-800/50">
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                </>
-                              )}
+                              <button
+                                onClick={() => startEdit(prod)}
+                                className="shrink-0 w-8 h-8 flex items-center justify-center text-gray-500 hover:text-green-400 rounded-lg hover:bg-green-950/20 transition-colors"
+                                title="Editar produto"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
 
@@ -1000,77 +932,13 @@ export default function PdvCadastroProdutos() {
                             </div>
                             <span className="text-xs text-gray-400 font-mono truncate">{prod.codigo}</span>
                             <span className="text-sm text-gray-300 font-mono">{prod.tamanho}</span>
-
-                            {isEditing ? (
-                              <>
-                                <Input
-                                  value={editingRow?.estoque ?? ""}
-                                  onChange={e => setEditingRow(prev => prev ? { ...prev, estoque: e.target.value.replace(/\D/g, "") } : null)}
-                                  className="h-8 text-sm bg-[#1a1a1a] border-green-700/50 text-white px-2"
-                                  inputMode="numeric"
-                                />
-                                <Input
-                                  value={editingRow?.precoAtacado ?? ""}
-                                  onChange={e => setEditingRow(prev => prev ? { ...prev, precoAtacado: e.target.value } : null)}
-                                  className="h-8 text-sm bg-[#1a1a1a] border-green-700/50 text-white px-2"
-                                  inputMode="decimal"
-                                />
-                                <Input
-                                  value={editingRow?.precoVarejo ?? ""}
-                                  onChange={e => setEditingRow(prev => prev ? { ...prev, precoVarejo: e.target.value } : null)}
-                                  className="h-8 text-sm bg-[#1a1a1a] border-green-700/50 text-white px-2"
-                                  inputMode="decimal"
-                                />
-                                <Input
-                                  value={editingRow?.custo ?? ""}
-                                  onChange={e => setEditingRow(prev => prev ? { ...prev, custo: e.target.value } : null)}
-                                  className="h-8 text-sm bg-[#1a1a1a] border-yellow-700/50 text-white px-2"
-                                  inputMode="decimal"
-                                  placeholder="Custo"
-                                />
-                              </>
-                            ) : (
-                              <>
-                                <span className={`text-sm font-medium ${prod.estoque > 0 ? "text-green-400" : "text-red-400"}`}>{prod.estoque}</span>
-                                <span className="text-sm text-gray-300">R$ {Number(prod.precoAtacado).toFixed(2)}</span>
-                                <span className="text-sm text-gray-300">R$ {Number(prod.precoVarejo).toFixed(2)}</span>
-                              </>
-                            )}
-
+                            <span className={`text-sm font-medium ${prod.estoque > 0 ? "text-green-400" : "text-red-400"}`}>{prod.estoque}</span>
+                            <span className="text-sm text-gray-300">R$ {Number(prod.precoAtacado).toFixed(2)}</span>
+                            <span className="text-sm text-gray-300">R$ {Number(prod.precoVarejo).toFixed(2)}</span>
                             <div className="flex gap-1 justify-end">
-                              {isEditing ? (
-                                <>
-                                  <button onClick={() => setEditingRow(null)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-gray-300 rounded-lg hover:bg-[#252525]">
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button onClick={saveEdit} disabled={isSaving} className="w-7 h-7 flex items-center justify-center text-green-400 hover:text-green-300 rounded-lg hover:bg-green-950/30">
-                                    {isSaving ? <span className="w-3 h-3 border border-green-400/30 border-t-green-400 rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                                  </button>
-                                </>
-                              ) : confirmDeleteId === prod.id ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs text-red-400 whitespace-nowrap">Confirmar?</span>
-                                  <button
-                                    onClick={() => { setDeletingId(prod.id); deleteProduct.mutate({ id: prod.id }); }}
-                                    disabled={deletingId === prod.id}
-                                    className="w-7 h-7 flex items-center justify-center text-red-400 hover:text-red-300 rounded-lg hover:bg-red-950/30"
-                                  >
-                                    {deletingId === prod.id ? <span className="w-3 h-3 border border-red-400/30 border-t-red-400 rounded-full animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                                  </button>
-                                  <button onClick={() => setConfirmDeleteId(null)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-gray-300 rounded-lg hover:bg-[#252525]">
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <>
-                                  <button onClick={() => startEdit(prod)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-green-400 rounded-lg hover:bg-green-950/20 transition-colors">
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button onClick={() => setConfirmDeleteId(prod.id)} className="w-7 h-7 flex items-center justify-center text-gray-600 hover:text-red-400 rounded-lg hover:bg-red-950/20 transition-colors">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                              )}
+                              <button onClick={() => startEdit(prod)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-green-400 rounded-lg hover:bg-green-950/20 transition-colors" title="Editar produto">
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1116,6 +984,132 @@ export default function PdvCadastroProdutos() {
 
         </div>
       </div>
+
+      {/* ─── Modal de Edição de Produto ─────────────────────────────────────── */}
+      {editingRow && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#141414] border border-[#252525] rounded-2xl w-full max-w-sm shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e1e1e]">
+              <div className="min-w-0">
+                <h3 className="text-white font-semibold text-base truncate">
+                  {editingRow.time}{editingRow.modelo ? ` · ${editingRow.modelo}` : ""}
+                </h3>
+                <p className="text-xs text-gray-500 font-mono mt-0.5">
+                  {editingRow.codigo} &middot; Tam: {editingRow.tamanho}
+                </p>
+              </div>
+              <button
+                onClick={() => setEditingRow(null)}
+                className="shrink-0 w-8 h-8 flex items-center justify-center text-gray-500 hover:text-white rounded-lg hover:bg-[#252525] transition-colors ml-2"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Campos */}
+            <div className="px-5 py-4 space-y-3">
+              {/* Estoque */}
+              <div>
+                <Label className="text-gray-400 text-xs font-medium uppercase tracking-wide">Estoque</Label>
+                <Input
+                  value={editingRow.estoque}
+                  onChange={e => setEditingRow(prev => prev ? { ...prev, estoque: e.target.value.replace(/\D/g, "") } : null)}
+                  className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white focus:border-green-600 h-10 text-base"
+                  inputMode="numeric"
+                  placeholder="0"
+                  autoFocus
+                />
+              </div>
+
+              {/* Preços */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-gray-400 text-xs font-medium uppercase tracking-wide">Preço Atacado</Label>
+                  <Input
+                    value={editingRow.precoAtacado}
+                    onChange={e => setEditingRow(prev => prev ? { ...prev, precoAtacado: formatMoney(e.target.value) } : null)}
+                    className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white focus:border-green-600 h-10 text-base"
+                    inputMode="numeric"
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-400 text-xs font-medium uppercase tracking-wide">Preço Varejo</Label>
+                  <Input
+                    value={editingRow.precoVarejo}
+                    onChange={e => setEditingRow(prev => prev ? { ...prev, precoVarejo: formatMoney(e.target.value) } : null)}
+                    className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white focus:border-green-600 h-10 text-base"
+                    inputMode="numeric"
+                    placeholder="0,00"
+                  />
+                </div>
+              </div>
+
+              {/* Custo */}
+              <div>
+                <Label className="text-gray-400 text-xs font-medium uppercase tracking-wide">Custo</Label>
+                <Input
+                  value={editingRow.custo}
+                  onChange={e => setEditingRow(prev => prev ? { ...prev, custo: formatMoney(e.target.value) } : null)}
+                  className="mt-1.5 bg-[#1a1a1a] border-yellow-900/50 text-white focus:border-yellow-600 h-10 text-base"
+                  inputMode="numeric"
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+
+            {/* Ações */}
+            <div className="px-5 pb-5 space-y-2">
+              {/* Salvar */}
+              <Button
+                onClick={saveEdit}
+                disabled={savingId === editingRow.id}
+                className="w-full bg-green-700 hover:bg-green-600 text-white h-11 font-semibold"
+              >
+                {savingId === editingRow.id ? (
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <><Save className="w-4 h-4 mr-2" />Salvar Alterações</>
+                )}
+              </Button>
+
+              {/* Excluir */}
+              {confirmDeleteId === editingRow.id ? (
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => { setDeletingId(editingRow.id); deleteProduct.mutate({ id: editingRow.id }); }}
+                    disabled={deletingId === editingRow.id}
+                    className="flex-1 bg-red-800 hover:bg-red-700 text-white h-10 font-semibold"
+                  >
+                    {deletingId === editingRow.id ? (
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <><Trash2 className="w-4 h-4 mr-2" />Confirmar Exclusão</>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="px-4 border-[#2e2e2e] text-gray-400 hover:bg-[#1a1a1a] h-10"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() => setConfirmDeleteId(editingRow.id)}
+                  className="w-full border-red-900/50 text-red-500 hover:bg-red-950/30 hover:text-red-400 hover:border-red-800/50 h-10"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Excluir Produto
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox de foto */}
       {lightbox && (
