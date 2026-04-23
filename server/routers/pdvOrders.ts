@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
-import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet, appendToLucroProdutos, type LucroItem } from './pdvSheetsWriter';
+import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet, appendCashFlowToSheet, appendToLucroProdutos, type LucroItem } from './pdvSheetsWriter';
 import { autoSyncProductToSite } from './pdvSiteSync';
 
 async function getDb() {
@@ -363,6 +363,38 @@ export const pdvOrdersRouter = router({
               });
             }
 
+            // ── Suprimento automático para pagamentos em DINHEIRO ──
+            const dinheiroPagamentos = input.payments.filter((p: any) => p.formaPagamento === 'DINHEIRO');
+            if (dinheiroPagamentos.length > 0) {
+              const totalDinheiro = dinheiroPagamentos.reduce((s: number, p: any) => s + (parseFloat(p.valor) || 0), 0);
+              if (totalDinheiro > 0) {
+                const dbCash = await getDb();
+                if (dbCash) {
+                  try {
+                    const descricaoSuprimento = `Venda ${pedidoId}${input.clienteNome ? ' - ' + input.clienteNome : ''}`;
+                    const [cashResult] = await dbCash.execute(
+                      'INSERT INTO pdv_cash_flow (tipo, descricao, valor, usuario) VALUES (?, ?, ?, ?)',
+                      ['SUPRIMENTO', descricaoSuprimento, totalDinheiro, seller.name]
+                    ) as any;
+                    const newCashId = cashResult.insertId;
+                    await dbCash.end();
+                    // Sync com planilha FLUXO_CAIXA (fire-and-forget)
+                    appendCashFlowToSheet({
+                      id: newCashId,
+                      tipo: 'SUPRIMENTO',
+                      descricao: descricaoSuprimento,
+                      valor: totalDinheiro,
+                      usuario: seller.name,
+                      createdAt: new Date(),
+                    }).catch((err: any) => console.error('[PDV Orders] Erro ao sincronizar suprimento dinheiro:', err));
+                    console.log(`[PDV Orders] Suprimento automático R$${totalDinheiro.toFixed(2)} criado para ${pedidoId}`);
+                  } catch (cashErr) {
+                    await dbCash.end().catch(() => {});
+                    console.error('[PDV Orders] Erro ao criar suprimento automático:', cashErr);
+                  }
+                }
+              }
+            }
             // ── ABA Lucro_produtos — somente itens NÃO-Sofia ──
             if (normalItems.length > 0) {
               const lucroItems: LucroItem[] = normalItems.map(item => ({

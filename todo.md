@@ -935,3 +935,11 @@
 - [x] pdvSync.ts: endpoint backfillPedidosItens (admin only)
 - [x] PdvConfiguracoes.tsx: botão azul "Preencher Dados Retroativos" na aba Sincronização com resultado detalhado
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v125 — Pagamento em dinheiro como suprimento automático
+- [x] Analisar estrutura de suprimentos (banco + planilha)
+- [x] Confirmar que suprimento manual (admin) e automático (pedido) são independentes (sem duplicidade)
+- [x] pdvOrders.ts: ao fechar pedido com DINHEIRO, cria suprimento no pdv_cash_flow com descrição 'Venda PED-XXXXX - {cliente}'
+- [x] Sync automático com aba FLUXO_CAIXA da planilha (fire-and-forget)
+- [x] Suporte a pagamentos mistos: só o valor em DINHEIRO vira suprimento
+- [x] 206/206 testes passando, 0 erros TypeScript
