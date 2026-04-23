@@ -553,7 +553,7 @@ export default function PdvDashboard() {
                 onChange={e => setCaixSellerId(e.target.value ? parseInt(e.target.value) : undefined)}
                 className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-yellow-600"
               >
-                <option value="">Todos os vendedores</option>
+                <option key="all" value="">Todos os vendedores</option>
                 {bySeller.map((s: any) => (
                   <option key={s.sellerId} value={s.sellerId}>{s.sellerName}</option>
                 ))}

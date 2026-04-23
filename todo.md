@@ -990,3 +990,8 @@
 - [x] Frontend: aviso vermelho "Já cadastrado" ou verde "Disponível" por linha de tamanho
 - [x] Frontend: bloqueia envio se houver códigos duplicados não resolvidos
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v131 — Correção de bugs no PdvDashboard
+- [x] Corrigido missing key prop: <option key="all"> adicionado no option estático do select de vendedores no PdvDashboard
+- [x] Corrigido "Incorrect arguments to LIMIT": waRouter.ts usa interpolação direta (LIMIT ${safeLimit}) em vez de placeholder ? para LIMIT/OFFSET
+- [x] 206/206 testes passando, 0 erros TypeScript

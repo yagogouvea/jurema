@@ -131,8 +131,9 @@ export const waRouter = router({
           sql += " AND (c.contactName LIKE ? OR c.contactPhone LIKE ?)";
           params.push(`%${input.search}%`, `%${input.search}%`);
         }
-        sql += " ORDER BY c.lastMessageAt DESC LIMIT ? OFFSET ?";
-        params.push(input.limit, input.offset);
+        const safeLimit = Math.max(1, Math.min(200, Math.floor(input.limit)));
+        const safeOffset = Math.max(0, Math.floor(input.offset ?? 0));
+        sql += ` ORDER BY c.lastMessageAt DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
         const [rows] = await db.execute(sql, params);
         return rows as any[];
       } finally { await db.end(); }
@@ -273,8 +274,8 @@ export const waRouter = router({
         let sql = "SELECT * FROM wa_messages WHERE conversationId=?";
         const params: any[] = [input.conversationId];
         if (input.before) { sql += " AND id<?"; params.push(input.before); }
-        sql += " ORDER BY timestamp DESC LIMIT ?";
-        params.push(input.limit);
+        const safeLimit2 = Math.max(1, Math.min(200, Math.floor(input.limit)));
+        sql += ` ORDER BY timestamp DESC LIMIT ${safeLimit2}`;
         const [rows] = await db.execute(sql, params);
         return (rows as any[]).reverse(); // retorna em ordem cronológica
       } finally { await db.end(); }
