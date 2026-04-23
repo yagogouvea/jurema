@@ -409,6 +409,10 @@ export const pdvProductsRouter = router({
   updateProduct: publicProcedure
     .input(z.object({
       id: z.number(),
+      linha: z.enum(["TAILANDESA", "NACIONAL", "TORCEDOR", "PECA"]).optional(),
+      modelo: z.enum(["TORCEDOR", "JOGADOR", "TAILANDESA", "VENDEDOR"]).optional(),
+      time: z.string().optional(),
+      tamanho: z.string().optional(),
       estoque: z.number().int().min(0).optional(),
       precoAtacado: z.number().min(0).optional(),
       precoVarejo: z.number().min(0).optional(),
@@ -427,6 +431,10 @@ export const pdvProductsRouter = router({
       const sets: string[] = [];
       const params: any[] = [];
 
+      if (fields.linha !== undefined) { sets.push("linha = ?"); params.push(fields.linha); }
+      if (fields.modelo !== undefined) { sets.push("modelo = ?"); params.push(fields.modelo); }
+      if (fields.time !== undefined) { sets.push("time = ?"); params.push(fields.time); }
+      if (fields.tamanho !== undefined) { sets.push("tamanho = ?"); params.push(fields.tamanho); }
       if (fields.estoque !== undefined) { sets.push("estoque = ?"); params.push(fields.estoque); }
       if (fields.precoAtacado !== undefined) { sets.push("precoAtacado = ?"); params.push(fields.precoAtacado); }
       if (fields.precoVarejo !== undefined) { sets.push("precoVarejo = ?"); params.push(fields.precoVarejo); }

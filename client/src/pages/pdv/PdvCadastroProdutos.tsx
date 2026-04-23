@@ -61,6 +61,7 @@ interface FormState {
 interface EditingRow {
   id: number;
   codigo: string;
+  linha: string;
   time: string;
   modelo: string;
   tamanho: string;
@@ -145,6 +146,8 @@ export default function PdvCadastroProdutos() {
   // ── Estado da listagem ──
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [filterLinha, setFilterLinha] = useState("");
+  const [filterTime, setFilterTime] = useState("");
   const [page, setPage] = useState(1);
   const [editingRow, setEditingRow] = useState<EditingRow | null>(null);
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -158,12 +161,19 @@ export default function PdvCadastroProdutos() {
     setForm(prev => ({ ...prev, [k]: v }));
   }, []);
 
-  // ─── Queries ──────────────────────────────────────────────────────────────────
+  // ─── Queries ─────────────────────────────────────────────────────────────────
   const productsQuery = trpc.pdvProducts.list.useQuery(
-    { search: search || undefined, page, limit: PAGE_SIZE },
+    { search: search || undefined, linha: filterLinha || undefined, time: filterTime || undefined, page, limit: PAGE_SIZE },
     { enabled: activeTab === "listar" }
   );
 
+  const linhasQuery = trpc.pdvProducts.getLinhas.useQuery(undefined, { enabled: activeTab === "listar" });
+  const timesQuery = trpc.pdvProducts.getTimes.useQuery(
+    { linha: filterLinha || undefined },
+    { enabled: activeTab === "listar" }
+  );
+  const linhasDisponiveis: string[] = (linhasQuery.data as any) ?? [];
+  const timesDisponiveis: string[] = (timesQuery.data as any) ?? [];
   const utils = trpc.useUtils();
 
   // ─── Mutations ────────────────────────────────────────────────────────────────
@@ -341,11 +351,12 @@ export default function PdvCadastroProdutos() {
     });
   };
 
-  // ─── Edição inline ────────────────────────────────────────────────────────────
+  // ─── Edição modal ─────────────────────────────────────────────────────────────
   const startEdit = (prod: any) => {
     setEditingRow({
       id: prod.id,
       codigo: prod.codigo ?? "",
+      linha: prod.linha ?? "",
       time: prod.time ?? "",
       modelo: prod.modelo ?? "",
       tamanho: prod.tamanho ?? "",
@@ -361,6 +372,9 @@ export default function PdvCadastroProdutos() {
     setSavingId(editingRow.id);
     updateProduct.mutate({
       id: editingRow.id,
+      linha: editingRow.linha as any,
+      modelo: editingRow.modelo as any,
+      time: editingRow.time || undefined,
       estoque: parseInt(editingRow.estoque) || 0,
       precoAtacado: parseMoney(editingRow.precoAtacado),
       precoVarejo: parseMoney(editingRow.precoVarejo),
@@ -810,35 +824,61 @@ export default function PdvCadastroProdutos() {
           ════════════════════════════════════════════════════════════════ */}
           {activeTab === "listar" && (
             <>
-              {/* Barra de busca */}
-              <div className="flex gap-2 mb-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                  <Input
-                    value={searchInput}
-                    onChange={e => setSearchInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === "Enter") { setSearch(searchInput); setPage(1); }
-                    }}
-                    placeholder="Buscar por código, time, modelo..."
-                    className="pl-9 bg-[#141414] border-[#252525] text-white placeholder:text-gray-600 focus:border-green-600"
-                  />
-                </div>
-                <Button
-                  onClick={() => { setSearch(searchInput); setPage(1); }}
-                  className="bg-green-700 hover:bg-green-600 text-white px-4"
-                >
-                  Buscar
-                </Button>
-                {search && (
+              {/* Barra de busca + filtros */}
+              <div className="flex flex-col gap-2 mb-4">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                    <Input
+                      value={searchInput}
+                      onChange={e => setSearchInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") { setSearch(searchInput); setPage(1); }
+                      }}
+                      placeholder="Buscar por código, time, modelo..."
+                      className="pl-9 bg-[#141414] border-[#252525] text-white placeholder:text-gray-600 focus:border-green-600"
+                    />
+                  </div>
                   <Button
-                    variant="outline"
-                    onClick={() => { setSearch(""); setSearchInput(""); setPage(1); }}
-                    className="border-[#252525] text-gray-400 hover:bg-[#1a1a1a] px-3"
+                    onClick={() => { setSearch(searchInput); setPage(1); }}
+                    className="bg-green-700 hover:bg-green-600 text-white px-4"
                   >
-                    <X className="w-4 h-4" />
+                    Buscar
                   </Button>
-                )}
+                  {(search || filterLinha || filterTime) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setSearch(""); setSearchInput(""); setFilterLinha(""); setFilterTime(""); setPage(1); }}
+                      className="border-[#252525] text-gray-400 hover:bg-[#1a1a1a] px-3"
+                      title="Limpar todos os filtros"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+                {/* Filtros por Linha e Time */}
+                <div className="flex gap-2">
+                  <select
+                    value={filterLinha}
+                    onChange={e => { setFilterLinha(e.target.value); setFilterTime(""); setPage(1); }}
+                    className="flex-1 bg-[#141414] border border-[#252525] text-sm text-white rounded-lg px-3 py-2 focus:outline-none focus:border-green-600"
+                  >
+                    <option key="all-linhas" value="">Todas as linhas</option>
+                    {linhasDisponiveis.map(l => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={filterTime}
+                    onChange={e => { setFilterTime(e.target.value); setPage(1); }}
+                    className="flex-1 bg-[#141414] border border-[#252525] text-sm text-white rounded-lg px-3 py-2 focus:outline-none focus:border-green-600"
+                  >
+                    <option key="all-times" value="">Todos os times</option>
+                    {timesDisponiveis.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Tabela */}
@@ -1009,6 +1049,49 @@ export default function PdvCadastroProdutos() {
 
             {/* Campos */}
             <div className="px-5 py-4 space-y-3">
+              {/* Linha + Modelo */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-gray-400 text-xs font-medium uppercase tracking-wide">Linha</Label>
+                  <select
+                    value={editingRow.linha}
+                    onChange={e => setEditingRow(prev => prev ? { ...prev, linha: e.target.value } : null)}
+                    className="mt-1.5 w-full bg-[#1a1a1a] border border-[#2e2e2e] text-white rounded-lg px-3 h-10 text-sm focus:outline-none focus:border-green-600"
+                  >
+                    <option value="">-- Linha --</option>
+                    <option value="TAILANDESA">TAILANDESA</option>
+                    <option value="NACIONAL">NACIONAL</option>
+                    <option value="TORCEDOR">TORCEDOR</option>
+                    <option value="PECA">PECA</option>
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-gray-400 text-xs font-medium uppercase tracking-wide">Modelo</Label>
+                  <select
+                    value={editingRow.modelo}
+                    onChange={e => setEditingRow(prev => prev ? { ...prev, modelo: e.target.value } : null)}
+                    className="mt-1.5 w-full bg-[#1a1a1a] border border-[#2e2e2e] text-white rounded-lg px-3 h-10 text-sm focus:outline-none focus:border-green-600"
+                  >
+                    <option value="">-- Modelo --</option>
+                    <option value="TORCEDOR">TORCEDOR</option>
+                    <option value="JOGADOR">JOGADOR</option>
+                    <option value="TAILANDESA">TAILANDESA</option>
+                    <option value="VENDEDOR">VENDEDOR</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Time */}
+              <div>
+                <Label className="text-gray-400 text-xs font-medium uppercase tracking-wide">Time</Label>
+                <Input
+                  value={editingRow.time}
+                  onChange={e => setEditingRow(prev => prev ? { ...prev, time: e.target.value.toUpperCase() } : null)}
+                  className="mt-1.5 bg-[#1a1a1a] border-[#2e2e2e] text-white focus:border-green-600 h-10 text-base"
+                  placeholder="Ex: BRASIL, FLAMENGO..."
+                />
+              </div>
+
               {/* Estoque */}
               <div>
                 <Label className="text-gray-400 text-xs font-medium uppercase tracking-wide">Estoque</Label>

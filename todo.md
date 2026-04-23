@@ -1003,3 +1003,10 @@
 - [x] Mobile layout simplificado: dados visíveis em linha, botão lápis abre o mesmo modal
 - [x] Desktop layout limpo: apenas colunas de leitura + botão lápis
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v133 — Modal de edição completo + filtros na listagem de produtos
+- [x] Backend: updateProduct aceita campos linha, modelo, time, tamanho
+- [x] Modal: campos Linha (select), Modelo (select), Time (input) adicionados acima do Estoque
+- [x] Listagem: dropdowns "Todas as linhas" e "Todos os times" (dependente da linha) na barra de filtros
+- [x] Filtros populados dinamicamente via getLinhas/getTimes; limpar tudo com botão X
+- [x] 206/206 testes passando, 0 erros TypeScript
