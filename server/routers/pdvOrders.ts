@@ -102,8 +102,9 @@ export const pdvOrdersRouter = router({
         
         // Determinar isSofia do pedido: se QUALQUER item for Sofia, o pedido tem Sofia
         // Mas agora o controle é por item, então isSofia no pedido = true se TODOS os itens forem Sofia
+        // IMPORTANTE: [].every() retorna true em JS, então pedidos sem itens (só serviços) NÃO devem ser Sofia
         const hasSofiaItems = input.items.some(item => item.isSofia);
-        const allSofia = input.items.every(item => item.isSofia);
+        const allSofia = input.items.length > 0 && input.items.every(item => item.isSofia);
         
         // Insert order — isSofia no pedido = true apenas se TODOS os itens forem Sofia
         await db.execute(
@@ -447,7 +448,15 @@ export const pdvOrdersRouter = router({
       try {
         // Incluir pedidos mistos (que têm itens Sofia E não-Sofia) no histórico geral
         // Excluir apenas pedidos 100% Sofia (isSofia = 1 = todos os itens são Sofia)
-        let query = "SELECT * FROM pdv_orders WHERE isSofia = 0";
+        // Mas INCLUIR pedidos só com serviços (sem itens de produto) mesmo que isSofia=1 (bug legado)
+        let query = `SELECT o.* FROM pdv_orders o
+          WHERE (
+            o.isSofia = 0
+            OR EXISTS (
+              SELECT 1 FROM pdv_order_services os WHERE os.pedidoId = o.pedidoId
+              AND NOT EXISTS (SELECT 1 FROM pdv_order_items oi WHERE oi.pedidoId = o.pedidoId)
+            )
+          )`;
         const params: any[] = [];
         
         // Non-admin sellers can only see their own orders

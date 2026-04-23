@@ -962,3 +962,11 @@
 - [x] pdvSync.ts: endpoint backfillSuprimentosDinheiro (admin only) com detecção de duplicatas
 - [x] PdvConfiguracoes.tsx: seção verde "Gerar Suprimentos Retroativos (Dinheiro)" na aba Sincronização
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v128 — Histórico: incluir pedidos apenas com serviços
+- [x] Diagnóstico: bug em [].every() → retorna true → pedidos só com serviços marcados como isSofia=1
+- [x] Backend pdvOrders.ts: correção do cálculo allSofia (input.items.length > 0 && ...)
+- [x] Backend pdvOrders.ts: query do histórico agora inclui pedidos só com serviços (OR EXISTS subquery)
+- [x] Banco: 6 pedidos existentes corrigidos (isSofia=0 via UPDATE direto)
+- [x] Frontend: modal de detalhes já exibia serviços corretamente (nenhuma alteração necessária)
+- [x] 206/206 testes passando, 0 erros TypeScript
