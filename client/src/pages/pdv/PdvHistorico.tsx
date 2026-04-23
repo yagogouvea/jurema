@@ -5,7 +5,7 @@ import PdvLayout from "./PdvLayout";
 import { toast } from "sonner";
 import {
   Search, ChevronDown, ChevronUp, X, Eye, Calendar,
-  ShoppingBag, DollarSign, User, Package, CreditCard
+  ShoppingBag, DollarSign, User, Package, CreditCard, Wrench
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -190,13 +190,20 @@ export default function PdvHistorico() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          order.regime === "ATACADO"
-                            ? "bg-blue-950/50 text-blue-400"
-                            : "bg-orange-950/50 text-orange-400"
-                        }`}>
-                          {order.regime}
-                        </span>
+                        {order.isSomenteServico ? (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-950/50 text-purple-400">
+                            <Wrench className="w-3 h-3" />
+                            Serviço
+                          </span>
+                        ) : (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            order.regime === "ATACADO"
+                              ? "bg-blue-950/50 text-blue-400"
+                              : "bg-orange-950/50 text-orange-400"
+                          }`}>
+                            {order.regime}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right text-white font-semibold text-sm">
                         {formatCurrency(order.totalAplicado)}

@@ -970,3 +970,9 @@
 - [x] Banco: 6 pedidos existentes corrigidos (isSofia=0 via UPDATE direto)
 - [x] Frontend: modal de detalhes já exibia serviços corretamente (nenhuma alteração necessária)
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v129 — Badge "Serviço" no histórico + cancelamento para pedidos de serviço
+- [x] Backend: query de listagem refatorada com whereClause separado + campo isSomenteServico via CASE WHEN
+- [x] Frontend: badge roxo com ícone Wrench "Serviço" na coluna Regime da tabela do histórico
+- [x] Cancelamento: botão já disponível para todos os pedidos não cancelados (admin only) — pedidos de serviço agora aparecem no histórico
+- [x] 206/206 testes passando, 0 erros TypeScript

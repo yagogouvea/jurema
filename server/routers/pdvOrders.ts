@@ -449,8 +449,7 @@ export const pdvOrdersRouter = router({
         // Incluir pedidos mistos (que têm itens Sofia E não-Sofia) no histórico geral
         // Excluir apenas pedidos 100% Sofia (isSofia = 1 = todos os itens são Sofia)
         // Mas INCLUIR pedidos só com serviços (sem itens de produto) mesmo que isSofia=1 (bug legado)
-        let query = `SELECT o.* FROM pdv_orders o
-          WHERE (
+        let whereClause = `WHERE (
             o.isSofia = 0
             OR EXISTS (
               SELECT 1 FROM pdv_order_services os WHERE os.pedidoId = o.pedidoId
@@ -461,33 +460,38 @@ export const pdvOrdersRouter = router({
         
         // Non-admin sellers can only see their own orders
         if (seller.role !== "admin") {
-          query += " AND sellerId = ?";
+          whereClause += " AND o.sellerId = ?";
           params.push(seller.sellerId);
         } else if (input.sellerId) {
-          query += " AND sellerId = ?";
+          whereClause += " AND o.sellerId = ?";
           params.push(input.sellerId);
         }
         
-        if (input.canal) { query += " AND canal = ?"; params.push(input.canal); }
-        if (input.status) { query += " AND status = ?"; params.push(input.status); }
-        if (input.regime) { query += " AND regime = ?"; params.push(input.regime); }
-        if (input.startDate) { query += " AND DATE(createdAt) >= ?"; params.push(input.startDate); }
-        if (input.endDate) { query += " AND DATE(createdAt) <= ?"; params.push(input.endDate); }
+        if (input.canal) { whereClause += " AND o.canal = ?"; params.push(input.canal); }
+        if (input.status) { whereClause += " AND o.status = ?"; params.push(input.status); }
+        if (input.regime) { whereClause += " AND o.regime = ?"; params.push(input.regime); }
+        if (input.startDate) { whereClause += " AND DATE(o.createdAt) >= ?"; params.push(input.startDate); }
+        if (input.endDate) { whereClause += " AND DATE(o.createdAt) <= ?"; params.push(input.endDate); }
         if (input.search) {
-          query += " AND (pedidoId LIKE ? OR clienteNome LIKE ? OR sellerName LIKE ?)";
+          whereClause += " AND (o.pedidoId LIKE ? OR o.clienteNome LIKE ? OR o.sellerName LIKE ?)";
           const s = `%${input.search}%`;
           params.push(s, s, s);
         }
         
-        query += " ORDER BY createdAt DESC";
-        
-        // Count
-        const countQuery = query.replace("SELECT *", "SELECT COUNT(*) as total");
+        // Count query (sem subquery de isSomenteServico para performance)
+        const countQuery = `SELECT COUNT(*) as total FROM pdv_orders o ${whereClause}`;
         const [countRows] = await db.execute(countQuery, params);
         const total = (countRows as any[])[0].total;
         
         const offset = (input.page - 1) * input.limit;
-        query += ` LIMIT ${input.limit} OFFSET ${offset}`;
+        const query = `SELECT o.*,
+          (CASE WHEN NOT EXISTS (SELECT 1 FROM pdv_order_items oi WHERE oi.pedidoId = o.pedidoId)
+                 AND EXISTS (SELECT 1 FROM pdv_order_services os2 WHERE os2.pedidoId = o.pedidoId)
+           THEN 1 ELSE 0 END) as isSomenteServico
+          FROM pdv_orders o
+          ${whereClause}
+          ORDER BY o.createdAt DESC
+          LIMIT ${input.limit} OFFSET ${offset}`;
         
         const [rows] = await db.execute(query, params);
         await db.end();
