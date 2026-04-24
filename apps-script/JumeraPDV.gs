@@ -1,16 +1,16 @@
 /**
  * ============================================================
  *  JUMERA SPORT PDV — Google Apps Script
- *  Versão: 3.0 (debounce + validação + reconciliação de exclusões)
+ *  Versão: 4.0 (geração automática de código + debounce + reconciliação)
  * ============================================================
  *
- *  COMO INSTALAR:
+ *  COMO INSTALAR / ATUALIZAR:
  *  1. Abra a planilha no Google Sheets
  *  2. Menu: Extensões → Apps Script
  *  3. Cole todo este código substituindo o conteúdo existente
  *  4. Salve (Ctrl+S)
  *  5. Menu lateral: Acionadores (ícone de relógio)
- *  6. Adicione DOIS acionadores:
+ *  6. Verifique se existem DOIS acionadores (ou crie-os):
  *
  *     Acionador 1 — Edição:
  *     - Função: onSheetEdit
@@ -22,29 +22,98 @@
  *
  *  7. Autorize as permissões quando solicitado
  *
- *  CONFIGURAÇÃO:
- *  Altere as constantes abaixo conforme o ambiente.
+ *  NOVIDADE v4.0:
+ *  - Quando a coluna CODIGO estiver vazia, o código é gerado automaticamente
+ *    no formato {LINHA}-{MODELO}-{TIME}-{DESC}-{TAM} e gravado na célula A.
  * ============================================================
  */
 
 // ─── CONFIGURAÇÃO ────────────────────────────────────────────────────────────
 
-var WEBHOOK_URL           = 'https://juremasport.wzsolutions.com.br/api/trpc/pdvSync.webhookNewProduct';
-var WEBHOOK_RECONCILE_URL = 'https://juremasport.wzsolutions.com.br/api/trpc/pdvSync.webhookReconcile';
+var WEBHOOK_URL           = 'https://juremasports2.com.br/api/trpc/pdvSync.webhookNewProduct';
+var WEBHOOK_RECONCILE_URL = 'https://juremasports2.com.br/api/trpc/pdvSync.webhookReconcile';
 var WEBHOOK_SECRET        = 'jurema-pdv-2024';
 var SHEET_NAME            = 'PRODUTOS';
 
 /**
  * Colunas obrigatórias para considerar a linha "completa":
- * [0]CODIGO [1]LINHA [2]MODELO [3]TIME [4]DESCRIÇÃO [5]TAM [6]TIPO [7]QTD [8]ATC [9]VAR [10]ATIVO
+ * [0]CODIGO (opcional — gerado automaticamente) [1]LINHA [2]MODELO [3]TIME
+ * [4]DESCRIÇÃO [5]TAM [6]TIPO [7]QTD [8]ATC [9]VAR [10]ATIVO
+ * CODIGO não é mais obrigatório — será gerado se vazio.
  */
-var REQUIRED_COLS = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10];
+var REQUIRED_COLS = [1, 2, 3, 5, 6, 7, 8, 9, 10];
 var COL_NAMES = {
   0: 'CODIGO', 1: 'LINHA', 2: 'MODELO', 3: 'TIME', 4: 'DESCRIÇÃO',
   5: 'TAM', 6: 'TIPO', 7: 'QTD', 8: 'ATC', 9: 'VAR', 10: 'ATIVO'
 };
 
 var DEBOUNCE_SECONDS = 30;
+
+// ─── GERAÇÃO AUTOMÁTICA DE CÓDIGO ────────────────────────────────────────────
+
+var LINHA_MAP  = { 'TAILANDESA': 'CA', 'NACIONAL': 'NA', 'TORCEDOR': 'TO', 'PECA': 'PE' };
+var MODELO_MAP = { 'JOGADOR': 'JG', 'TORCEDOR': 'TO', 'TAILANDESA': 'CA', 'DRYFIT': 'DR', 'VENDEDOR': 'VE' };
+var STOPWORDS  = ['COM','DE','DA','DO','NO','NA','E','A','O','EM','AO','AS','OS','UM','UMA'];
+var DESC_OVERRIDE = {
+  'FEMI-PRETA COM GOLA AMARELA RIO': 'FEMI-PRET-GOLA-AMAR',
+  'FEMI-PRETA GOLA AMARELA RIO':     'FEMI-PRET-GOLA-RIO',
+  'FEMI-VERDE GOLA AMARELA':         'FEMI-VERD-GOLA',
+  'FEMI-VERDE GOLA AMARELA RIO':     'FEMI-VERD-GOLA-RIO',
+  'VERMELHO COM LISTRA PRETA':       'VERM-LIST-PRET',
+  'VERMELHA COM LISTRA PRETA NO OMBRO': 'VERM-LIST-OMBR'
+};
+
+function removeAcentos(s) {
+  var map = {'À':'A','Á':'A','Â':'A','Ã':'A','Ä':'A','È':'E','É':'E','Ê':'E','Ë':'E',
+             'Ì':'I','Í':'I','Î':'I','Ï':'I','Ò':'O','Ó':'O','Ô':'O','Õ':'O','Ö':'O',
+             'Ù':'U','Ú':'U','Û':'U','Ü':'U','Ç':'C','Ñ':'N','à':'a','á':'a','â':'a',
+             'ã':'a','ä':'a','è':'e','é':'e','ê':'e','ë':'e','ì':'i','í':'i','î':'i',
+             'ï':'i','ò':'o','ó':'o','ô':'o','õ':'o','ö':'o','ù':'u','ú':'u','û':'u',
+             'ü':'u','ç':'c','ñ':'n'};
+  return s.split('').map(function(c) { return map[c] || c; }).join('');
+}
+
+function slugifyCode(s) {
+  if (!s) return '';
+  var r = removeAcentos(s.trim().toUpperCase());
+  r = r.replace(/[^A-Z0-9 \-]/g, '');
+  r = r.replace(/\s+/g, '-');
+  r = r.replace(/-+/g, '-');
+  return r.replace(/^-|-$/g, '');
+}
+
+function abreviarCampo(s, mapa, n) {
+  if (!s) return '';
+  var chave = s.trim().toUpperCase();
+  if (mapa[chave]) return mapa[chave];
+  return slugifyCode(chave).substring(0, n);
+}
+
+function palavrasSig(desc) {
+  var s = removeAcentos(desc.toUpperCase());
+  var palavras = s.match(/[A-Z0-9]+/g) || [];
+  var sig = palavras.filter(function(p) { return STOPWORDS.indexOf(p) === -1; });
+  return sig.length > 0 ? sig : palavras;
+}
+
+function abreviarDesc(desc, n) {
+  if (!desc) return '';
+  n = n || 2;
+  var chave = removeAcentos(desc.trim().toUpperCase());
+  if (DESC_OVERRIDE[chave]) return DESC_OVERRIDE[chave];
+  var sig = palavrasSig(desc);
+  return sig.slice(0, n).map(function(p) { return p.substring(0, 4); }).join('-');
+}
+
+function gerarCodigo(linha, modelo, time, desc, tamanho) {
+  var partes = [];
+  var l = abreviarCampo(linha, LINHA_MAP, 2);   if (l) partes.push(l);
+  var m = abreviarCampo(modelo, MODELO_MAP, 2); if (m) partes.push(m);
+  var t = abreviarCampo(time, {}, 3);           if (t) partes.push(t);
+  var d = abreviarDesc(desc, 2);                if (d) partes.push(d);
+  var tam = slugifyCode(tamanho);               if (tam) partes.push(tam);
+  return partes.join('-');
+}
 
 // ─── GATILHO PRINCIPAL (EDIÇÃO) ─────────────────────────────────────────────
 
@@ -128,18 +197,10 @@ function processRow(rowNumber) {
     var sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) return;
 
-    var range = sheet.getRange(rowNumber, 1, 1, 15);
+    var range = sheet.getRange(rowNumber, 1, 1, 16);
     var values = range.getValues()[0];
 
-    // Se a linha está vazia (foi deletada), disparar reconciliação imediata
-    var codigo = (values[0] || '').toString().trim();
-    if (!codigo) {
-      Logger.log('[processRow] Linha ' + rowNumber + ' vazia (possível exclusão) — disparando reconciliação');
-      reconcileProducts();
-      return;
-    }
-
-    // Validação de campos obrigatórios
+    // Validação de campos obrigatórios (exceto CODIGO que é gerado automaticamente)
     var missingCols = [];
     for (var i = 0; i < REQUIRED_COLS.length; i++) {
       var colIdx = REQUIRED_COLS[i];
@@ -154,8 +215,6 @@ function processRow(rowNumber) {
       return;
     }
 
-    var codigoUpper = codigo.toUpperCase();
-
     // Validação de QTD
     var qtdRaw = values[7].toString().trim();
     var qtd = parseInt(qtdRaw);
@@ -169,20 +228,38 @@ function processRow(rowNumber) {
     var varRaw = values[9].toString().replace(',', '.').trim();
     var precoAtacado = parseFloat(atcRaw);
     var precoVarejo = parseFloat(varRaw);
-
     if (isNaN(precoAtacado) || precoAtacado <= 0) return;
     if (isNaN(precoVarejo) || precoVarejo <= 0) return;
+
+    var linha   = (values[1] || '').toString().trim().toUpperCase();
+    var modelo  = (values[2] || '').toString().trim().toUpperCase();
+    var time    = (values[3] || '').toString().trim().toUpperCase();
+    var desc    = (values[4] || '').toString().trim();
+    var tamanho = (values[5] || '').toString().trim().toUpperCase();
+
+    // Gerar código automaticamente se vazio
+    var codigo = (values[0] || '').toString().trim().toUpperCase();
+    if (!codigo) {
+      codigo = gerarCodigo(linha, modelo, time, desc, tamanho);
+      if (!codigo) {
+        Logger.log('[processRow] Linha ' + rowNumber + ' — não foi possível gerar código');
+        return;
+      }
+      // Escrever o código gerado na célula A da linha
+      sheet.getRange(rowNumber, 1).setValue(codigo);
+      Logger.log('[processRow] Linha ' + rowNumber + ' — código gerado e gravado: ' + codigo);
+    }
 
     var ativoRaw = values[10].toString().trim().toUpperCase();
     var isActive = (ativoRaw === 'SIM' || ativoRaw === '1' || ativoRaw === 'TRUE');
 
     var product = {
-      codigo:       codigoUpper,
-      linha:        (values[1] || '').toString().trim().toUpperCase(),
-      modelo:       (values[2] || '').toString().trim().toUpperCase(),
-      time:         (values[3] || '').toString().trim().toUpperCase(),
-      descricao:    (values[4] || '').toString().trim(),
-      tamanho:      (values[5] || '').toString().trim().toUpperCase(),
+      codigo:       codigo,
+      linha:        linha,
+      modelo:       modelo,
+      time:         time,
+      descricao:    desc,
+      tamanho:      tamanho,
       tipo:         (values[6] || 'CAMISETA').toString().trim().toUpperCase(),
       estoque:      qtd,
       precoAtacado: precoAtacado,
@@ -232,8 +309,6 @@ function sendToWebhook(product) {
  *
  * Esta função deve ser configurada como acionador baseado em tempo (a cada 5 minutos)
  * para detectar exclusões de linhas automaticamente.
- *
- * Também pode ser executada manualmente: Executar → reconcileProducts
  */
 function reconcileProducts() {
   try {
@@ -250,7 +325,6 @@ function reconcileProducts() {
       return;
     }
 
-    // Ler todos os códigos da planilha (coluna A, linhas 2 até o fim)
     var range = sheet.getRange(2, 1, lastRow - 1, 1);
     var values = range.getValues();
     var codigos = [];
@@ -269,7 +343,6 @@ function reconcileProducts() {
       return;
     }
 
-    // Enviar lista de códigos ao webhook de reconciliação
     var payload = JSON.stringify({
       json: {
         secret: WEBHOOK_SECRET,
@@ -314,7 +387,7 @@ function reconcileProducts() {
 
 /**
  * Sincronização manual: processa TODAS as linhas da aba PRODUTOS de uma vez.
- * Útil para importação inicial ou reprocessamento em caso de falha.
+ * Gera código automaticamente para linhas sem CODIGO.
  * Execute manualmente pelo menu Executar → syncAllProducts.
  */
 function syncAllProducts() {
@@ -330,15 +403,13 @@ function syncAllProducts() {
 
   var enviados = 0;
   var ignorados = 0;
+  var codigosGerados = 0;
 
   for (var row = 2; row <= lastRow; row++) {
-    var range = sheet.getRange(row, 1, 1, 15);
+    var range = sheet.getRange(row, 1, 1, 16);
     var values = range.getValues()[0];
 
-    if (!values[0] || values[0].toString().trim() === '') {
-      continue;
-    }
-
+    // Verificar campos obrigatórios (exceto CODIGO)
     var completa = true;
     for (var i = 0; i < REQUIRED_COLS.length; i++) {
       var val = values[REQUIRED_COLS[i]];
@@ -363,14 +434,29 @@ function syncAllProducts() {
       continue;
     }
 
+    var linha   = (values[1] || '').toString().trim().toUpperCase();
+    var modelo  = (values[2] || '').toString().trim().toUpperCase();
+    var time    = (values[3] || '').toString().trim().toUpperCase();
+    var desc    = (values[4] || '').toString().trim();
+    var tamanho = (values[5] || '').toString().trim().toUpperCase();
+
+    // Gerar código se vazio
+    var codigo = (values[0] || '').toString().trim().toUpperCase();
+    if (!codigo) {
+      codigo = gerarCodigo(linha, modelo, time, desc, tamanho);
+      if (!codigo) { ignorados++; continue; }
+      sheet.getRange(row, 1).setValue(codigo);
+      codigosGerados++;
+    }
+
     var ativoRaw = values[10].toString().trim().toUpperCase();
     var product = {
-      codigo:       values[0].toString().trim().toUpperCase(),
-      linha:        (values[1] || '').toString().trim().toUpperCase(),
-      modelo:       (values[2] || '').toString().trim().toUpperCase(),
-      time:         (values[3] || '').toString().trim().toUpperCase(),
-      descricao:    (values[4] || '').toString().trim(),
-      tamanho:      (values[5] || '').toString().trim().toUpperCase(),
+      codigo:       codigo,
+      linha:        linha,
+      modelo:       modelo,
+      time:         time,
+      descricao:    desc,
+      tamanho:      tamanho,
       tipo:         (values[6] || 'CAMISETA').toString().trim().toUpperCase(),
       estoque:      parseInt(values[7].toString().trim()) || 0,
       precoAtacado: precoAtacado,
@@ -381,11 +467,11 @@ function syncAllProducts() {
     sendToWebhook(product);
     enviados++;
 
-    Utilities.sleep(500);
+    Utilities.sleep(300);
   }
 
-  Logger.log('[syncAllProducts] Concluído — Enviados: ' + enviados + ', Ignorados: ' + ignorados);
-  SpreadsheetApp.getUi().alert('Sincronização concluída!\n\nEnviados: ' + enviados + '\nIgnorados (incompletos): ' + ignorados);
+  Logger.log('[syncAllProducts] Concluído — Enviados: ' + enviados + ', Ignorados: ' + ignorados + ', Códigos gerados: ' + codigosGerados);
+  SpreadsheetApp.getUi().alert('Sincronização concluída!\n\nEnviados: ' + enviados + '\nIgnorados (incompletos): ' + ignorados + '\nCódigos gerados automaticamente: ' + codigosGerados);
 }
 
 // ─── LIMPEZA ─────────────────────────────────────────────────────────────────

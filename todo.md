@@ -1027,3 +1027,11 @@
 - [x] 22 produtos com códigos gerados confirmados no banco
 - [x] Tarefa agendada Manus configurada (a cada 30 minutos)
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v136 — Apps Script: geração automática de código quando CODIGO vazio
+- [x] JumeraPDV.gs v4.0: funções gerarCodigo(), abreviarDesc(), slugifyCode() com mesma lógica do sistema
+- [x] JumeraPDV.gs: processRow() gera código quando vazio, grava na célula A e envia ao webhook
+- [x] JumeraPDV.gs: syncAllProducts() também gera código quando vazio + relatório de códigos gerados
+- [x] REQUIRED_COLS atualizado: CODIGO removido da lista de obrigatórios
+- [x] URL do webhook atualizada para juremasports2.com.br
+- [x] Instruções de atualização incluídas no cabeçalho do arquivo
