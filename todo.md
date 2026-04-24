@@ -1019,3 +1019,11 @@
 - [x] Backend: deduplicar lotes (somar estoque) já existia e continua funcionando
 - [x] Frontend: banner azul no preview indica quantos códigos foram gerados automaticamente
 - [x] 206/206 testes passando, 0 erros TypeScript
+
+## v135 — Sincronização automática da planilha (tarefa agendada)
+- [x] pdvAutoSync.ts: runAutoSync() executa sync completo sem exigir autenticação PDV
+- [x] Endpoint POST /api/scheduled/sync-products registrado no servidor Express
+- [x] Testado: 205 inseridos, 645 atualizados, 0 erros em 3.2s
+- [x] 22 produtos com códigos gerados confirmados no banco
+- [x] Tarefa agendada Manus configurada (a cada 30 minutos)
+- [x] 206/206 testes passando, 0 erros TypeScript

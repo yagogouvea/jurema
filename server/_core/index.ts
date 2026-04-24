@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerUploadRoutes } from "../uploadHandler";
 import { runPdvMigration, seedPdvData } from "../routers/pdvMigration";
+import { runAutoSync } from "../routers/pdvAutoSync";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -50,6 +51,18 @@ async function startServer() {
       createContext,
     })
   );
+
+  // Endpoint de sincronização automática (chamado por tarefa agendada Manus)
+  // Aceita qualquer usuário autenticado (role=user) — a tarefa agendada usa cookie de sessão
+  app.post("/api/scheduled/sync-products", async (req, res) => {
+    try {
+      const result = await runAutoSync();
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[AutoSync] Erro:", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
