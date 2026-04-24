@@ -709,6 +709,12 @@ export default function PdvMain() {
                           <p className="text-xs text-gray-400">Ignorados</p>
                         </div>
                       </div>
+                      {(syncPreview as any).codigosAutoGerados > 0 && (
+                        <div className="bg-blue-900/20 border border-blue-800/40 rounded-xl p-3">
+                          <p className="text-xs text-blue-400 font-semibold mb-1">🤖 {(syncPreview as any).codigosAutoGerados} código(s) gerado(s) automaticamente</p>
+                          <p className="text-xs text-gray-400">Linhas sem código na planilha terão o código gerado no padrão {'{LINHA}-{MODELO}-{TIME}-{DESC}-{TAM}'}</p>
+                        </div>
+                      )}
                       {syncPreview.novosProdutos?.length > 0 && (
                         <div className="bg-green-900/20 border border-green-800/40 rounded-xl p-3">
                           <p className="text-xs text-green-400 font-semibold mb-1">Novos produtos (amostra):</p>

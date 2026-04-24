@@ -28,9 +28,9 @@ async function requirePdvAdmin(ctx: any) {
 const SHEET_ID = "1SGUr5Sh2gZ5nkYg0km-QhllQS4Jm2_aVxy6PuyATsLU"; // Nova planilha PDV JUREMA 5.0
 const SHEET_RANGE = "PRODUTOS!A2:P2000"; // Aba PRODUTOS (16 colunas: CODIGO,LINHA,MODELO,TIME,DESCRIÇÃO,TAM,TIPO,QTD,ATC,VAR,CUSTO,ATIVO,FOTO,TEMPORADA,PT ATAC,PT VAR)
 
-// Colunas obrigatórias — CUSTO (10), FOTO (12), TEMPORADA (13), PT ATAC (14), PT VAR (15) são IGNORADAS na validação
+// Colunas obrigatórias — CODIGO (0) é opcional (gerado automaticamente), CUSTO (10), FOTO (12), TEMPORADA (13), PT ATAC (14), PT VAR (15) são IGNORADAS
 // [0]CODIGO [1]LINHA [2]MODELO [3]TIME [4]DESCRIÇÃO [5]TAM [6]TIPO [7]QTD [8]ATC [9]VAR [10]CUSTO [11]ATIVO
-const REQUIRED_COLS = [0, 1, 2, 3, 5, 6, 7, 8, 9, 11]; // DESCRIÇÃO (4) e CUSTO (10) opcionais
+const REQUIRED_COLS = [1, 2, 3, 5, 6, 7, 8, 9, 11]; // CODIGO (0), DESCRIÇÃO (4) e CUSTO (10) opcionais — código gerado automaticamente se vazio
 const COL_NAMES: Record<number, string> = {
   0: "CODIGO", 1: "LINHA", 2: "MODELO", 3: "TIME", 4: "DESCRIÇÃO",
   5: "TAM", 6: "TIPO", 7: "QTD", 8: "ATC", 9: "VAR", 10: "CUSTO", 11: "ATIVO",
@@ -39,6 +39,115 @@ const COL_NAMES: Record<number, string> = {
 // Normaliza string: trim + uppercase
 function norm(val: string): string {
   return (val || '').trim().toUpperCase();
+}
+
+// ─── Geração automática de código (mesma lógica do script Python) ─────────────
+const LINHA_MAP: Record<string, string> = {
+  'TAILANDESA': 'CA',
+  'NACIONAL': 'NA',
+  'TORCEDOR': 'TO',
+  'PECA': 'PE',
+};
+const MODELO_MAP: Record<string, string> = {
+  'JOGADOR': 'JG',
+  'TORCEDOR': 'TO',
+  'TAILANDESA': 'CA',
+  'DRYFIT': 'DR',
+  'VENDEDOR': 'VE',
+};
+const STOPWORDS = new Set(['COM', 'DE', 'DA', 'DO', 'NO', 'NA', 'E', 'A', 'O', 'EM', 'AO', 'AS', 'OS', 'UM', 'UMA']);
+
+// Overrides manuais para descrições que colidem mesmo com 3 palavras
+const DESC_OVERRIDE: Record<string, string> = {
+  'FEMI-PRETA COM GOLA AMARELA RIO': 'FEMI-PRET-GOLA-AMAR',
+  'FEMI-PRETA GOLA AMARELA RIO':     'FEMI-PRET-GOLA-RIO',
+  'FEMI-VERDE GOLA AMARELA':         'FEMI-VERD-GOLA',
+  'FEMI-VERDE GOLA AMARELA RIO':     'FEMI-VERD-GOLA-RIO',
+  'VERMELHO COM LISTRA PRETA':       'VERM-LIST-PRET',
+  'VERMELHA COM LISTRA PRETA NO OMBRO': 'VERM-LIST-OMBR',
+};
+
+function removeAcentos(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function slugifyCode(s: string): string {
+  if (!s) return '';
+  let r = removeAcentos(s.trim().toUpperCase());
+  r = r.replace(/[^A-Z0-9 \-]/g, '');
+  r = r.replace(/\s+/g, '-');
+  r = r.replace(/-+/g, '-');
+  return r.replace(/^-|-$/g, '');
+}
+
+function abreviarCampo(s: string, mapa: Record<string, string>, n: number): string {
+  if (!s) return '';
+  const chave = s.trim().toUpperCase();
+  if (mapa[chave]) return mapa[chave];
+  return slugifyCode(chave).slice(0, n);
+}
+
+function palavrasSignificativas(desc: string): string[] {
+  const s = removeAcentos(desc.toUpperCase());
+  const palavras = s.match(/[A-Z0-9]+/g) || [];
+  const sig = palavras.filter(p => !STOPWORDS.has(p));
+  return sig.length > 0 ? sig : palavras;
+}
+
+function abreviarDesc(desc: string, nPalavras = 2): string {
+  if (!desc) return '';
+  // Verificar override manual
+  const chave = removeAcentos(desc.trim().toUpperCase());
+  if (DESC_OVERRIDE[chave]) return DESC_OVERRIDE[chave];
+  const sig = palavrasSignificativas(desc);
+  return sig.slice(0, nPalavras).map(p => p.slice(0, 4)).join('-');
+}
+
+function gerarCodigoAuto(linha: string, modelo: string, time: string, desc: string, tamanho: string): string {
+  const partes: string[] = [];
+  const l = abreviarCampo(linha, LINHA_MAP, 2);
+  if (l) partes.push(l);
+  const m = abreviarCampo(modelo, MODELO_MAP, 2);
+  if (m) partes.push(m);
+  const t = abreviarCampo(time, {}, 3);
+  if (t) partes.push(t);
+  const d = abreviarDesc(desc, 2);
+  if (d) partes.push(d);
+  const tam = slugifyCode(tamanho);
+  if (tam) partes.push(tam);
+  return partes.join('-');
+}
+
+// Detecta e resolve conflitos de código gerado dentro de um batch de linhas
+function resolverConflitosDescricao(rows: Array<{linha: string; modelo: string; time: string; desc: string; tamanho: string}>): string[] {
+  // Primeira passagem: 2 palavras
+  const codigos = rows.map(r => gerarCodigoAuto(r.linha, r.modelo, r.time, r.desc, r.tamanho));
+  // Detectar conflitos (mesmo código, descrições diferentes)
+  const grupos: Record<string, number[]> = {};
+  codigos.forEach((cod, i) => {
+    if (!grupos[cod]) grupos[cod] = [];
+    grupos[cod].push(i);
+  });
+  const conflitos: number[] = [];
+  Object.values(grupos).forEach(indices => {
+    if (indices.length > 1) {
+      const descs = new Set(indices.map((i: number) => removeAcentos(rows[i].desc.trim().toUpperCase())));
+      if (descs.size > 1) indices.forEach((i: number) => conflitos.push(i));
+    }
+  });
+  // Segunda passagem: 3 palavras para os conflitos
+  const resultado = [...codigos];
+  conflitos.forEach(i => {
+    const r = rows[i];
+    const partes: string[] = [];
+    const l = abreviarCampo(r.linha, LINHA_MAP, 2); if (l) partes.push(l);
+    const m = abreviarCampo(r.modelo, MODELO_MAP, 2); if (m) partes.push(m);
+    const t = abreviarCampo(r.time, {}, 3); if (t) partes.push(t);
+    const d = abreviarDesc(r.desc, 3); if (d) partes.push(d);
+    const tam = slugifyCode(r.tamanho); if (tam) partes.push(tam);
+    resultado[i] = partes.join('-');
+  });
+  return resultado;
 }
 
 interface SheetProduct {
@@ -63,6 +172,7 @@ async function fetchSheetData(apiKey: string): Promise<{
   invalid: any[];
   total: number;
   duplicatesCount: number;
+  autoGeneratedCount: number;
 }> {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_RANGE)}?key=${apiKey}`;
   const response = await fetch(url);
@@ -131,8 +241,9 @@ async function fetchSheetData(apiKey: string): Promise<{
     const ptVarejoRaw = row[15]?.toString().trim();
     const ptAtacado = ptAtacadoRaw ? parseFloat(ptAtacadoRaw.replace(',', '.')) : 0;
     const ptVarejo = ptVarejoRaw ? parseFloat(ptVarejoRaw.replace(',', '.')) : 0;
+    const codigoRaw = (row[0] || '').trim();
     validRaw.push({
-      codigo: row[0].trim(),
+      codigo: codigoRaw, // pode estar vazio — será gerado após o loop
       linha: norm(row[1]),
       modelo: norm(row[2]),
       time: norm(row[3]),
@@ -147,6 +258,24 @@ async function fetchSheetData(apiKey: string): Promise<{
       custo: isNaN(custo) ? 0 : custo,
     });
   }
+
+  // ===== GERAÇÃO AUTOMÁTICA DE CÓDIGO =====
+  // Para linhas sem código, gerar automaticamente com resolução de conflitos de descrição
+  const semCodigo = validRaw
+    .map((p, i) => ({ ...p, _idx: i }))
+    .filter(p => !p.codigo);
+
+  if (semCodigo.length > 0) {
+    const rowsParaGerar = semCodigo.map(p => ({
+      linha: p.linha, modelo: p.modelo, time: p.time, desc: p.descricao, tamanho: p.tamanho
+    }));
+    const codigosGerados = resolverConflitosDescricao(rowsParaGerar);
+    semCodigo.forEach((p, j) => {
+      validRaw[p._idx].codigo = codigosGerados[j];
+    });
+    console.log(`[pdvSync] Gerados ${semCodigo.length} códigos automaticamente`);
+  }
+  const autoGeneratedCount = semCodigo.length;
 
   // ===== DEDUPLICAÇÃO =====
   // A planilha pode ter códigos duplicados (mesma camisa com variações de descrição).
@@ -182,6 +311,7 @@ async function fetchSheetData(apiKey: string): Promise<{
     invalid,
     total: rows.length,
     duplicatesCount,
+    autoGeneratedCount,
   };
 }
 
@@ -230,7 +360,7 @@ export const pdvSyncRouter = router({
     const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
     if (!apiKey) throw new Error("GOOGLE_SHEETS_API_KEY não configurada");
 
-    const { valid, invalid, total, duplicatesCount } = await fetchSheetData(apiKey);
+    const { valid, invalid, total, duplicatesCount, autoGeneratedCount } = await fetchSheetData(apiKey);
 
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
@@ -280,6 +410,7 @@ export const pdvSyncRouter = router({
       alteradosProdutos: alterados.slice(0, 10).map(a =>
         `${a.product.codigo} — ${a.diffs.join(", ")}`
       ),
+      codigosAutoGerados: autoGeneratedCount,
     };
   }),
 
