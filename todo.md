@@ -1035,3 +1035,7 @@
 - [x] REQUIRED_COLS atualizado: CODIGO removido da lista de obrigatórios
 - [x] URL do webhook atualizada para juremasports2.com.br
 - [x] Instruções de atualização incluídas no cabeçalho do arquivo
+
+## v137 — Correção índice coluna ATIVO no Apps Script
+- [x] Apps Script: values[10] (CUSTO) → values[11] (ATIVO) em processRow e syncAllProducts
+- [x] Produto de teste TEST-TESTE-TESTE-TESTE-G ativado no banco manualmente

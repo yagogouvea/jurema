@@ -250,7 +250,7 @@ function processRow(rowNumber) {
       Logger.log('[processRow] Linha ' + rowNumber + ' — código gerado e gravado: ' + codigo);
     }
 
-    var ativoRaw = values[10].toString().trim().toUpperCase();
+    var ativoRaw = values[11].toString().trim().toUpperCase();
     var isActive = (ativoRaw === 'SIM' || ativoRaw === '1' || ativoRaw === 'TRUE');
 
     var product = {
@@ -449,7 +449,7 @@ function syncAllProducts() {
       codigosGerados++;
     }
 
-    var ativoRaw = values[10].toString().trim().toUpperCase();
+    var ativoRaw = values[11].toString().trim().toUpperCase();
     var product = {
       codigo:       codigo,
       linha:        linha,
