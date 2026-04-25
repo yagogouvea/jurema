@@ -1039,3 +1039,10 @@
 ## v137 — Correção índice coluna ATIVO no Apps Script
 - [x] Apps Script: values[10] (CUSTO) → values[11] (ATIVO) em processRow e syncAllProducts
 - [x] Produto de teste TEST-TESTE-TESTE-TESTE-G ativado no banco manualmente
+
+## v138 — Corrigir geração de código no cadastro manual de produtos
+- [x] Analisar gerarCodigo no PdvCadastroProdutos.tsx
+- [x] Implementar LINHA_MAP, MODELO_MAP e abreviarDesc igual ao Apps Script e pdvSync
+- [x] Atualizar as 3 chamadas de gerarCodigo para passar form.descricao como 5º argumento
+- [x] useEffect de regeneração atualizado para reagir a mudanças em form.descricao
+- [x] 0 erros TypeScript, 206/206 testes passando

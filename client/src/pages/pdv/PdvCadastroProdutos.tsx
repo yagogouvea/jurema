@@ -101,22 +101,57 @@ const newRow = (): LoteRow => ({
 });
 
 // ─── Geração de código automático ─────────────────────────────────────────────
-function slugify(s: string): string {
-  return s.trim().toUpperCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove acentos
-    .replace(/[^A-Z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
+const LINHA_MAP: Record<string, string> = {
+  'TAILANDESA': 'CA',
+  'NACIONAL': 'NA',
+  'TORCEDOR': 'TO',
+  'PECA': 'PE',
+};
+const MODELO_MAP: Record<string, string> = {
+  'JOGADOR': 'JG',
+  'TORCEDOR': 'TO',
+  'TAILANDESA': 'CA',
+  'DRYFIT': 'DR',
+  'VENDEDOR': 'VE',
+};
+const STOPWORDS = new Set(['COM', 'DE', 'DA', 'DO', 'NO', 'NA', 'E', 'A', 'O', 'EM', 'AO', 'AS', 'OS', 'UM', 'UMA']);
 
-function gerarCodigo(linha: string, time: string, modelo: string, tamanho: string): string {
+function removeAcentos(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+function slugifyCode(s: string): string {
+  if (!s) return '';
+  let r = removeAcentos(s.trim().toUpperCase());
+  r = r.replace(/[^A-Z0-9 \-]/g, '');
+  r = r.replace(/\s+/g, '-');
+  r = r.replace(/-+/g, '-');
+  return r.replace(/^-|-$/g, '');
+}
+function abreviarCampo(s: string, mapa: Record<string, string>, n: number): string {
+  if (!s) return '';
+  const chave = s.trim().toUpperCase();
+  if (mapa[chave]) return mapa[chave];
+  return slugifyCode(chave).slice(0, n);
+}
+function palavrasSignificativas(desc: string): string[] {
+  const s = removeAcentos(desc.toUpperCase());
+  const palavras = s.match(/[A-Z0-9]+/g) || [];
+  const sig = palavras.filter(p => !STOPWORDS.has(p));
+  return sig.length > 0 ? sig : palavras;
+}
+function abreviarDesc(desc: string, nPalavras = 2): string {
+  if (!desc) return '';
+  const sig = palavrasSignificativas(desc);
+  return sig.slice(0, nPalavras).map(p => p.slice(0, 4)).join('-');
+}
+function gerarCodigo(linha: string, time: string, modelo: string, tamanho: string, descricao = ''): string {
   const partes: string[] = [];
-  if (linha.trim()) partes.push(slugify(linha));
-  if (time.trim()) partes.push(slugify(time));
-  if (modelo.trim()) partes.push(slugify(modelo));
-  if (tamanho.trim()) partes.push(slugify(tamanho));
-  return partes.join("-");
+  const l = abreviarCampo(linha, LINHA_MAP, 2); if (l) partes.push(l);
+  const m = abreviarCampo(modelo, MODELO_MAP, 2); if (m) partes.push(m);
+  const t = abreviarCampo(time, {}, 3); if (t) partes.push(t);
+  const d = abreviarDesc(descricao, 2); if (d) partes.push(d);
+  const tam = slugifyCode(tamanho); if (tam) partes.push(tam);
+  return partes.join('-');
 }
 
 // ─── Máscara monetária ─────────────────────────────────────────────────────────
@@ -229,11 +264,11 @@ export default function PdvCadastroProdutos() {
     setLote(prev => prev.map(row => {
       // Só regenera se não está em modo edição manual
       if (row.modoEdicao) return row;
-      const novo = gerarCodigo(form.linha, form.time, form.modelo, row.tamanho);
+      const novo = gerarCodigo(form.linha, form.time, form.modelo, row.tamanho, form.descricao);
       if (novo === row.codigoGerado) return row;
       return { ...row, codigoGerado: novo, duplicado: null, verificando: false };
     }));
-  }, [form.linha, form.time, form.modelo]);
+  }, [form.linha, form.time, form.modelo, form.descricao]);
 
   // ─── Verificar duplicidade de um código no banco ──────────────────────────────
   const verificarCodigo = useCallback(async (rowId: number, codigo: string) => {
@@ -261,13 +296,13 @@ export default function PdvCadastroProdutos() {
     const tam = tamanho.toUpperCase();
     setLote(prev => prev.map(r => {
       if (r.id !== id) return r;
-      const novo = gerarCodigo(form.linha, form.time, form.modelo, tam);
+      const novo = gerarCodigo(form.linha, form.time, form.modelo, tam, form.descricao);
       return { ...r, tamanho: tam, codigoGerado: novo, duplicado: null, verificando: false };
     }));
     // Verificar duplicidade após debounce
     const timer = setTimeout(() => {
       const row = lote.find(r => r.id === id);
-      const cod = row?.modoEdicao ? row.codigoEditado : gerarCodigo(form.linha, form.time, form.modelo, tam);
+      const cod = row?.modoEdicao ? row.codigoEditado : gerarCodigo(form.linha, form.time, form.modelo, tam, form.descricao);
       if (cod) verificarCodigo(id, cod);
     }, 600);
     return () => clearTimeout(timer);
