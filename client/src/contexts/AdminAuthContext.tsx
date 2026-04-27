@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import { trpc } from "@/lib/trpc";
+import { useLocation } from "wouter";
 
 interface AdminUser {
   id: unknown;
@@ -20,9 +21,13 @@ const AdminAuthContext = createContext<AdminAuthContextType>({
 });
 
 export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
+  const [location] = useLocation();
+  const isPdvRoute = location.startsWith("/pdv");
   const { data: admin, isLoading } = trpc.adminAuth.me.useQuery(undefined, {
     retry: false,
     staleTime: 5 * 60 * 1000,
+    // Desabilitar em rotas PDV para não entrar no batch com pdvAuth.me e causar lentidão
+    enabled: !isPdvRoute,
   });
 
   return (

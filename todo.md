@@ -1053,3 +1053,9 @@
 - [x] customerAuth.me: retornar null imediatamente se não houver cookie (sem query no banco)
 - [x] pdvAuth.ts: connectTimeout de 5s na conexão mysql (falha rápido em vez de 59s)
 - [x] main.tsx: timeout de 30s no fetch do tRPC client
+
+## v140 — Corrigir redirecionamento pós-login PDV
+- [x] Isolar customerAuth.me e adminAuth.me de rotas /pdv/* (enabled: !isPdvRoute)
+- [x] Evitar que queries lentas de outros contextos bloqueiem o batch do pdvAuth.me
+- [x] Login PDV funcionando: 200 em 111ms, redirecionamento imediato
+- [x] 0 erros TypeScript

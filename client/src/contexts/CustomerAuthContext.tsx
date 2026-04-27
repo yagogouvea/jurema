@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useLocation } from "wouter";
 
 type Customer = {
   id: number;
@@ -31,9 +32,13 @@ const CustomerAuthContext = createContext<CustomerAuthContextType>({
 });
 
 export function CustomerAuthProvider({ children }: { children: React.ReactNode }) {
+  const [location] = useLocation();
+  const isPdvRoute = location.startsWith("/pdv");
   const { data, isLoading, refetch } = trpc.customerAuth.me.useQuery(undefined, {
     retry: false,
     staleTime: 5 * 60 * 1000,
+    // Desabilitar em rotas PDV para não entrar no batch com pdvAuth.me e causar lentidão
+    enabled: !isPdvRoute,
   });
 
   return (
