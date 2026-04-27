@@ -20,6 +20,10 @@ const SOFIA_SHEET = 'SOFIA_ITENS';
 
 // ─── JWT para Service Account ───────────────────────────────────────────────
 
+export async function getServiceAccountTokenForSync(): Promise<string | null> {
+  return getServiceAccountToken();
+}
+
 async function getServiceAccountToken(): Promise<string | null> {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;

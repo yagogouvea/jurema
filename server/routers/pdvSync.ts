@@ -857,6 +857,177 @@ export const pdvSyncRouter = router({
     }
   }),
 
+  // Gerar códigos automáticos para linhas sem código na planilha
+  // Lê a aba PRODUTOS, identifica linhas sem código na coluna A,
+  // gera os códigos com resolução de conflitos e escreve de volta na planilha
+  generateCodes: publicProcedure
+    .input(z.object({ confirmar: z.boolean().default(false) }))
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+
+      const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
+      if (!apiKey) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'GOOGLE_SHEETS_API_KEY não configurada' });
+
+      // 1. Ler a aba PRODUTOS completa (A2:P2000)
+      const sheetUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent('PRODUTOS!A2:P2000')}?key=${apiKey}`;
+      const sheetRes = await fetch(sheetUrl);
+      if (!sheetRes.ok) {
+        const err = await sheetRes.text();
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `Erro ao ler planilha: ${err}` });
+      }
+      const sheetData = await sheetRes.json() as any;
+      const rows: string[][] = sheetData.values || [];
+
+      // 2. Identificar linhas sem código mas com campos mínimos preenchidos
+      // Campos mínimos: LINHA(1), MODELO(2), TIME(3), TAM(5)
+      const semCodigo: Array<{ rowIndex: number; linha: string; modelo: string; time: string; desc: string; tamanho: string; motivo?: string }> = [];
+      const invalidas: Array<{ rowIndex: number; motivo: string }> = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const codigo = (row[0] || '').trim();
+        if (codigo) continue; // já tem código — pular
+
+        // Verificar se a linha tem conteúdo (não está completamente vazia)
+        const hasContent = row.some(cell => (cell || '').trim() !== '');
+        if (!hasContent) continue; // linha vazia — pular
+
+        // Verificar campos mínimos para gerar código
+        const linha = norm(row[1] || '');
+        const modelo = norm(row[2] || '');
+        const time = norm(row[3] || '');
+        const desc = (row[4] || '').trim();
+        const tamanho = norm(row[5] || '');
+
+        const camposFaltando: string[] = [];
+        if (!linha) camposFaltando.push('LINHA');
+        if (!modelo) camposFaltando.push('MODELO');
+        if (!time) camposFaltando.push('TIME');
+        if (!tamanho) camposFaltando.push('TAM');
+
+        if (camposFaltando.length > 0) {
+          invalidas.push({ rowIndex: i + 2, motivo: `Campos faltando para gerar código: ${camposFaltando.join(', ')}` });
+          continue;
+        }
+
+        semCodigo.push({ rowIndex: i + 2, linha, modelo, time, desc, tamanho });
+      }
+
+      if (semCodigo.length === 0) {
+        return {
+          gerados: 0,
+          invalidas: invalidas.length,
+          detalhesInvalidas: invalidas.slice(0, 10),
+          preview: [],
+          message: 'Nenhuma linha sem código encontrada com campos suficientes para gerar.',
+        };
+      }
+
+      // 3. Gerar códigos com resolução de conflitos
+      const rowsParaGerar = semCodigo.map(r => ({
+        linha: r.linha, modelo: r.modelo, time: r.time, desc: r.desc, tamanho: r.tamanho
+      }));
+      const codigosGerados = resolverConflitosDescricao(rowsParaGerar);
+
+      // 4. Verificar conflitos com códigos já existentes no banco
+      const db = await getDb();
+      let codigosExistentes = new Set<string>();
+      if (db) {
+        try {
+          const [rows2] = await db.execute('SELECT codigo FROM pdv_products WHERE codigo IS NOT NULL AND codigo != ""');
+          for (const r of rows2 as any[]) codigosExistentes.add((r.codigo || '').toUpperCase());
+          await db.end();
+        } catch { try { await db.end(); } catch {} }
+      }
+
+      // Também verificar conflitos com códigos já na planilha (coluna A não vazia)
+      for (const row of rows) {
+        const c = (row[0] || '').trim().toUpperCase();
+        if (c) codigosExistentes.add(c);
+      }
+
+      // Montar preview e detectar conflitos
+      const preview = semCodigo.map((r, i) => ({
+        rowIndex: r.rowIndex,
+        codigo: codigosGerados[i],
+        time: r.time,
+        desc: r.desc,
+        tamanho: r.tamanho,
+        conflito: codigosExistentes.has(codigosGerados[i].toUpperCase()),
+      }));
+
+      // Se não confirmado, retornar apenas preview
+      if (!input.confirmar) {
+        return {
+          gerados: 0,
+          invalidas: invalidas.length,
+          detalhesInvalidas: invalidas.slice(0, 10),
+          preview: preview.slice(0, 20),
+          totalSemCodigo: semCodigo.length,
+          conflitos: preview.filter(p => p.conflito).length,
+          message: `Preview: ${semCodigo.length} linha(s) sem código. ${preview.filter(p => p.conflito).length} conflito(s) detectado(s). Confirme para gravar na planilha.`,
+        };
+      }
+
+      // 5. Escrever os códigos de volta na planilha (coluna A)
+      // Usar batchUpdate values para atualizar múltiplas células de uma vez
+      const { getServiceAccountTokenForSync } = await import('./pdvSheetsWriter');
+      const token = await getServiceAccountTokenForSync();
+      if (!token) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Service Account não configurada (GOOGLE_SERVICE_ACCOUNT_JSON). Não é possível escrever na planilha.',
+        });
+      }
+
+      // Montar valueRanges para batchUpdate — uma entrada por linha
+      const valueRanges = semCodigo
+        .map((r, i) => ({
+          range: `PRODUTOS!A${r.rowIndex}`,
+          values: [[codigosGerados[i]]],
+        }))
+        .filter((_, i) => !preview[i].conflito); // pular conflitos
+
+      const skippedConflicts = preview.filter(p => p.conflito).length;
+
+      if (valueRanges.length === 0) {
+        return {
+          gerados: 0,
+          invalidas: invalidas.length,
+          conflitos: skippedConflicts,
+          preview: preview.slice(0, 20),
+          message: `Nenhum código gravado — todos os ${skippedConflicts} código(s) gerado(s) conflitam com códigos existentes.`,
+        };
+      }
+
+      const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`;
+      const batchRes = await fetch(batchUrl, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          valueInputOption: 'USER_ENTERED',
+          data: valueRanges,
+        }),
+      });
+
+      if (!batchRes.ok) {
+        const err = await batchRes.text();
+        console.error('[PDV Sync] generateCodes batchUpdate failed:', err);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `Erro ao gravar na planilha: ${err.slice(0, 200)}` });
+      }
+
+      console.log(`[PDV Sync] generateCodes: ${valueRanges.length} código(s) gravado(s) na planilha`);
+
+      return {
+        gerados: valueRanges.length,
+        invalidas: invalidas.length,
+        conflitos: skippedConflicts,
+        detalhesInvalidas: invalidas.slice(0, 10),
+        preview: preview.slice(0, 30),
+        message: `${valueRanges.length} código(s) gerado(s) e gravado(s) na planilha. ${skippedConflicts} conflito(s) ignorado(s). ${invalidas.length} linha(s) com campos insuficientes.`,
+      };
+    }),
+
   // Status atual do catálogo
   status: publicProcedure.query(async ({ ctx }) => {
     await requirePdvAuth(ctx);

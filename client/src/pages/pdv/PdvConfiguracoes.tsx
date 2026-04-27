@@ -368,6 +368,8 @@ function TabSync() {
   const [syncing, setSyncing] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ updated: number; skipped: number; errors: number; message: string } | null>(null);
   const [backfillSuprResult, setBackfillSuprResult] = useState<{ inseridos: number; jaExistiam: number; erros: number; message: string } | null>(null);
+  const [genCodesPreview, setGenCodesPreview] = useState<any>(null);
+  const [genCodesConfirming, setGenCodesConfirming] = useState(false);
 
   const { data: syncStatus, refetch: refetchStatus } = trpc.pdvSync.status.useQuery(undefined, { enabled: isAdmin });
   const { data: syncPreview, isLoading: previewLoading } = trpc.pdvSync.preview.useQuery(undefined, { enabled: isAdmin && showPreview });
@@ -398,9 +400,41 @@ function TabSync() {
     onError: (err: any) => { toast.error(`Erro: ${err.message}`); setSyncing(false); },
   });
 
+  const generateCodesMutation = trpc.pdvSync.generateCodes.useMutation({
+    onSuccess: (result: any) => {
+      if (genCodesConfirming) {
+        toast.success(result.message);
+        setGenCodesPreview(null);
+        setGenCodesConfirming(false);
+        // Disparar sync automático após gerar códigos
+        if (result.gerados > 0) {
+          toast.info('Iniciando sincronização automática...');
+          setSyncing(true);
+          syncMutation.mutate({ confirmar: true });
+        }
+      } else {
+        setGenCodesPreview(result);
+      }
+    },
+    onError: (err: any) => {
+      toast.error(`Erro: ${err.message}`);
+      setGenCodesConfirming(false);
+    },
+  });
+
   function handleSync() {
     setSyncing(true);
     syncMutation.mutate({ confirmar: true });
+  }
+
+  function handleGenCodesPreview() {
+    setGenCodesPreview(null);
+    generateCodesMutation.mutate({ confirmar: false });
+  }
+
+  function handleGenCodesConfirm() {
+    setGenCodesConfirming(true);
+    generateCodesMutation.mutate({ confirmar: true });
   }
 
   return (
@@ -523,6 +557,95 @@ function TabSync() {
 
         <p className="text-gray-600 text-xs">
           A sincronização é somente leitura — o sistema nunca modifica a planilha.
+        </p>
+      </div>
+
+      {/* Gerar Códigos Automáticos */}
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-yellow-950/50 border border-yellow-900/50 rounded-xl flex items-center justify-center">
+            <Settings className="w-4 h-4 text-yellow-400" />
+          </div>
+          <div>
+            <h3 className="text-white font-bold text-sm">Gerar Códigos Automáticos</h3>
+            <p className="text-gray-500 text-xs">Preenche a coluna COD para linhas sem código na aba PRODUTOS</p>
+          </div>
+        </div>
+
+        <div className="bg-yellow-950/20 border border-yellow-900/30 rounded-xl p-3">
+          <p className="text-yellow-300 text-xs">
+            <strong>O que faz:</strong> Lê a aba <code className="bg-gray-800 px-1 rounded">PRODUTOS</code> da planilha,
+            identifica linhas com LINHA, MODELO, TIME e TAM preenchidos mas sem código na coluna A,
+            gera o código no formato padrão (ex: <code className="bg-gray-800 px-1 rounded">CA-JG-BRA-AZUL-G</code>)
+            e escreve de volta na planilha. Após gerar, execute a Sincronização para importar os novos produtos.
+          </p>
+        </div>
+
+        {genCodesPreview && !genCodesConfirming && (
+          <div className="bg-gray-800 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-yellow-400" />
+              <span className="text-white font-semibold text-sm">Prévia — {genCodesPreview.totalSemCodigo ?? 0} linha(s) sem código</span>
+            </div>
+            {genCodesPreview.conflitos > 0 && (
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-orange-400" />
+                <span className="text-orange-400 text-xs">{genCodesPreview.conflitos} conflito(s) com códigos existentes (serão ignorados)</span>
+              </div>
+            )}
+            {genCodesPreview.invalidas > 0 && (
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                <span className="text-red-400 text-xs">{genCodesPreview.invalidas} linha(s) com campos insuficientes (sem LINHA/MODELO/TIME/TAM)</span>
+              </div>
+            )}
+            {genCodesPreview.preview?.length > 0 && (
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {genCodesPreview.preview.slice(0, 10).map((p: any, i: number) => (
+                  <div key={i} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${p.conflito ? 'bg-orange-950/30 text-orange-400' : 'bg-gray-700 text-gray-300'}`}>
+                    <span>Linha {p.rowIndex}: <strong>{p.codigo}</strong></span>
+                    <span className="text-gray-500">{p.time} {p.desc} ({p.tamanho})</span>
+                    {p.conflito && <span className="text-orange-400 text-xs">conflito</span>}
+                  </div>
+                ))}
+                {genCodesPreview.preview.length > 10 && (
+                  <p className="text-gray-500 text-xs text-center">... e mais {genCodesPreview.preview.length - 10} linha(s)</p>
+                )}
+              </div>
+            )}
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setGenCodesPreview(null)}
+                className="flex-1 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm font-semibold transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGenCodesConfirm}
+                disabled={generateCodesMutation.isPending || (genCodesPreview.totalSemCodigo ?? 0) === 0}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-yellow-700 hover:bg-yellow-600 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+              >
+                <CheckCircle className="w-4 h-4" /> Confirmar e Gravar na Planilha
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!genCodesPreview && (
+          <button
+            onClick={handleGenCodesPreview}
+            disabled={generateCodesMutation.isPending}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-yellow-800 hover:bg-yellow-700 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+          >
+            {generateCodesMutation.isPending && !genCodesConfirming ? (
+              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Verificando planilha...</>
+            ) : (
+              <><Settings className="w-4 h-4" /> Ver Prévia dos Códigos a Gerar</>
+            )}
+          </button>
+        )}
+        <p className="text-gray-600 text-xs">
+          Requer Service Account configurada. Após gerar os códigos, execute a Sincronização para importar os produtos.
         </p>
       </div>
 

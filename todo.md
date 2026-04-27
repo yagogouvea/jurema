@@ -1059,3 +1059,13 @@
 - [x] Evitar que queries lentas de outros contextos bloqueiem o batch do pdvAuth.me
 - [x] Login PDV funcionando: 200 em 111ms, redirecionamento imediato
 - [x] 0 erros TypeScript
+
+## v141 — Geração automática de código na planilha Google Sheets
+- [x] Analisar fluxo atual de sync (pdvSync.ts) e função gerarCodigo no backend
+- [x] Endpoint pdvSync.generateCodes: lê linhas sem código, valida campos (LINHA/MODELO/TIME/TAM), gera códigos com resolução de conflitos
+- [x] Detecção de conflitos com códigos existentes no banco e na planilha
+- [x] Escrita em lote na planilha via batchUpdate (coluna A da aba PRODUTOS)
+- [x] Exportar getServiceAccountTokenForSync do pdvSheetsWriter
+- [x] UI na aba Sincronização: prévia com lista de códigos a gerar + botão confirmar
+- [x] Sync automático disparado após confirmar geração de códigos
+- [x] 0 erros TypeScript, 203/206 testes passando (3 falhas por banco instável, não relacionadas)
