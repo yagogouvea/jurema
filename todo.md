@@ -1046,3 +1046,10 @@
 - [x] Atualizar as 3 chamadas de gerarCodigo para passar form.descricao como 5º argumento
 - [x] useEffect de regeneração atualizado para reagir a mudanças em form.descricao
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v139 — Corrigir travamento no login PDV por timeout do banco
+- [x] Identificar causa raiz: banco TiDB instável causava timeout de 59s no batch pdvAuth.me+customerAuth.me+adminAuth.me
+- [x] PdvLogin.tsx: navegar imediatamente após login sem aguardar refetch() em batch
+- [x] customerAuth.me: retornar null imediatamente se não houver cookie (sem query no banco)
+- [x] pdvAuth.ts: connectTimeout de 5s na conexão mysql (falha rápido em vez de 59s)
+- [x] main.tsx: timeout de 30s no fetch do tRPC client

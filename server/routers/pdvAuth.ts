@@ -17,7 +17,8 @@ function hashPassword(password: string): string {
 async function getDb() {
   const url = process.env.DATABASE_URL;
   if (!url) return null;
-  return mysql.createConnection(url);
+  // connectTimeout de 5s para evitar travamento quando o banco está lento
+  return mysql.createConnection({ uri: url, connectTimeout: 5000 });
 }
 
 async function createPdvToken(seller: { id: number; name: string; username: string; role: string }) {

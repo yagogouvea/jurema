@@ -30,10 +30,13 @@ const trpcClient = trpc.createClient({
         return adminToken ? { Authorization: `Bearer ${adminToken}` } : {};
       },
       fetch(input, init) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
-        });
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeoutId));
       },
     }),
   ],

@@ -15,8 +15,9 @@ export default function PdvLogin() {
   const loginMutation = trpc.pdvAuth.login.useMutation({
     onSuccess: async (data) => {
       toast.success(`Bem-vindo, ${data.seller.name}!`);
-      // Aguarda o refetch do contexto antes de navegar para evitar redirect de volta ao login
-      await refetch();
+      // Navega imediatamente — o PdvLayout fará o refetch ao montar
+      // Não aguardar refetch() pois pode travar por timeout de outras queries em batch
+      refetch();
       navigate("/pdv");
     },
     onError: (err) => {

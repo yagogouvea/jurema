@@ -22,9 +22,18 @@ export async function getCustomerFromRequest(req: { headers: Record<string, stri
     });
 
     const token = cookies[CUSTOMER_COOKIE];
+    // Retorna null imediatamente se não houver cookie — evita query desnecessária no banco
     if (!token) return null;
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    // Verifica o JWT antes de consultar o banco
+    let payload: any;
+    try {
+      const result = await jwtVerify(token, JWT_SECRET);
+      payload = result.payload;
+    } catch {
+      return null; // Token inválido — não consulta o banco
+    }
+
     const db = await getDb();
     if (!db) return null;
 
