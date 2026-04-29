@@ -43,7 +43,7 @@ function norm(val: string): string {
 
 // ─── Geração automática de código (mesma lógica do script Python) ─────────────
 const LINHA_MAP: Record<string, string> = {
-  'TAILANDESA': 'CA',
+  'TAILANDESA': 'TA',
   'NACIONAL': 'NA',
   'TORCEDOR': 'TO',
   'PECA': 'PE',
@@ -51,9 +51,36 @@ const LINHA_MAP: Record<string, string> = {
 const MODELO_MAP: Record<string, string> = {
   'JOGADOR': 'JG',
   'TORCEDOR': 'TO',
-  'TAILANDESA': 'CA',
+  'TAILANDESA': 'TA',
   'DRYFIT': 'DR',
   'VENDEDOR': 'VE',
+  'CONJ.ADULTO': 'CO',
+  'CONJ ADULTO': 'CO',
+  'CONJUNTO ADULTO': 'CO',
+  'CONJ.INFANTIL': 'CI',
+  'CONJ INFANTIL': 'CI',
+  'CONJUNTO INFANTIL': 'CI',
+  'FEMININO': 'FE',
+  'FEMI': 'FE',
+  'MASCULINO': 'MA',
+  'INFANTIL': 'IN',
+  'REGATA': 'RG',
+  'AGASALHO': 'AG',
+  'SHORTS': 'SH',
+  'CALCA': 'CL',
+  'CALÇA': 'CL',
+  'BERMUDA': 'BM',
+  'MOLETOM': 'ML',
+  'JAQUETA': 'JQ',
+  'BLUSA': 'BL',
+  'CAMISA': 'CM',
+  'CAMISETA': 'CT',
+  'POLO': 'PL',
+  'MEIAS': 'ME',
+  'BONE': 'BO',
+  'BONÉ': 'BO',
+  'MOCHILA': 'MO',
+  'CHUTEIRA': 'CH',
 };
 const STOPWORDS = new Set(['COM', 'DE', 'DA', 'DO', 'NO', 'NA', 'E', 'A', 'O', 'EM', 'AO', 'AS', 'OS', 'UM', 'UMA']);
 
@@ -94,13 +121,22 @@ function palavrasSignificativas(desc: string): string[] {
   return sig.length > 0 ? sig : palavras;
 }
 
-function abreviarDesc(desc: string, nPalavras = 2): string {
+function abreviarDesc(desc: string, nPalavras = 2, timeParaFiltrar = ''): string {
   if (!desc) return '';
   // Verificar override manual
   const chave = removeAcentos(desc.trim().toUpperCase());
   if (DESC_OVERRIDE[chave]) return DESC_OVERRIDE[chave];
   const sig = palavrasSignificativas(desc);
-  return sig.slice(0, nPalavras).map(p => p.slice(0, 4)).join('-');
+  // Filtrar palavras que já estão presentes no time para evitar repetição no código
+  // Ex: time='SAO PAULO', desc='SAO PAULO BRANCO' → filtrar 'SAO','PAULO' → restam 'BRAN'
+  let filtradas = sig;
+  if (timeParaFiltrar) {
+    const palavrasTime = new Set(palavrasSignificativas(timeParaFiltrar));
+    filtradas = sig.filter(p => !palavrasTime.has(p));
+    // Se filtrar demais, usar as originais
+    if (filtradas.length === 0) filtradas = sig;
+  }
+  return filtradas.slice(0, nPalavras).map(p => p.slice(0, 4)).join('-');
 }
 
 function gerarCodigoAuto(linha: string, modelo: string, time: string, desc: string, tamanho: string): string {
@@ -111,7 +147,10 @@ function gerarCodigoAuto(linha: string, modelo: string, time: string, desc: stri
   if (m) partes.push(m);
   const t = abreviarCampo(time, {}, 3);
   if (t) partes.push(t);
-  const d = abreviarDesc(desc, 2);
+  // Passar o time como filtro para evitar repetição de palavras na descrição
+  // Ex: time='SAO PAULO', desc='SAO PAULO BRANCO' → d='BRAN' (não 'SAO-PAUL')
+  // Usar apenas 1 palavra da descrição por padrão para códigos mais curtos
+  const d = abreviarDesc(desc, 1, time);
   if (d) partes.push(d);
   const tam = slugifyCode(tamanho);
   if (tam) partes.push(tam);
@@ -120,7 +159,7 @@ function gerarCodigoAuto(linha: string, modelo: string, time: string, desc: stri
 
 // Detecta e resolve conflitos de código gerado dentro de um batch de linhas
 function resolverConflitosDescricao(rows: Array<{linha: string; modelo: string; time: string; desc: string; tamanho: string}>): string[] {
-  // Primeira passagem: 2 palavras
+  // Primeira passagem: 1 palavra da descrição (padrão)
   const codigos = rows.map(r => gerarCodigoAuto(r.linha, r.modelo, r.time, r.desc, r.tamanho));
   // Detectar conflitos (mesmo código, descrições diferentes)
   const grupos: Record<string, number[]> = {};
@@ -135,7 +174,7 @@ function resolverConflitosDescricao(rows: Array<{linha: string; modelo: string; 
       if (descs.size > 1) indices.forEach((i: number) => conflitos.push(i));
     }
   });
-  // Segunda passagem: 3 palavras para os conflitos
+  // Segunda passagem: 2 palavras para os conflitos (com filtro de time)
   const resultado = [...codigos];
   conflitos.forEach(i => {
     const r = rows[i];
@@ -143,7 +182,7 @@ function resolverConflitosDescricao(rows: Array<{linha: string; modelo: string; 
     const l = abreviarCampo(r.linha, LINHA_MAP, 2); if (l) partes.push(l);
     const m = abreviarCampo(r.modelo, MODELO_MAP, 2); if (m) partes.push(m);
     const t = abreviarCampo(r.time, {}, 3); if (t) partes.push(t);
-    const d = abreviarDesc(r.desc, 3); if (d) partes.push(d);
+    const d = abreviarDesc(r.desc, 2, r.time); if (d) partes.push(d);
     const tam = slugifyCode(r.tamanho); if (tam) partes.push(tam);
     resultado[i] = partes.join('-');
   });

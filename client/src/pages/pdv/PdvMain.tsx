@@ -56,6 +56,8 @@ export default function PdvMain() {
     onSuccess: (data) => {
       setSyncResult(data);
       utils.pdvProducts.listGrouped.invalidate();
+      utils.pdvProducts.getLinhas.invalidate();
+      utils.pdvProducts.getTimes.invalidate();
       utils.pdvNotifications.unreadCount.invalidate();
       toast.success(`Sincronização concluída! ${data.inseridos} novos, ${data.atualizados} atualizados.`);
     },
@@ -118,7 +120,7 @@ export default function PdvMain() {
     placeholderData: (prev) => prev,
   });
 
-  const { data: linhas } = trpc.pdvProducts.getLinhas.useQuery();
+  const { data: linhas } = trpc.pdvProducts.getLinhas.useQuery(undefined, { staleTime: 10000 });
 
   const groups: GroupedProduct[] = groupedData?.groups || [];
 

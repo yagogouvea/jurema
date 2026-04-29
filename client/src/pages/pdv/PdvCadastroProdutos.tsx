@@ -102,7 +102,7 @@ const newRow = (): LoteRow => ({
 
 // ─── Geração de código automático ─────────────────────────────────────────────
 const LINHA_MAP: Record<string, string> = {
-  'TAILANDESA': 'CA',
+  'TAILANDESA': 'TA',
   'NACIONAL': 'NA',
   'TORCEDOR': 'TO',
   'PECA': 'PE',
@@ -110,9 +110,36 @@ const LINHA_MAP: Record<string, string> = {
 const MODELO_MAP: Record<string, string> = {
   'JOGADOR': 'JG',
   'TORCEDOR': 'TO',
-  'TAILANDESA': 'CA',
+  'TAILANDESA': 'TA',
   'DRYFIT': 'DR',
   'VENDEDOR': 'VE',
+  'CONJ.ADULTO': 'CO',
+  'CONJ ADULTO': 'CO',
+  'CONJUNTO ADULTO': 'CO',
+  'CONJ.INFANTIL': 'CI',
+  'CONJ INFANTIL': 'CI',
+  'CONJUNTO INFANTIL': 'CI',
+  'FEMININO': 'FE',
+  'FEMI': 'FE',
+  'MASCULINO': 'MA',
+  'INFANTIL': 'IN',
+  'REGATA': 'RG',
+  'AGASALHO': 'AG',
+  'SHORTS': 'SH',
+  'CALCA': 'CL',
+  'CALÇA': 'CL',
+  'BERMUDA': 'BM',
+  'MOLETOM': 'ML',
+  'JAQUETA': 'JQ',
+  'BLUSA': 'BL',
+  'CAMISA': 'CM',
+  'CAMISETA': 'CT',
+  'POLO': 'PL',
+  'MEIAS': 'ME',
+  'BONE': 'BO',
+  'BONÉ': 'BO',
+  'MOCHILA': 'MO',
+  'CHUTEIRA': 'CH',
 };
 const STOPWORDS = new Set(['COM', 'DE', 'DA', 'DO', 'NO', 'NA', 'E', 'A', 'O', 'EM', 'AO', 'AS', 'OS', 'UM', 'UMA']);
 
@@ -139,17 +166,27 @@ function palavrasSignificativas(desc: string): string[] {
   const sig = palavras.filter(p => !STOPWORDS.has(p));
   return sig.length > 0 ? sig : palavras;
 }
-function abreviarDesc(desc: string, nPalavras = 2): string {
+function abreviarDesc(desc: string, nPalavras = 2, timeParaFiltrar = ''): string {
   if (!desc) return '';
   const sig = palavrasSignificativas(desc);
-  return sig.slice(0, nPalavras).map(p => p.slice(0, 4)).join('-');
+  // Filtrar palavras já presentes no time para evitar repetição no código
+  // Ex: time='SAO PAULO', desc='SAO PAULO BRANCO' → filtrar SAO/PAULO → restam 'BRAN'
+  let filtradas = sig;
+  if (timeParaFiltrar) {
+    const palavrasTime = new Set(palavrasSignificativas(timeParaFiltrar));
+    filtradas = sig.filter(p => !palavrasTime.has(p));
+    if (filtradas.length === 0) filtradas = sig;
+  }
+  return filtradas.slice(0, nPalavras).map(p => p.slice(0, 4)).join('-');
 }
 function gerarCodigo(linha: string, time: string, modelo: string, tamanho: string, descricao = ''): string {
   const partes: string[] = [];
   const l = abreviarCampo(linha, LINHA_MAP, 2); if (l) partes.push(l);
   const m = abreviarCampo(modelo, MODELO_MAP, 2); if (m) partes.push(m);
   const t = abreviarCampo(time, {}, 3); if (t) partes.push(t);
-  const d = abreviarDesc(descricao, 2); if (d) partes.push(d);
+  // Passar o time como filtro para evitar repetição de palavras na descrição
+  // Usar apenas 1 palavra da descrição por padrão para códigos mais curtos
+  const d = abreviarDesc(descricao, 1, time); if (d) partes.push(d);
   const tam = slugifyCode(tamanho); if (tam) partes.push(tam);
   return partes.join('-');
 }

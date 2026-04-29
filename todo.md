@@ -1069,3 +1069,12 @@
 - [x] UI na aba Sincronização: prévia com lista de códigos a gerar + botão confirmar
 - [x] Sync automático disparado após confirmar geração de códigos
 - [x] 0 erros TypeScript, 203/206 testes passando (3 falhas por banco instável, não relacionadas)
+
+## v142 — Corrigir formato do código gerado e filtros do catálogo
+- [x] TAILANDESA corrigido de CA para TA no LINHA_MAP (backend e frontend)
+- [x] CONJ.ADULTO, CONJ.INFANTIL, FEMININO adicionados ao MODELO_MAP
+- [x] abreviarDesc corrigido para 1 palavra por padrão, filtrando palavras do time
+- [x] resolverConflitosDescricao: 1 palavra na 1ª passagem, 2 na 2ª (conflitos)
+- [x] Bug filtro catálogo: invalidar getLinhas e getTimes após sync
+- [x] getLinhas com staleTime: 10000 para dados mais frescos
+- [x] 0 erros TypeScript
