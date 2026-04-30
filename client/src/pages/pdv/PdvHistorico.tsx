@@ -72,6 +72,18 @@ export default function PdvHistorico() {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const togglePaymentMutation = trpc.pdvOrders.updateStatus.useMutation({
+    onSuccess: (_data: any, variables: any) => {
+      const novoStatus = variables.status;
+      const label = novoStatus === 'PAGO' ? 'Pago' : 'Pendente';
+      toast.success(`Status alterado para ${label} — planilha atualizada`);
+      // Atualiza o selectedOrder localmente para refletir imediatamente
+      setSelectedOrder((prev: any) => prev ? { ...prev, status: novoStatus } : prev);
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
   const orders = data?.orders || [];
   const total = data?.total || 0;
   const totalPages = data?.totalPages || 1;
@@ -452,19 +464,46 @@ export default function PdvHistorico() {
                 </div>
               )}
 
-              {/* Cancel button */}
-              {selectedOrder.status !== "CANCELADO" && isAdmin && (
-                <button
-                  onClick={() => {
-                    if (confirm("Cancelar este pedido?")) {
-                      cancelMutation.mutate({ pedidoId: selectedOrder.pedidoId, status: "CANCELADO" });
+              {/* Botões de ação — apenas admin */}
+              {isAdmin && selectedOrder.status !== "CANCELADO" && (
+                <div className="flex flex-col gap-2">
+                  {/* Alternar PAGO ↔ PENDENTE */}
+                  <button
+                    onClick={() => {
+                      const novoStatus = selectedOrder.status === 'PAGO' ? 'PENDENTE' : 'PAGO';
+                      const label = novoStatus === 'PAGO' ? 'marcar como Pago' : 'marcar como Pendente';
+                      if (confirm(`Deseja ${label}? Isso será refletido na planilha.`)) {
+                        togglePaymentMutation.mutate({ pedidoId: selectedOrder.pedidoId, status: novoStatus });
+                      }
+                    }}
+                    disabled={togglePaymentMutation.isPending}
+                    className={`w-full font-medium py-2.5 rounded-xl text-sm transition-colors border disabled:opacity-50 ${
+                      selectedOrder.status === 'PAGO'
+                        ? 'border-yellow-800/60 text-yellow-400 hover:bg-yellow-950/30'
+                        : 'border-green-800/60 text-green-400 hover:bg-green-950/30'
+                    }`}
+                  >
+                    {togglePaymentMutation.isPending
+                      ? 'Atualizando...'
+                      : selectedOrder.status === 'PAGO'
+                        ? '↩ Marcar como Pendente'
+                        : '✓ Marcar como Pago'
                     }
-                  }}
-                  disabled={cancelMutation.isPending}
-                  className="w-full border border-green-900/50 text-green-500 hover:bg-green-950/30 font-medium py-2.5 rounded-xl text-sm transition-colors"
-                >
-                  Cancelar Pedido
-                </button>
+                  </button>
+
+                  {/* Cancelar pedido */}
+                  <button
+                    onClick={() => {
+                      if (confirm("Cancelar este pedido? O estoque será devolvido.")) {
+                        cancelMutation.mutate({ pedidoId: selectedOrder.pedidoId, status: "CANCELADO" });
+                      }
+                    }}
+                    disabled={cancelMutation.isPending}
+                    className="w-full border border-red-900/50 text-red-400 hover:bg-red-950/30 font-medium py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50"
+                  >
+                    {cancelMutation.isPending ? 'Cancelando...' : 'Cancelar Pedido'}
+                  </button>
+                </div>
               )}
             </div>
           </div>

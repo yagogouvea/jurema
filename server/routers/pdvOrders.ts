@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
-import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet, appendCashFlowToSheet, appendToLucroProdutos, type LucroItem } from './pdvSheetsWriter';
+import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet, appendCashFlowToSheet, appendToLucroProdutos, updateOrderStatusInSheet, type LucroItem } from './pdvSheetsWriter';
 import { autoSyncProductToSite } from './pdvSiteSync';
 
 async function getDb() {
@@ -638,7 +638,12 @@ export const pdvOrdersRouter = router({
             }
           });
         } else {
+          // Transição PAGO ↔ PENDENTE (sem alterar estoque)
           await db.end();
+          // Atualizar status na planilha de forma assíncrona
+          setImmediate(async () => {
+            await updateOrderStatusInSheet(input.pedidoId, input.status);
+          });
         }
         return { success: true };
       } catch (err) {

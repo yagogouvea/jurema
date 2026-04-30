@@ -1130,3 +1130,13 @@
 - [x] Bug 2: baseParams era reutilizado em 4 queries diferentes — corrigido com mkParams() que cria novo array a cada chamada
 - [x] Validado: FLAVIO (30001) retorna 97 pedidos e R$1.031 de caixinha corretamente
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v149 — Alternar status de pagamento no modal do histórico
+- [x] Backend: função updateOrderStatusInSheet adicionada ao pdvSheetsWriter (localiza pelo pedidoId na coluna A e atualiza coluna T)
+- [x] Endpoint pdvOrders.updateStatus integrado para refletir PAGO↔PENDENTE na planilha via setImmediate (assíncrono)
+- [x] Frontend: botão '✓ Marcar como Pago' (verde) quando status=PENDENTE
+- [x] Frontend: botão '↩ Marcar como Pendente' (amarelo) quando status=PAGO
+- [x] Botão 'Cancelar Pedido' mantido (vermelho) separado dos botões de status
+- [x] Atualização imediata do selectedOrder no modal + refetch da lista
+- [x] Ambos os botões mostram 'Atualizando...' / 'Cancelando...' durante a operação
+- [x] 0 erros TypeScript, 206/206 testes passando

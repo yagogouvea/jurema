@@ -1495,3 +1495,34 @@ export async function backfillOrderItemsColumns(db: import('mysql2/promise').Con
     return result;
   }
 }
+
+/**
+ * Atualiza o status de um pedido na coluna T da aba PEDIDOS.
+ * Usado quando o admin altera o status entre PAGO e PENDENTE.
+ * @param pedidoId - ID do pedido
+ * @param novoStatus - Novo status: 'PAGO', 'PENDENTE' ou 'CANCELADO'
+ */
+export async function updateOrderStatusInSheet(pedidoId: string, novoStatus: 'PAGO' | 'PENDENTE' | 'CANCELADO'): Promise<boolean> {
+  try {
+    // Localizar a linha do pedido pela coluna A
+    const rows = await readSheet(`${ORDERS_SHEET}!A2:A5000`);
+    const rowIndex = rows.findIndex(row => row[0]?.toString().trim() === pedidoId.trim());
+    if (rowIndex === -1) {
+      console.warn(`[SheetsWriter] updateOrderStatusInSheet: pedido ${pedidoId} não encontrado na aba PEDIDOS`);
+      return false;
+    }
+
+    // rowIndex 0 = linha 2 da planilha (linha 1 é cabeçalho)
+    const sheetRow = rowIndex + 2; // +2: pula cabeçalho (linha 1) e converte de 0-based para 1-based
+    const statusFormatado = novoStatus === 'CANCELADO' ? 'Cancelado' : novoStatus === 'PENDENTE' ? 'Pendente' : 'Pago';
+
+    const updated = await updateCellInSheet(`${ORDERS_SHEET}!T${sheetRow}`, statusFormatado);
+    if (updated) {
+      console.log(`[SheetsWriter] Status do pedido ${pedidoId} atualizado para "${statusFormatado}" na linha ${sheetRow}`);
+    }
+    return updated;
+  } catch (err) {
+    console.error('[SheetsWriter] updateOrderStatusInSheet error:', err);
+    return false;
+  }
+}
