@@ -1105,3 +1105,15 @@
 - [x] Barra de progresso de metas por vendedor
 - [x] Tabela de pedidos recentes com scroll vertical (50 registros)
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v146 — Corrigir filtro e layout da Caixinha no Dashboard
+- [x] Bug identificado: select de vendedores usava bySeller (dados do período) — ficava vazio se não houvesse vendas
+- [x] Correção: agora usa trpc.pdvSellers.list (lista fixa de vendedores ativos, independente do período)
+- [x] Bug identificado: ao clicar em um vendedor, os outros botões sumiam (sem opção de voltar)
+- [x] Correção: botões coloridos sempre visíveis + botão "Todos" persistente (padrão igual ao PdvComissoes)
+- [x] Cada botão de vendedor mostra o valor total de caixinha do período ao lado do nome
+- [x] Cards de resumo com barra de progresso (% do total) quando "Todos" selecionado
+- [x] Layout responsivo: tabela com scroll em desktop/tablet, cards empilhados em mobile
+- [x] Tabela com cabeçalho e rodapé sticky + scroll vertical (max-h-80)
+- [x] Coluna Vendedor some da tabela quando um vendedor específico está selecionado
+- [x] 0 erros TypeScript, 206/206 testes passando

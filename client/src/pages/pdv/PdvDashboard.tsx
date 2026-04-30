@@ -82,6 +82,9 @@ export default function PdvDashboard() {
   }), [startDate, endDate, caixSellerId]);
   const { data: caixData, isLoading: loadingCaix } = trpc.pdvOrders.caixinhasReport.useQuery(caixInput, { enabled: isAdmin });
 
+  // Lista fixa de vendedores ativos (independente do período — evita select vazio)
+  const { data: activeSellers } = trpc.pdvSellers.list.useQuery(undefined, { enabled: isAdmin });
+
   const syncCashFlowFromSheetMutation = trpc.pdvDashboard.syncCashFlowFromSheet.useMutation({
     onSuccess: (res) => {
       toast.success(`${res.inseridos} novas movimentações importadas da planilha`);
@@ -538,49 +541,84 @@ export default function PdvDashboard() {
 
         {/* Caixinhas por Vendedor */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <div className="p-5 border-b border-gray-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <Box className="w-5 h-5 text-yellow-400" />
+          {/* Header */}
+          <div className="p-4 sm:p-5 border-b border-gray-800">
+            <div className="flex items-center gap-2 mb-3">
+              <Box className="w-5 h-5 text-yellow-400 flex-shrink-0" />
               <h3 className="text-white font-semibold">Caixinhas por Vendedor</h3>
               {caixData && (
-                <span className="ml-2 text-xs bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 px-2 py-0.5 rounded-full">
-                  Total: {formatCurrency(caixData.totalValor)} ({caixData.totalCaixinhas} un.)
+                <span className="ml-1 text-xs bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                  {formatCurrency(caixData.totalValor)} &bull; {caixData.totalCaixinhas} un.
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={caixSellerId ?? ""}
-                onChange={e => setCaixSellerId(e.target.value ? parseInt(e.target.value) : undefined)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-yellow-600"
+            {/* Filtro por vendedor — botões sempre visíveis */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setCaixSellerId(undefined)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                  !caixSellerId
+                    ? 'bg-yellow-700 border-yellow-600 text-white'
+                    : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-white'
+                }`}
               >
-                <option key="all" value="">Todos os vendedores</option>
-                {bySeller.map((s: any) => (
-                  <option key={s.sellerId} value={s.sellerId}>{s.sellerName}</option>
-                ))}
-              </select>
+                Todos
+              </button>
+              {(activeSellers || []).map((s: any, i: number) => {
+                const sellerTotal = caixData?.resumoPorVendedor?.find(r => r.sellerId === s.id);
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setCaixSellerId(s.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                      caixSellerId === s.id
+                        ? 'border-transparent text-white'
+                        : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-white'
+                    }`}
+                    style={caixSellerId === s.id ? { backgroundColor: COLORS[i % COLORS.length], borderColor: COLORS[i % COLORS.length] } : {}}
+                  >
+                    {s.name}
+                    {sellerTotal && (
+                      <span className="ml-1.5 opacity-80">{formatCurrency(sellerTotal.totalValor)}</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Resumo por vendedor */}
-          {caixData?.resumoPorVendedor && caixData.resumoPorVendedor.length > 0 && !caixSellerId && (
-            <div className="p-5 border-b border-gray-800">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {caixData.resumoPorVendedor.map(v => (
+          {/* Resumo por vendedor (cards) — só quando "Todos" está selecionado */}
+          {!caixSellerId && caixData?.resumoPorVendedor && caixData.resumoPorVendedor.length > 0 && (
+            <div className="p-4 sm:p-5 border-b border-gray-800">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {caixData.resumoPorVendedor.map((v, i) => (
                   <button
                     key={v.sellerId}
                     onClick={() => setCaixSellerId(v.sellerId)}
-                    className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-yellow-700 rounded-xl p-3 text-left transition-colors"
+                    className="bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-yellow-700/60 rounded-xl p-3 text-left transition-all group"
                   >
-                    <div className="text-white font-medium text-sm truncate">{v.sellerName}</div>
-                    <div className="text-yellow-400 font-bold mt-1">{formatCurrency(v.totalValor)}</div>
-                    <div className="text-gray-500 text-xs">{v.totalCaixinhas} caixinha{v.totalCaixinhas !== 1 ? 's' : ''}</div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                      <div className="text-white font-medium text-sm truncate">{v.sellerName}</div>
+                    </div>
+                    <div className="text-yellow-400 font-bold text-base">{formatCurrency(v.totalValor)}</div>
+                    <div className="text-gray-500 text-xs mt-0.5">{v.totalCaixinhas} caixinha{v.totalCaixinhas !== 1 ? 's' : ''}</div>
+                    <div className="mt-2 h-1 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${caixData.totalValor > 0 ? Math.min(100, (v.totalValor / caixData.totalValor) * 100).toFixed(0) : 0}%`,
+                          backgroundColor: COLORS[i % COLORS.length],
+                        }}
+                      />
+                    </div>
                   </button>
                 ))}
               </div>
             </div>
           )}
 
+          {/* Histórico */}
           {loadingCaix ? (
             <div className="p-8 flex justify-center">
               <div className="w-6 h-6 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
@@ -588,47 +626,85 @@ export default function PdvDashboard() {
           ) : !caixData?.historico.length ? (
             <div className="p-8 text-center text-gray-500 text-sm">
               <Box className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              Nenhuma caixinha registrada no período.
+              Nenhuma caixinha registrada no período{caixSellerId ? ' para este vendedor' : ''}.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-gray-400 text-xs border-b border-gray-800">
-                    <th className="text-left px-4 py-3">Pedido</th>
-                    <th className="text-left px-4 py-3">Data</th>
-                    <th className="text-left px-4 py-3">Vendedor</th>
-                    <th className="text-left px-4 py-3">Cliente</th>
-                    <th className="text-left px-4 py-3">Canal</th>
-                    <th className="text-left px-4 py-3">Descrição</th>
-                    <th className="text-right px-4 py-3 text-yellow-400">Valor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {caixData.historico.map((c, i) => (
-                    <tr key={c.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-900/30'}`}>
-                      <td className="px-4 py-3 text-gray-300 font-mono text-xs">{c.pedidoId}</td>
-                      <td className="px-4 py-3 text-gray-400">{new Date(c.createdAt).toLocaleDateString('pt-BR')}</td>
-                      <td className="px-4 py-3 text-white">{c.sellerName}</td>
-                      <td className="px-4 py-3 text-gray-300">{c.clienteNome || '—'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          c.canal === 'BALCAO' ? 'bg-blue-900/50 text-blue-300' : 'bg-green-900/50 text-green-300'
-                        }`}>{c.canal}</span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">{c.descricao || '—'}</td>
-                      <td className="px-4 py-3 text-right font-bold text-yellow-400">{formatCurrency(c.valor)}</td>
+            <>
+              {/* Tabela — desktop/tablet */}
+              <div className="hidden sm:block overflow-x-auto overflow-y-auto max-h-80">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-gray-900 z-10">
+                    <tr className="text-gray-400 text-xs border-b border-gray-800">
+                      <th className="text-left px-4 py-3">Data</th>
+                      {!caixSellerId && <th className="text-left px-4 py-3">Vendedor</th>}
+                      <th className="text-left px-4 py-3">Pedido</th>
+                      <th className="text-left px-4 py-3">Cliente</th>
+                      <th className="text-left px-4 py-3">Canal</th>
+                      <th className="text-left px-4 py-3">Descrição</th>
+                      <th className="text-right px-4 py-3 text-yellow-400">Valor</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-gray-700 bg-gray-800/50">
-                    <td colSpan={6} className="px-4 py-3 text-gray-300 font-semibold text-sm">Total</td>
-                    <td className="px-4 py-3 text-right font-bold text-yellow-400">{formatCurrency(caixData.totalValor)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {caixData.historico.map((c, i) => (
+                      <tr key={c.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${i % 2 !== 0 ? 'bg-gray-900/20' : ''}`}>
+                        <td className="px-4 py-2.5 text-gray-400 text-xs whitespace-nowrap">{new Date(c.createdAt).toLocaleDateString('pt-BR')}</td>
+                        {!caixSellerId && <td className="px-4 py-2.5 text-white font-medium text-sm">{c.sellerName}</td>}
+                        <td className="px-4 py-2.5 text-gray-400 font-mono text-xs">{c.pedidoId}</td>
+                        <td className="px-4 py-2.5 text-gray-300 text-sm max-w-[100px] truncate">{c.clienteNome || '—'}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            c.canal === 'BALCAO' ? 'bg-blue-900/50 text-blue-300' : 'bg-green-900/50 text-green-300'
+                          }`}>{c.canal}</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-gray-400 text-xs max-w-[120px] truncate">{c.descricao || '—'}</td>
+                        <td className="px-4 py-2.5 text-right font-bold text-yellow-400">{formatCurrency(c.valor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="sticky bottom-0 bg-gray-900">
+                    <tr className="border-t border-gray-700 bg-gray-800/60">
+                      <td colSpan={!caixSellerId ? 6 : 5} className="px-4 py-3 text-gray-300 font-semibold text-sm">Total ({caixData.totalCaixinhas} itens)</td>
+                      <td className="px-4 py-3 text-right font-bold text-yellow-400 text-base">{formatCurrency(caixData.totalValor)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Cards — mobile */}
+              <div className="sm:hidden divide-y divide-gray-800/50 overflow-y-auto max-h-96">
+                {caixData.historico.map((c) => (
+                  <div key={c.id} className="px-4 py-3 hover:bg-gray-800/30 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {!caixSellerId && (
+                            <span className="text-white font-semibold text-sm">{c.sellerName}</span>
+                          )}
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            c.canal === 'BALCAO' ? 'bg-blue-900/50 text-blue-300' : 'bg-green-900/50 text-green-300'
+                          }`}>{c.canal}</span>
+                        </div>
+                        <div className="text-gray-400 text-xs mt-1">
+                          {new Date(c.createdAt).toLocaleDateString('pt-BR')} &bull; {c.pedidoId}
+                        </div>
+                        {c.clienteNome && (
+                          <div className="text-gray-300 text-xs mt-0.5 truncate">{c.clienteNome}</div>
+                        )}
+                        {c.descricao && (
+                          <div className="text-gray-500 text-xs mt-0.5 truncate">{c.descricao}</div>
+                        )}
+                      </div>
+                      <div className="text-yellow-400 font-bold text-base flex-shrink-0">{formatCurrency(c.valor)}</div>
+                    </div>
+                  </div>
+                ))}
+                {/* Total fixo no rodapé */}
+                <div className="px-4 py-3 bg-gray-800/60 flex items-center justify-between">
+                  <span className="text-gray-300 font-semibold text-sm">Total ({caixData.totalCaixinhas} itens)</span>
+                  <span className="text-yellow-400 font-bold text-base">{formatCurrency(caixData.totalValor)}</span>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
