@@ -1117,3 +1117,10 @@
 - [x] Tabela com cabeçalho e rodapé sticky + scroll vertical (max-h-80)
 - [x] Coluna Vendedor some da tabela quando um vendedor específico está selecionado
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v147 — Corrigir filtro por vendedor (sem dados ao selecionar)
+- [x] Causa raiz identificada: PdvSellerPanel usava data?.sellers (filtrado) para montar os botões — quando um vendedor era selecionado, a lista retornava apenas 1 item e os outros botões sumiam
+- [x] Correção PdvSellerPanel: adicionada query separada pdvSellers.list para a lista fixa de botões (independente do filtro)
+- [x] Correção: selectedSellerName e selectedColor agora usam a lista fixa
+- [x] Correção: comparacões usam Number(s.id) para evitar type mismatch string vs number
+- [x] 0 erros TypeScript, 206/206 testes passando

@@ -61,6 +61,9 @@ export default function PdvSellerPanel() {
     enabled: isAdmin,
   });
 
+  // Lista fixa de vendedores ativos para os botões (independente do filtro selecionado)
+  const { data: allSellersList } = trpc.pdvSellers.list.useQuery(undefined, { enabled: isAdmin });
+
   // Guard
   if (!isAdmin) {
     navigate("/pdv");
@@ -73,12 +76,14 @@ export default function PdvSellerPanel() {
   const recentOrders = data?.recentOrders || [];
   const goals = (data?.goals || {}) as Record<string, number>;
 
+  const sellerListForButtons = (allSellersList as any[]) || [];
+
   const selectedSellerName = selectedSellerId
-    ? sellers.find(s => s.id === selectedSellerId)?.name ?? "Vendedor"
+    ? sellerListForButtons.find((s: any) => Number(s.id) === selectedSellerId)?.name ?? "Vendedor"
     : "Todos os Vendedores";
 
   const selectedColor = selectedSellerId
-    ? SELLER_COLORS[sellers.findIndex(s => s.id === selectedSellerId) % SELLER_COLORS.length]
+    ? SELLER_COLORS[sellerListForButtons.findIndex((s: any) => Number(s.id) === selectedSellerId) % SELLER_COLORS.length]
     : "#16a34a";
 
   return (
@@ -134,20 +139,20 @@ export default function PdvSellerPanel() {
             >
               Todos
             </button>
-            {/* Botão por vendedor — carregados da query (todos os vendedores ativos) */}
-            {isLoading && !sellers.length
+            {/* Botão por vendedor — lista fixa independente do filtro */}
+            {!allSellersList
               ? <span className="text-gray-600 text-xs">Carregando...</span>
-              : sellers.map((s, i) => (
+              : (allSellersList || []).map((s: any, i: number) => (
                 <button
                   key={s.id}
-                  onClick={() => setSelectedSellerId(s.id)}
+                  onClick={() => setSelectedSellerId(Number(s.id))}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                    selectedSellerId === s.id
+                    selectedSellerId === Number(s.id)
                       ? "border-transparent text-white"
                       : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-white"
                   }`}
                   style={
-                    selectedSellerId === s.id
+                    selectedSellerId === Number(s.id)
                       ? { backgroundColor: SELLER_COLORS[i % SELLER_COLORS.length], borderColor: SELLER_COLORS[i % SELLER_COLORS.length] }
                       : {}
                   }
