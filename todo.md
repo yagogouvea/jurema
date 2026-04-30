@@ -1140,3 +1140,10 @@
 - [x] Atualização imediata do selectedOrder no modal + refetch da lista
 - [x] Ambos os botões mostram 'Atualizando...' / 'Cancelando...' durante a operação
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v150 — Remover personalização de comissão do frontend nos relatórios
+- [x] Campo 'Bônus (R$/peça)' removido do frontend (era editável, padrão 5 — errado)
+- [x] Backend agora busca taxaComissao diretamente da tabela pdv_config (chave 'comissao_peca', valor R$ 0,50)
+- [x] taxaComissao removido do input Zod do endpoint getData
+- [x] ReportContent usa data.comissoes.taxaComissao (vindo do backend) em vez de prop local
+- [x] 0 erros TypeScript, 206/206 testes passando

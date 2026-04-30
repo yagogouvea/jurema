@@ -20,7 +20,10 @@ async function requirePdvAdmin(ctx: any) {
 }
 
 // Gera dados consolidados para o relatório — agora usa isSofia por ITEM
-async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDate: string, sections: { comissoes: boolean; sofia: boolean; descontos: boolean }, taxaComissao: number) {
+async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDate: string, sections: { comissoes: boolean; sofia: boolean; descontos: boolean }) {  // taxaComissao é sempre buscada das configurações
+  // Buscar taxa de comissão das configurações do sistema
+  const [cfgRows] = await db.execute("SELECT value FROM pdv_config WHERE `key` = 'comissao_peca' LIMIT 1");
+  const taxaComissao = parseFloat((cfgRows as any[])[0]?.value || '0.50');
   const result: any = { periodo: { startDate, endDate }, geradoEm: new Date().toISOString() };
 
   // ===================== COMISSÕES =====================
@@ -192,7 +195,6 @@ export const pdvRelatorioRouter = router({
     .input(z.object({
       startDate: z.string(),
       endDate: z.string(),
-      taxaComissao: z.number().min(0).default(5),
       sections: z.object({
         comissoes: z.boolean().default(true),
         sofia: z.boolean().default(true),
@@ -205,7 +207,7 @@ export const pdvRelatorioRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
       try {
-        const data = await fetchRelatorioData(db, input.startDate, input.endDate, input.sections, input.taxaComissao);
+        const data = await fetchRelatorioData(db, input.startDate, input.endDate, input.sections);
         await db.end();
         return data;
       } catch (err) {

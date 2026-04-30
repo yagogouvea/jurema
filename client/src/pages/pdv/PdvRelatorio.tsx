@@ -33,7 +33,6 @@ export default function PdvRelatorio() {
   const defaults = getDefaultDates();
   const [startDate, setStartDate] = useState(defaults.startDate);
   const [endDate, setEndDate] = useState(defaults.endDate);
-  const [taxaComissao, setTaxaComissao] = useState(5);
   const [sections, setSections] = useState({
     comissoes: true,
     sofia: true,
@@ -43,7 +42,7 @@ export default function PdvRelatorio() {
   const printRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, refetch } = trpc.pdvRelatorio.getData.useQuery(
-    { startDate, endDate, taxaComissao, sections },
+    { startDate, endDate, sections },
     { enabled: showPreview }
   );
 
@@ -155,17 +154,7 @@ export default function PdvRelatorio() {
               />
             </div>
           </div>
-          <div>
-            <label className="text-gray-400 text-xs mb-1 block">Bônus (R$/peça)</label>
-            <input
-              type="number"
-              value={taxaComissao}
-              onChange={(e) => { setTaxaComissao(Number(e.target.value)); setShowPreview(false); }}
-              min={0}
-              step={0.5}
-              className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2.5 text-sm focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none"
-            />
-          </div>
+
         </div>
 
         {/* Seções */}
@@ -247,7 +236,7 @@ export default function PdvRelatorio() {
 
           {/* Conteúdo imprimível */}
           <div ref={printRef} className="bg-white rounded-xl p-6 text-gray-900">
-            <ReportContent data={data} startDate={startDate} endDate={endDate} taxaComissao={taxaComissao} />
+            <ReportContent data={data} startDate={startDate} endDate={endDate} />
           </div>
         </div>
       )}
@@ -259,11 +248,10 @@ export default function PdvRelatorio() {
 // ============================================================
 // Componente de conteúdo do relatório (usado no preview e na impressão)
 // ============================================================
-function ReportContent({ data, startDate, endDate, taxaComissao }: {
+function ReportContent({ data, startDate, endDate }: {
   data: any;
   startDate: string;
   endDate: string;
-  taxaComissao: number;
 }) {
   return (
     <div>
@@ -279,7 +267,7 @@ function ReportContent({ data, startDate, endDate, taxaComissao }: {
       {data.comissoes && (
         <div className="section" style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#16a34a", marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid #e5e7eb" }}>
-            📊 Bônus por Vendedor (R$ {taxaComissao.toFixed(2)}/peça)
+            📊 Bônus por Vendedor (R$ {(data?.comissoes?.taxaComissao ?? 0.50).toFixed(2)}/peça)
           </div>
 
           <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "12px 16px", marginBottom: 12 }}>
