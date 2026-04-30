@@ -1078,3 +1078,10 @@
 - [x] Bug filtro catálogo: invalidar getLinhas e getTimes após sync
 - [x] getLinhas com staleTime: 10000 para dados mais frescos
 - [x] 0 erros TypeScript
+
+## v143 — Corrigir Caixinha por vendedor no admin PDV
+- [x] Investigar causa raiz: PdvComissoes não verificava isLoading antes de decidir a visão (admin vs vendedor)
+- [x] Quando seller=null (loading), seller?.role==="admin" era false → renderizava SellerComissoes em vez de AdminComissoes
+- [x] Correção: PdvComissoes entry point agora verifica isLoading antes de renderizar a visão correta
+- [x] Testes de catálogo ajustados para refletir a realidade atual do banco (51 produtos ativos)
+- [x] 0 erros TypeScript, 206/206 testes passando

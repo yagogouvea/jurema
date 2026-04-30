@@ -381,10 +381,10 @@ function SellerComissoes() {
 // ENTRY POINT: redireciona para visão correta baseada no role
 // ============================================================
 export default function PdvComissoes() {
-  const { seller } = usePdvAuth();
+  const { seller, isLoading } = usePdvAuth();
   return (
     <PdvLayout>
-      {seller?.role === "admin" ? <AdminComissoes /> : <SellerComissoes />}
+      {isLoading ? null : seller?.role === "admin" ? <AdminComissoes /> : <SellerComissoes />}
     </PdvLayout>
   );
 }
