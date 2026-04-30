@@ -113,6 +113,17 @@ export default function PdvSofia() {
     onError: (err: any) => toast.error(err.message || "Erro ao cancelar pedido"),
   });
 
+  const toggleStatusMutation = trpc.pdvSofia.updateStatus.useMutation({
+    onSuccess: (data, variables) => {
+      const label = variables.status === "PAGO" ? "Marcado como Pago" : "Marcado como Pendente";
+      toast.success(label + " — planilha atualizada");
+      refetchPedidos();
+      utils.pdvOrders.getById.invalidate({ pedidoId: variables.pedidoId });
+      utils.pdvSofia.dashboard.invalidate();
+    },
+    onError: (err: any) => toast.error(err.message || "Erro ao atualizar status"),
+  });
+
   if (!isAdmin) {
     return (
       <PdvLayout>
@@ -453,7 +464,27 @@ export default function PdvSofia() {
 
                           {/* Actions */}
                           {order.status !== "CANCELADO" && (
-                            <div className="flex justify-end pt-2">
+                            <div className="flex flex-wrap justify-end gap-2 pt-2">
+                              {/* Botões de status: Pago ↔ Pendente */}
+                              {order.status === "PENDENTE" ? (
+                                <button
+                                  onClick={() => toggleStatusMutation.mutate({ pedidoId: order.pedidoId, status: "PAGO" })}
+                                  disabled={toggleStatusMutation.isPending}
+                                  className="flex items-center gap-2 px-4 py-2 bg-emerald-950/30 border border-emerald-900/50 hover:border-emerald-600 rounded-xl text-emerald-400 hover:text-emerald-300 text-sm transition-colors disabled:opacity-50"
+                                >
+                                  {toggleStatusMutation.isPending ? "Atualizando..." : "✓ Marcar como Pago"}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => toggleStatusMutation.mutate({ pedidoId: order.pedidoId, status: "PENDENTE" })}
+                                  disabled={toggleStatusMutation.isPending}
+                                  className="flex items-center gap-2 px-4 py-2 bg-yellow-950/30 border border-yellow-900/50 hover:border-yellow-600 rounded-xl text-yellow-400 hover:text-yellow-300 text-sm transition-colors disabled:opacity-50"
+                                >
+                                  {toggleStatusMutation.isPending ? "Atualizando..." : "↩ Marcar como Pendente"}
+                                </button>
+                              )}
+
+                              {/* Botão cancelar */}
                               {confirmCancel === order.pedidoId ? (
                                 <div className="flex items-center gap-3 bg-red-950/30 border border-red-900/50 rounded-xl px-4 py-2">
                                   <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />

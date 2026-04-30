@@ -1526,3 +1526,32 @@ export async function updateOrderStatusInSheet(pedidoId: string, novoStatus: 'PA
     return false;
   }
 }
+
+/**
+ * Atualiza o status de um pedido Sofia na aba SOFIA_ITENS da planilha
+ * Localiza todas as linhas com o pedidoId (coluna A) e atualiza a coluna T (status)
+ */
+export async function updateSofiaStatusInSheet(pedidoId: string, novoStatus: 'PAGO' | 'PENDENTE' | 'CANCELADO'): Promise<boolean> {
+  try {
+    const rows = await readSheet(`${SOFIA_SHEET}!A2:A5000`);
+    const statusFormatado = novoStatus === 'CANCELADO' ? 'Cancelado' : novoStatus === 'PENDENTE' ? 'Pendente' : 'Pago';
+    let updated = false;
+    // Um pedido Sofia pode ter múltiplas linhas (uma por item) — atualizar todas
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][0]?.toString().trim() === pedidoId.trim()) {
+        const sheetRow = i + 2; // +2: pula cabeçalho e converte para 1-based
+        const ok = await updateCellInSheet(`${SOFIA_SHEET}!T${sheetRow}`, statusFormatado);
+        if (ok) updated = true;
+      }
+    }
+    if (!updated) {
+      console.warn(`[SheetsWriter] updateSofiaStatusInSheet: pedido ${pedidoId} não encontrado na aba ${SOFIA_SHEET}`);
+    } else {
+      console.log(`[SheetsWriter] Status Sofia do pedido ${pedidoId} atualizado para "${statusFormatado}"`);
+    }
+    return updated;
+  } catch (err) {
+    console.error('[SheetsWriter] updateSofiaStatusInSheet error:', err);
+    return false;
+  }
+}

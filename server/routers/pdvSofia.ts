@@ -264,4 +264,32 @@ export const pdvSofiaRouter = router({
       await db.end();
       return { success: true };
     }),
+
+  // Alternar status de pagamento (PAGO ↔ PENDENTE) com reflexo na planilha Sofia
+  updateStatus: publicProcedure
+    .input(z.object({
+      pedidoId: z.string(),
+      status: z.enum(["PAGO", "PENDENTE"]),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      try {
+        await db.execute(
+          "UPDATE pdv_orders SET status = ? WHERE pedidoId = ?",
+          [input.status, input.pedidoId]
+        );
+        await db.end();
+        // Atualizar planilha Sofia de forma assíncrona
+        setImmediate(async () => {
+          const { updateSofiaStatusInSheet } = await import("./pdvSheetsWriter");
+          await updateSofiaStatusInSheet(input.pedidoId, input.status);
+        });
+        return { success: true, status: input.status };
+      } catch (err) {
+        await db.end();
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao atualizar status" });
+      }
+    }),
 });

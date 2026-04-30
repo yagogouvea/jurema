@@ -1161,3 +1161,13 @@
 - [x] Frontend: modal de visualização em tela cheia ao clicar na foto
 - [x] Limite de 5MB no upload com toast de erro
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v152 — Alternar status de pagamento nos pedidos Sofia (Pago ↔ Pendente)
+- [x] Backend: função updateSofiaStatusInSheet adicionada ao pdvSheetsWriter (atualiza coluna T em todas as linhas do pedido na aba SOFIA_ITENS)
+- [x] Endpoint pdvSofia.updateStatus criado com integração assíncrona à planilha
+- [x] Frontend: botão '✓ Marcar como Pago' (verde) quando status=PENDENTE
+- [x] Frontend: botão '↩ Marcar como Pendente' (amarelo) quando status=PAGO
+- [x] Botão 'Cancelar Pedido' mantido (vermelho) separado dos botões de status
+- [x] Ambos os botões mostram 'Atualizando...' durante a operação
+- [x] Refetch da lista + invalidate do dashboard Sofia após alteração
+- [x] 0 erros TypeScript, 206/206 testes passando
