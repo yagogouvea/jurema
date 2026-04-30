@@ -1094,3 +1094,14 @@
 - [x] Badge "Filtrado: NOME" no cabeçalho da tabela quando um vendedor específico está selecionado
 - [x] Rodapé TOTAL também sticky na parte inferior da tabela
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v145 — Painel por Vendedor (admin only)
+- [x] Backend: endpoint pdvDashboard.sellerPanel — KPIs, pedidos diários, bônus, caixinha, metas por vendedor (ou todos)
+- [x] Frontend: página /pdv/painel-vendedor com seletor de vendedor, período, KPIs (faturamento, pedidos, peças, bônus, caixinha, ticket médio), gráficos e tabela de pedidos recentes
+- [x] Card "Vendedores" no Dashboard admin clicável com seta → navega para /pdv/painel-vendedor
+- [x] Item "Painel Vendedor" no menu lateral (admin only) com ícone LayoutGrid
+- [x] Rota /pdv/painel-vendedor registrada no App.tsx
+- [x] Seletor de vendedor com botões coloridos + "Todos" persistente
+- [x] Barra de progresso de metas por vendedor
+- [x] Tabela de pedidos recentes com scroll vertical (50 registros)
+- [x] 0 erros TypeScript, 206/206 testes passando

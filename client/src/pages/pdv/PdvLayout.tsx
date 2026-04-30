@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import {
   ShoppingBag, History, Users, LogOut,
   ChevronRight, Menu, X, BarChart2, Settings, TrendingUp, Bell,
-  Package, Wallet, FileText, PlusSquare, Globe, UserCircle, MessageCircle
+  Package, Wallet, FileText, PlusSquare, Globe, UserCircle, MessageCircle, LayoutGrid
 } from "lucide-react";
 
 interface PdvLayoutProps {
@@ -69,6 +69,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
     { href: "/pdv/whatsapp", icon: MessageCircle, label: "WhatsApp IA" },
     ...(isAdmin ? [
       { href: "/pdv/dashboard", icon: BarChart2, label: "Dashboard" },
+      { href: "/pdv/painel-vendedor", icon: LayoutGrid, label: "Painel Vendedor" },
       { href: "/pdv/vendedores", icon: Users, label: "Vendedores" },
       { href: "/pdv/sofia", icon: Package, label: "Sofia" },
       { href: "/pdv/desconto-folha", icon: Wallet, label: "Desc. Folha" },

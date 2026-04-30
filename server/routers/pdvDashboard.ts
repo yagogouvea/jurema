@@ -525,4 +525,167 @@ export const pdvDashboardRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       }
     }),
+
+  // Painel por vendedor (admin only) — consolida vendas, bônus, metas e histórico de pedidos
+  sellerPanel: publicProcedure
+    .input(z.object({
+      sellerId: z.number().optional(), // undefined = todos os vendedores
+      startDate: z.string(),
+      endDate: z.string(),
+    }))
+    .query(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      try {
+        const sellerFilter = input.sellerId ? " AND s.id = ?" : "";
+        const sellerParams: any[] = input.sellerId ? [input.sellerId] : [];
+
+        // Lista de vendedores ativos (filtrada ou todos)
+        const [sellerRows] = await db.execute(
+          `SELECT id, name, username FROM pdv_sellers WHERE isActive = 1${sellerFilter} ORDER BY name`,
+          sellerParams
+        );
+        const sellers = sellerRows as any[];
+
+        if (sellers.length === 0) {
+          await db.end();
+          return { sellers: [], kpis: null, daily: [], recentOrders: [], goals: {} };
+        }
+
+        const sellerIds = sellers.map((s: any) => s.id);
+        const placeholders = sellerIds.map(() => "?").join(",");
+        const baseParams = [...sellerIds, input.startDate, input.endDate];
+
+        // KPIs consolidados para os vendedores selecionados
+        const [kpiRows] = await db.execute(
+          `SELECT
+            COUNT(DISTINCT o.id) as totalPedidos,
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as totalBonus,
+            COALESCE(SUM(CASE WHEN o.regime = 'ATACADO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamentoAtacado,
+            COALESCE(SUM(CASE WHEN o.regime = 'VAREJO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamentoVarejo,
+            COALESCE(SUM(CASE WHEN o.canal = 'BALCAO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamentoBalcao,
+            COALESCE(SUM(CASE WHEN o.canal = 'WHATSAPP' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamentoWhatsapp,
+            COUNT(CASE WHEN o.status = 'CANCELADO' THEN 1 END) as pedidosCancelados
+          FROM pdv_orders o
+          LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
+          WHERE o.sellerId IN (${placeholders})
+            AND o.status != 'CANCELADO'
+            AND DATE(o.createdAt) >= ?
+            AND DATE(o.createdAt) <= ?`,
+          baseParams
+        );
+
+        // Caixinha total (serviços do tipo CAIXINHA)
+        const [caixRows] = await db.execute(
+          `SELECT COALESCE(SUM(os.valor), 0) as totalCaixinha
+          FROM pdv_order_services os
+          JOIN pdv_orders o ON o.pedidoId = os.pedidoId
+          WHERE os.tipo = 'CAIXINHA'
+            AND o.status != 'CANCELADO'
+            AND o.sellerId IN (${placeholders})
+            AND DATE(o.createdAt) >= ?
+            AND DATE(o.createdAt) <= ?`,
+          baseParams
+        );
+
+        // Faturamento por dia
+        const [dailyRows] = await db.execute(
+          `SELECT
+            DATE(o.createdAt) as dia,
+            COUNT(DISTINCT o.id) as pedidos,
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as pecas,
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as bonus
+          FROM pdv_orders o
+          LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
+          WHERE o.sellerId IN (${placeholders})
+            AND o.status != 'CANCELADO'
+            AND DATE(o.createdAt) >= ?
+            AND DATE(o.createdAt) <= ?
+          GROUP BY DATE(o.createdAt)
+          ORDER BY dia ASC`,
+          baseParams
+        );
+
+        // Pedidos recentes (50 mais recentes)
+        const [orderRows] = await db.execute(
+          `SELECT
+            o.pedidoId, o.createdAt, o.clienteNome, o.regime, o.canal,
+            o.status, o.totalAplicado, o.sellerName,
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
+            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as bonusTotal,
+            COALESCE((SELECT SUM(os2.valor) FROM pdv_order_services os2 WHERE os2.pedidoId = o.pedidoId AND os2.tipo = 'CAIXINHA'), 0) as caixinhaTotal
+          FROM pdv_orders o
+          LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
+          WHERE o.sellerId IN (${placeholders})
+            AND DATE(o.createdAt) >= ?
+            AND DATE(o.createdAt) <= ?
+          GROUP BY o.pedidoId, o.createdAt, o.clienteNome, o.regime, o.canal, o.status, o.totalAplicado, o.sellerName
+          ORDER BY o.createdAt DESC
+          LIMIT 50`,
+          baseParams
+        );
+
+        // Metas
+        const [goalRows] = await db.execute("SELECT \`key\`, value FROM pdv_goals");
+        const goals: Record<string, number> = {};
+        (goalRows as any[]).forEach((g: any) => { goals[g.key] = parseFloat(g.value); });
+
+        await db.end();
+
+        const kpi = (kpiRows as any[])[0];
+        const faturamento = parseFloat(kpi.faturamento || '0');
+        const totalBonus = parseFloat(kpi.totalBonus || '0');
+        const totalCaixinha = parseFloat((caixRows as any[])[0]?.totalCaixinha || '0');
+
+        return {
+          sellers,
+          kpis: {
+            totalPedidos: parseInt(kpi.totalPedidos || '0'),
+            totalPecas: parseInt(kpi.totalPecas || '0'),
+            faturamento,
+            totalBonus,
+            totalCaixinha,
+            faturamentoAtacado: parseFloat(kpi.faturamentoAtacado || '0'),
+            faturamentoVarejo: parseFloat(kpi.faturamentoVarejo || '0'),
+            faturamentoBalcao: parseFloat(kpi.faturamentoBalcao || '0'),
+            faturamentoWhatsapp: parseFloat(kpi.faturamentoWhatsapp || '0'),
+            pedidosCancelados: parseInt(kpi.pedidosCancelados || '0'),
+            metaAtingida: faturamento >= (goals.BRONZE || 0)
+              ? faturamento >= (goals.OURO || 0) ? 'OURO'
+                : faturamento >= (goals.PRATA || 0) ? 'PRATA' : 'BRONZE'
+              : null,
+          },
+          daily: (dailyRows as any[]).map(d => ({
+            dia: d.dia,
+            pedidos: parseInt(d.pedidos || '0'),
+            pecas: parseInt(d.pecas || '0'),
+            faturamento: parseFloat(d.faturamento || '0'),
+            bonus: parseFloat(d.bonus || '0'),
+          })),
+          recentOrders: (orderRows as any[]).map(r => ({
+            pedidoId: r.pedidoId,
+            createdAt: r.createdAt,
+            clienteNome: r.clienteNome,
+            regime: r.regime,
+            canal: r.canal,
+            status: r.status,
+            sellerName: r.sellerName,
+            totalAplicado: parseFloat(r.totalAplicado || '0'),
+            totalPecas: parseInt(r.totalPecas || '0'),
+            bonusTotal: parseFloat(r.bonusTotal || '0'),
+            caixinhaTotal: parseFloat(r.caixinhaTotal || '0'),
+          })),
+          goals,
+        };
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+        console.error("[PDV SellerPanel] Error:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      }
+    }),
 });

@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, ShoppingBag, Users, DollarSign, Plus, Minus,
-  Target, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Box
+  Target, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Box, ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -242,6 +242,7 @@ export default function PdvDashboard() {
             color="text-yellow-400"
             bg="bg-yellow-950/30 border-yellow-900/50"
             loading={isLoading}
+            onClick={() => navigate("/pdv/painel-vendedor")}
           />
         </div>
 
@@ -679,16 +680,20 @@ export default function PdvDashboard() {
   );
 }
 
-function KpiCard({ title, value, icon: Icon, color, bg, loading }: {
+function KpiCard({ title, value, icon: Icon, color, bg, loading, onClick }: {
   title: string;
   value: string;
   icon: any;
   color: string;
   bg: string;
   loading?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div className={`border rounded-2xl p-4 ${bg}`}>
+    <div
+      className={`border rounded-2xl p-4 ${bg} ${onClick ? "cursor-pointer hover:brightness-110 transition-all" : ""}`}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between mb-3">
         <span className="text-gray-400 text-sm">{title}</span>
         <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-gray-900/50`}>
@@ -698,7 +703,10 @@ function KpiCard({ title, value, icon: Icon, color, bg, loading }: {
       {loading ? (
         <div className="h-7 bg-gray-800 rounded animate-pulse" />
       ) : (
-        <div className={`text-xl font-bold ${color}`}>{value}</div>
+        <div className="flex items-center gap-2">
+          <div className={`text-xl font-bold ${color}`}>{value}</div>
+          {onClick && <ChevronRight className={`w-4 h-4 ${color} opacity-60`} />}
+        </div>
       )}
     </div>
   );
