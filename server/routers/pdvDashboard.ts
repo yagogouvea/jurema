@@ -539,7 +539,7 @@ export const pdvDashboardRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
       try {
-        const sellerFilter = input.sellerId ? " AND s.id = ?" : "";
+        const sellerFilter = input.sellerId ? " AND id = ?" : "";
         const sellerParams: any[] = input.sellerId ? [input.sellerId] : [];
 
         // Lista de vendedores ativos (filtrada ou todos)
@@ -556,7 +556,8 @@ export const pdvDashboardRouter = router({
 
         const sellerIds = sellers.map((s: any) => s.id);
         const placeholders = sellerIds.map(() => "?").join(",");
-        const baseParams = [...sellerIds, input.startDate, input.endDate];
+        // Cada query recebe seu próprio array de parâmetros para evitar reutilização
+        const mkParams = () => [...sellerIds, input.startDate, input.endDate];
 
         // KPIs consolidados para os vendedores selecionados
         const [kpiRows] = await db.execute(
@@ -576,7 +577,7 @@ export const pdvDashboardRouter = router({
             AND o.status != 'CANCELADO'
             AND DATE(o.createdAt) >= ?
             AND DATE(o.createdAt) <= ?`,
-          baseParams
+          mkParams()
         );
 
         // Caixinha total (serviços do tipo CAIXINHA)
@@ -589,7 +590,7 @@ export const pdvDashboardRouter = router({
             AND o.sellerId IN (${placeholders})
             AND DATE(o.createdAt) >= ?
             AND DATE(o.createdAt) <= ?`,
-          baseParams
+          mkParams()
         );
 
         // Faturamento por dia
@@ -608,7 +609,7 @@ export const pdvDashboardRouter = router({
             AND DATE(o.createdAt) <= ?
           GROUP BY DATE(o.createdAt)
           ORDER BY dia ASC`,
-          baseParams
+          mkParams()
         );
 
         // Pedidos recentes (50 mais recentes)
@@ -627,7 +628,7 @@ export const pdvDashboardRouter = router({
           GROUP BY o.pedidoId, o.createdAt, o.clienteNome, o.regime, o.canal, o.status, o.totalAplicado, o.sellerName
           ORDER BY o.createdAt DESC
           LIMIT 50`,
-          baseParams
+          mkParams()
         );
 
         // Metas

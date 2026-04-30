@@ -1124,3 +1124,9 @@
 - [x] Correção: selectedSellerName e selectedColor agora usam a lista fixa
 - [x] Correção: comparacões usam Number(s.id) para evitar type mismatch string vs number
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v148 — Corrigir erro 500 no sellerPanel com sellerId específico
+- [x] Bug 1: query de vendedores usava alias s.id inexistente — corrigido para id = ?
+- [x] Bug 2: baseParams era reutilizado em 4 queries diferentes — corrigido com mkParams() que cria novo array a cada chamada
+- [x] Validado: FLAVIO (30001) retorna 97 pedidos e R$1.031 de caixinha corretamente
+- [x] 0 erros TypeScript, 206/206 testes passando
