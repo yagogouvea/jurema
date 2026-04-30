@@ -1085,3 +1085,12 @@
 - [x] Correção: PdvComissoes entry point agora verifica isLoading antes de renderizar a visão correta
 - [x] Testes de catálogo ajustados para refletir a realidade atual do banco (51 produtos ativos)
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v144 — Melhorias na tela de Bônus/Caixinha admin
+- [x] Barra de rolagem na tabela de vendedores (max-h-96 + overflow-y-auto, cabeçalho sticky)
+- [x] Filtro por vendedor com botões coloridos + opção "Todos" persistente (não some ao clicar)
+- [x] Filtro por período (data início e fim) mantido e visível junto ao filtro de vendedor
+- [x] KPIs e gráfico refletem o vendedor filtrado (filtragem client-side com useMemo)
+- [x] Badge "Filtrado: NOME" no cabeçalho da tabela quando um vendedor específico está selecionado
+- [x] Rodapé TOTAL também sticky na parte inferior da tabela
+- [x] 0 erros TypeScript, 206/206 testes passando
