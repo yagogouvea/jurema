@@ -1147,3 +1147,17 @@
 - [x] taxaComissao removido do input Zod do endpoint getData
 - [x] ReportContent usa data.comissoes.taxaComissao (vindo do backend) em vez de prop local
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v151 — Corrigir modal Sofia + anexar foto ao pedido
+- [x] Bug corrigido: orderDetail usava selectedOrder (null até clicar em Cancelar) em vez de expandedOrder
+- [x] Correção: query getById agora usa expandedOrder como chave — itens carregam ao expandir o pedido
+- [x] Estado de carregamento com spinner ao expandir pedido
+- [x] Mensagem "Nenhum item Sofia neste pedido" quando não há itens
+- [x] Migration: coluna fotoUrl varchar(2000) adicionada em pdv_orders
+- [x] Backend: endpoint pdvSofia.uploadFoto (base64 → S3 → salva URL no pedido)
+- [x] Backend: endpoint pdvSofia.removeFoto (limpa fotoUrl do pedido)
+- [x] Frontend: botão "Anexar foto" com dashed border quando sem foto
+- [x] Frontend: thumbnail 80x80 + botões Ver/Trocar/Remover quando com foto
+- [x] Frontend: modal de visualização em tela cheia ao clicar na foto
+- [x] Limite de 5MB no upload com toast de erro
+- [x] 0 erros TypeScript, 206/206 testes passando

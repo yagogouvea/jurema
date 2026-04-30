@@ -113,6 +113,13 @@
       "when": 1776876436478,
       "tag": "0015_wonderful_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1777583961764,
+      "tag": "0016_parallel_black_bolt",
+      "breakpoints": true
     }
   ]
 }

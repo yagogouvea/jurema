@@ -7,7 +7,8 @@ import {
 } from "recharts";
 import {
   Package, DollarSign, Calendar, ArrowDownRight, ArrowUpRight,
-  Settings2, ShoppingBag, ChevronDown, ChevronUp, X, Eye, AlertTriangle
+  Settings2, ShoppingBag, ChevronDown, ChevronUp, X, Eye, AlertTriangle,
+  Camera, Trash2, ExternalLink, Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,13 +54,43 @@ export default function PdvSofia() {
     { startDate, endDate, page, limit: 20 },
     { enabled: isAdmin && activeTab === "pedidos" }
   );
-  const { data: orderDetail } = trpc.pdvOrders.getById.useQuery(
-    { pedidoId: selectedOrder?.pedidoId || "" },
-    { enabled: !!selectedOrder?.pedidoId }
+  const { data: orderDetail, isLoading: orderDetailLoading } = trpc.pdvOrders.getById.useQuery(
+    { pedidoId: expandedOrder || "" },
+    { enabled: !!expandedOrder }
   );
 
   const [comissaoInput, setComissaoInput] = useState<number | null>(null);
+  const [uploadingFoto, setUploadingFoto] = useState<string | null>(null); // pedidoId em upload
+  const [viewFoto, setViewFoto] = useState<string | null>(null); // URL da foto em visualização
   const utils = trpc.useUtils();
+
+  const uploadFotoMutation = trpc.pdvSofia.uploadFoto.useMutation({
+    onSuccess: () => {
+      toast.success("Foto anexada com sucesso!");
+      setUploadingFoto(null);
+      utils.pdvOrders.getById.invalidate({ pedidoId: expandedOrder || "" });
+    },
+    onError: () => { toast.error("Erro ao fazer upload da foto"); setUploadingFoto(null); },
+  });
+
+  const removeFotoMutation = trpc.pdvSofia.removeFoto.useMutation({
+    onSuccess: () => {
+      toast.success("Foto removida");
+      utils.pdvOrders.getById.invalidate({ pedidoId: expandedOrder || "" });
+    },
+    onError: () => toast.error("Erro ao remover foto"),
+  });
+
+  function handleFotoUpload(pedidoId: string, file: File) {
+    if (file.size > 5 * 1024 * 1024) { toast.error("Foto deve ter no máximo 5MB"); return; }
+    setUploadingFoto(pedidoId);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string;
+      uploadFotoMutation.mutate({ pedidoId, base64, mimeType: file.type });
+    };
+    reader.readAsDataURL(file);
+  }
 
   const updateConfigMutation = trpc.pdvSofia.updateConfig.useMutation({
     onSuccess: () => {
@@ -100,6 +131,7 @@ export default function PdvSofia() {
   const totalPagesPedidos = pedidosData?.totalPages || 1;
 
   return (
+    <>
     <PdvLayout>
       <div className="p-6 space-y-6">
         {/* Header */}
@@ -361,10 +393,62 @@ export default function PdvSofia() {
                                     </div>
                                   </div>
                                 ))}
-                              {!orderDetail && (
-                                <div className="text-gray-500 text-xs italic px-2">Carregando itens...</div>
+                              {orderDetailLoading && (
+                                <div className="flex items-center gap-2 text-gray-500 text-xs italic px-2 py-2">
+                                  <div className="w-3 h-3 border border-purple-600 border-t-transparent rounded-full animate-spin" />
+                                  Carregando itens...
+                                </div>
+                              )}
+                              {!orderDetailLoading && orderDetail && orderDetail.items.filter((i: any) => i.isSofia).length === 0 && (
+                                <div className="text-gray-500 text-xs italic px-2">Nenhum item Sofia neste pedido</div>
                               )}
                             </div>
+                          </div>
+
+                          {/* Foto */}
+                          <div>
+                            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2">Foto do Pedido</p>
+                            {orderDetail?.fotoUrl ? (
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={orderDetail.fotoUrl}
+                                  alt="Foto do pedido"
+                                  className="w-20 h-20 object-cover rounded-xl border border-gray-700 cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => setViewFoto(orderDetail.fotoUrl)}
+                                />
+                                <div className="flex flex-col gap-2">
+                                  <button
+                                    onClick={() => setViewFoto(orderDetail.fotoUrl)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-300 text-xs transition-colors"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                    Ver foto
+                                  </button>
+                                  <label className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-300 text-xs transition-colors cursor-pointer">
+                                    <Camera className="w-3 h-3" />
+                                    Trocar
+                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFotoUpload(order.pedidoId, e.target.files[0])} />
+                                  </label>
+                                  <button
+                                    onClick={() => removeFotoMutation.mutate({ pedidoId: order.pedidoId })}
+                                    disabled={removeFotoMutation.isPending}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/30 hover:bg-red-950/50 border border-red-900/30 rounded-lg text-red-400 text-xs transition-colors disabled:opacity-50"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    Remover
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <label className="flex items-center gap-2 px-4 py-3 bg-gray-800/50 border border-dashed border-gray-700 hover:border-purple-600 rounded-xl text-gray-400 hover:text-purple-400 text-sm transition-colors cursor-pointer w-fit">
+                                {uploadingFoto === order.pedidoId ? (
+                                  <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+                                ) : (
+                                  <><Camera className="w-4 h-4" /> Anexar foto</>  
+                                )}
+                                <input type="file" accept="image/*" className="hidden" disabled={uploadingFoto === order.pedidoId} onChange={(e) => e.target.files?.[0] && handleFotoUpload(order.pedidoId, e.target.files[0])} />
+                              </label>
+                            )}
                           </div>
 
                           {/* Actions */}
@@ -431,5 +515,27 @@ export default function PdvSofia() {
         )}
       </div>
     </PdvLayout>
+      {/* Modal visualização de foto em tela cheia */}
+      {viewFoto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setViewFoto(null)}
+        >
+          <div className="relative max-w-3xl w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setViewFoto(null)}
+              className="absolute -top-10 right-0 text-white/70 hover:text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={viewFoto ?? undefined}
+              alt="Foto do pedido"
+              className="w-full max-h-[80vh] object-contain rounded-2xl"
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

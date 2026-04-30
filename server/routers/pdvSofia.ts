@@ -200,7 +200,7 @@ export const pdvSofiaRouter = router({
     };
   }),
 
-  // Configuração: atualizar comissão padrão da loja (afeta apenas novos pedidos)
+   // Configuração: atualizar comissão padrão da loja (afeta apenas novos pedidos)
   updateConfig: publicProcedure
     .input(z.object({
       comissaoLoja: z.number().min(0),
@@ -209,10 +209,57 @@ export const pdvSofiaRouter = router({
       await requirePdvAdmin(ctx);
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
       await db.execute(
         "UPDATE pdv_sofia_config SET comissaoLoja = ? WHERE id = 1",
         [input.comissaoLoja]
+      );
+      await db.end();
+      return { success: true };
+    }),
+
+  // Upload de foto para um pedido (base64 → S3)
+  uploadFoto: publicProcedure
+    .input(z.object({
+      pedidoId: z.string(),
+      base64: z.string(),   // data:image/jpeg;base64,...
+      mimeType: z.string().default("image/jpeg"),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      try {
+        const { storagePut } = await import("../storage");
+        // Extrair dados base64 (remover prefixo data:...;base64,)
+        const base64Data = input.base64.replace(/^data:[^;]+;base64,/, "");
+        const buffer = Buffer.from(base64Data, "base64");
+        const ext = input.mimeType === "image/png" ? "png" : "jpg";
+        const key = `pdv-fotos/${input.pedidoId}-${Date.now()}.${ext}`;
+        const { url } = await storagePut(key, buffer, input.mimeType);
+        // Salvar URL no pedido
+        await db.execute(
+          "UPDATE pdv_orders SET fotoUrl = ? WHERE pedidoId = ?",
+          [url, input.pedidoId]
+        );
+        await db.end();
+        return { success: true, url };
+      } catch (err) {
+        await db.end();
+        console.error("[PDV Sofia] Erro ao fazer upload da foto:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao fazer upload da foto" });
+      }
+    }),
+
+  // Remover foto de um pedido
+  removeFoto: publicProcedure
+    .input(z.object({ pedidoId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.execute(
+        "UPDATE pdv_orders SET fotoUrl = NULL WHERE pedidoId = ?",
+        [input.pedidoId]
       );
       await db.end();
       return { success: true };

@@ -256,12 +256,12 @@ export const pdvOrders = mysqlTable("pdv_orders", {
   totalPago: decimal("totalPago", { precision: 10, scale: 2 }).default("0").notNull(),
   totalPendente: decimal("totalPendente", { precision: 10, scale: 2 }).default("0").notNull(),
   justificativa: text("justificativa"),
-  isSofia: boolean("isSofia").default(false).notNull(),
+   isSofia: boolean("isSofia").default(false).notNull(),
   status: mysqlEnum("status", ["PAGO", "PENDENTE", "CANCELADO"]).default("PAGO").notNull(),
+  fotoUrl: varchar("fotoUrl", { length: 2000 }),              // URL S3 da foto anexada ao pedido
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
-
 export type PdvOrder = typeof pdvOrders.$inferSelect;
 export type InsertPdvOrder = typeof pdvOrders.$inferInsert;
 

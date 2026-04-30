@@ -1,0 +1,2 @@
+ALTER TABLE `wa_conversations` MODIFY COLUMN `status` enum('novo','em_atendimento','aguardando','proposta_enviada','finalizado','spam') NOT NULL DEFAULT 'novo';--> statement-breakpoint
+ALTER TABLE `pdv_orders` ADD `fotoUrl` varchar(2000);
