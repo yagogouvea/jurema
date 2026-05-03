@@ -1171,3 +1171,17 @@
 - [x] Ambos os botões mostram 'Atualizando...' durante a operação
 - [x] Refetch da lista + invalidate do dashboard Sofia após alteração
 - [x] 0 erros TypeScript, 206/206 testes passando
+
+## v153 — wa-bridge (WhatsApp Baileys) para Railway
+- [x] Criar projeto wa-bridge em /home/ubuntu/wa-bridge (Node.js + Baileys + Express)
+- [x] Multi-sessão: suporte a 3 números WhatsApp independentes
+- [x] Sessões persistentes salvas em /sessions (volume Railway)
+- [x] Dashboard web para escanear QR Code de cada número
+- [x] Endpoint POST /send para o site Jurema enviar mensagens
+- [x] Webhook de saída: POST para o site Jurema quando chega mensagem
+- [x] Autenticação por API key entre wa-bridge e site Jurema
+- [x] Reconexão automática ao cair a conexão
+- [x] Atualizar waRouter.ts: ativar envio real via wa-bridge (remover TODO)
+- [x] Configurar variável WA_BRIDGE_URL e WA_BRIDGE_API_KEY no site Jurema
+- [x] Dockerfile + railway.toml para deploy no Railway
+- [x] 0 erros TypeScript, testes passando

@@ -1,8 +1,7 @@
 /**
  * Router tRPC — Módulo WhatsApp IA
  * Toda a lógica de instâncias, conversas, mensagens e configuração da IA.
- * As chamadas reais à Evolution API (evocloud.pro) e OpenAI serão ativadas
- * quando as credenciais estiverem disponíveis.
+ * Integrado ao wa-bridge (Baileys) para envio/recebimento real de mensagens.
  */
 
 import { z } from "zod";
@@ -308,8 +307,10 @@ export const waRouter = router({
           [input.content.substring(0, 100), now, input.conversationId]
         );
 
-        // TODO: Chamar Evolution API para enviar a mensagem de verdade
-        // await evolutionSendMessage({ instanceId: conv.instanceId, remoteJid: conv.remoteJid, content: input.content });
+        // Enviar via wa-bridge (Baileys) se configurado
+        callWaBridge(conv.instanceId, conv.remoteJid, input.content).catch(e =>
+          console.error("[sendMessage] Erro ao chamar wa-bridge:", e)
+        );
 
         return { success: true, messageId: result.insertId };
       } finally { await db.end(); }
@@ -377,8 +378,10 @@ export const waRouter = router({
               "UPDATE wa_conversations SET lastMessage=?, lastMessageAt=NOW() WHERE id=?",
               [awayMsg.substring(0, 100), conversationId]
             );
-            // TODO: Enviar via Evolution API quando evocloud estiver conectado
-            // await evolutionSendMessage({ instanceId: input.instanceId, remoteJid: input.remoteJid, content: awayMsg });
+            // Enviar via wa-bridge (Baileys) se configurado
+            callWaBridge(input.instanceId, input.remoteJid, awayMsg).catch(e =>
+              console.error("[webhook] Erro ao enviar ausência via wa-bridge:", e)
+            );
             console.log(`[webhook] Mensagem de ausência enviada para conversa ${conversationId}`);
           }
 
@@ -535,6 +538,37 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 });
+
+// ─── Helper: wa-bridge ───────────────────────────────────────────────────────
+
+/**
+ * Envia uma mensagem via wa-bridge (microserviço Baileys no Railway).
+ * Silencioso se WA_BRIDGE_URL não estiver configurado (modo desenvolvimento).
+ */
+async function callWaBridge(instanceId: number, remoteJid: string, content: string): Promise<void> {
+  const bridgeUrl = process.env.WA_BRIDGE_URL;
+  const bridgeKey = process.env.WA_BRIDGE_API_KEY;
+
+  if (!bridgeUrl) {
+    console.log(`[wa-bridge] WA_BRIDGE_URL não configurado — mensagem não enviada (instanceId=${instanceId}, jid=${remoteJid})`);
+    return;
+  }
+
+  const res = await fetch(`${bridgeUrl}/send`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-wa-bridge-key": bridgeKey ?? "",
+    },
+    body: JSON.stringify({ instanceId, remoteJid, content }),
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`wa-bridge respondeu ${res.status}: ${text.substring(0, 200)}`);
+  }
+}
 
 // ─── Helper: Gerador de System Prompt ─────────────────────────────────────────
 
