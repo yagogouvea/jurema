@@ -15,8 +15,11 @@ export default function PdvLogin() {
   const loginMutation = trpc.pdvAuth.login.useMutation({
     onSuccess: async (data) => {
       toast.success(`Bem-vindo, ${data.seller.name}!`);
-      // Navega imediatamente — o PdvLayout fará o refetch ao montar
-      // Não aguardar refetch() pois pode travar por timeout de outras queries em batch
+      // Salvar token no localStorage para enviar via Authorization header nas chamadas tRPC
+      // Isso resolve o problema de cookies SameSite em produção
+      if (data.token) {
+        localStorage.setItem("pdv_token", data.token);
+      }
       refetch();
       navigate("/pdv");
     },

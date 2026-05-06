@@ -97,6 +97,7 @@ export const pdvAuthRouter = router({
         
         return {
           success: true,
+          token, // JWT para o frontend salvar no localStorage e enviar via Authorization header
           seller: {
             id: seller.id,
             name: seller.name,

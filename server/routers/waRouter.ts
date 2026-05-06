@@ -21,11 +21,24 @@ async function getDb() {
 
 /** Aceita usuários Manus OAuth (admin) ou vendedores PDV autenticados */
 async function requireWaAccess(ctx: any): Promise<{ name: string; role: string }> {
-  // Tenta autenticação PDV primeiro
   const req = ctx.req as Request;
-  const seller = await verifyPdvToken(req).catch(() => null);
-  if (seller) return { name: seller.name, role: seller.role };
-  // Fallback: usuário Manus OAuth
+  // 1. Tenta cookie pdv_token
+  const sellerFromCookie = await verifyPdvToken(req).catch(() => null);
+  if (sellerFromCookie) return { name: sellerFromCookie.name, role: sellerFromCookie.role };
+  // 2. Tenta header Authorization: Bearer <pdv_token>
+  const authHeader = req.headers.authorization || "";
+  if (authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    // Verificar se é token PDV (JWT)
+    try {
+      const { jwtVerify } = await import("jose");
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET || "pdv_jwt_secret_fallback");
+      const { payload } = await jwtVerify(token, secret);
+      const p = payload as any;
+      if (p.sellerId) return { name: p.name, role: p.role };
+    } catch { /* não é token PDV */ }
+  }
+  // 3. Fallback: usuário Manus OAuth
   if (ctx.user) return { name: ctx.user.name ?? "Atendente", role: ctx.user.role ?? "user" };
   throw new TRPCError({ code: "UNAUTHORIZED" });
 }
@@ -45,7 +58,7 @@ export const waRouter = router({
 
   // ── Instâncias ──────────────────────────────────────────────────────────────
 
-  listInstances: protectedProcedure.query(async ({ ctx }) => {
+  listInstances: publicProcedure.query(async ({ ctx }) => {
     await requireWaAccess(ctx);
     const db = await getDb();
     try {
@@ -54,7 +67,7 @@ export const waRouter = router({
     } finally { await db.end(); }
   }),
 
-  upsertInstance: protectedProcedure
+  upsertInstance: publicProcedure
     .input(z.object({
       id: z.number().optional(),
       name: z.string().min(1).max(100),
@@ -83,7 +96,7 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
-  updateInstanceStatus: protectedProcedure
+  updateInstanceStatus: publicProcedure
     .input(z.object({
       instanceId: z.number(),
       status: z.enum(["disconnected", "connecting", "connected", "error"]),
@@ -99,7 +112,7 @@ export const waRouter = router({
 
   // ── Conversas ───────────────────────────────────────────────────────────────
 
-  listConversations: protectedProcedure
+  listConversations: publicProcedure
     .input(z.object({
       instanceId: z.number().optional(), // 0 ou undefined = todos os números
       status: z.enum(["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam"]).optional(),
@@ -140,7 +153,7 @@ export const waRouter = router({
     }),
 
   // Contagem de conversas por status (para badges nos filtros)
-  countByStatus: protectedProcedure
+  countByStatus: publicProcedure
     .input(z.object({ instanceId: z.number().optional() }))
     .query(async ({ ctx, input }) => {
       await requireWaAccess(ctx);
@@ -159,7 +172,7 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
-  getConversation: protectedProcedure
+  getConversation: publicProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
       await requireWaAccess(ctx);
@@ -171,7 +184,7 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
-  markAsRead: protectedProcedure
+  markAsRead: publicProcedure
     .input(z.object({ conversationId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       await requireWaAccess(ctx);
@@ -182,7 +195,7 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
-  toggleAi: protectedProcedure
+  toggleAi: publicProcedure
     .input(z.object({
       conversationId: z.number(),
       enabled: z.boolean(),
@@ -212,7 +225,7 @@ export const waRouter = router({
     }),
 
   // Atualiza status (com lock de 30min) e/ou anotações de uma conversa
-  updateConversation: protectedProcedure
+  updateConversation: publicProcedure
     .input(z.object({
       id: z.number(),
       status: z.enum(["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam"]).optional(),
@@ -239,7 +252,7 @@ export const waRouter = router({
     }),
 
   // Libera o lock manual e devolve o controle de status para a IA
-  unlockAiStatus: protectedProcedure
+  unlockAiStatus: publicProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       await requireWaAccess(ctx);
@@ -261,7 +274,7 @@ export const waRouter = router({
     }),
 
   // ── Mensagens ───────────────────────────────────────────────────────────────
-  listMessages: protectedProcedure
+  listMessages: publicProcedure
     .input(z.object({
       conversationId: z.number(),
       limit: z.number().min(1).max(200).default(50),
@@ -281,7 +294,7 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
-  sendMessage: protectedProcedure
+  sendMessage: publicProcedure
     .input(z.object({
       conversationId: z.number(),
       content: z.string().min(1),

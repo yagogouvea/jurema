@@ -26,8 +26,12 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       headers() {
+        // Prioridade: admin_token (painel admin) > pdv_token (painel PDV)
         const adminToken = localStorage.getItem("admin_token");
-        return adminToken ? { Authorization: `Bearer ${adminToken}` } : {};
+        if (adminToken) return { Authorization: `Bearer ${adminToken}` };
+        const pdvToken = localStorage.getItem("pdv_token");
+        if (pdvToken) return { Authorization: `Bearer ${pdvToken}` };
+        return {};
       },
       fetch(input, init) {
         const controller = new AbortController();

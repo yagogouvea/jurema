@@ -31,6 +31,8 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
 
   const logoutMutation = trpc.pdvAuth.logout.useMutation({
     onSuccess: () => {
+      // Limpar token do localStorage ao fazer logout
+      localStorage.removeItem("pdv_token");
       utils.pdvAuth.me.invalidate();
       navigate("/pdv/login");
       toast.success("Logout realizado com sucesso");
