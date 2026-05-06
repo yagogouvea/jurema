@@ -152,7 +152,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
   );
 
   return (
-    <div className="min-h-screen bg-gray-950 flex">
+    <div className="h-screen bg-gray-950 flex overflow-hidden">
       {/* Desktop Sidebar */}
       <aside className="hidden xl:flex w-64 bg-gray-900 border-r border-gray-800 flex-col flex-shrink-0">
         <SidebarContent />
@@ -197,7 +197,7 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto min-h-0">
           {children}
         </main>
       </div>

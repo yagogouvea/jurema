@@ -365,9 +365,16 @@ export const waRouter = router({
         } else {
           const conv = convRows[0];
           conversationId = conv.id;
+          // Atualizar nome: se vier pushName preenchido, sempre sobrescreve (nome mais recente da agenda)
+          // Se não vier pushName, mantém o nome existente (COALESCE)
+          const newName = input.contactName && input.contactName.trim() ? input.contactName.trim() : null;
           await db.execute(
-            "UPDATE wa_conversations SET lastMessage=?, lastMessageAt=?, unreadCount=?, contactName=COALESCE(?,contactName), contactPhone=COALESCE(?,contactPhone) WHERE id=?",
-            [input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? conv.unreadCount : conv.unreadCount + 1, input.contactName ?? null, input.contactPhone ?? null, conv.id]
+            `UPDATE wa_conversations SET lastMessage=?, lastMessageAt=?, unreadCount=?,
+             contactName=${newName ? '?' : 'COALESCE(?,contactName)'},
+             contactPhone=COALESCE(?,contactPhone) WHERE id=?`,
+            newName
+              ? [input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? conv.unreadCount : conv.unreadCount + 1, newName, input.contactPhone ?? null, conv.id]
+              : [input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? conv.unreadCount : conv.unreadCount + 1, null, input.contactPhone ?? null, conv.id]
           );
         }
 

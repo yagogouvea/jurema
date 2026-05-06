@@ -1203,3 +1203,19 @@
 - [x] Botão "Iniciar Conexão" nos cards desconectados
 - [x] QR Code exibido inline no painel (sem abrir nova aba)
 - [x] Auto-refresh do QR a cada 5s
+
+## v161 — Reformulação da interface de conversa WhatsApp
+- [ ] Layout fixo estilo WhatsApp Web (sem scroll de página, painel dividido lista/chat)
+- [ ] Scroll interno apenas no painel de mensagens (não rola a página inteira)
+- [ ] Nomes de contatos reais (como salvos no telefone) via wa-bridge /contacts
+- [ ] Fallback: exibir número formatado quando não há nome salvo
+- [ ] Avatar com inicial do contato
+- [ ] Campo de resposta fixo no rodapé do painel de chat
+- [ ] UX desktop profissional (similar ao WhatsApp Web)
+
+## Melhorias Interface WhatsApp IA (v161)
+- [x] Corrigir scroll externo na página do WhatsApp (PdvLayout: h-screen overflow-hidden no container raiz)
+- [x] PdvWhatsApp: usar h-screen overflow-hidden para preencher viewport sem scroll externo
+- [x] Melhorar getDisplayName: formatar número de telefone (+55 (XX) XXXXX-XXXX) quando não há nome
+- [x] Input de mensagem: substituir Input por textarea expansível (auto-resize até 120px, Shift+Enter para nova linha)
+- [x] waRouter: atualizar contactName sempre que pushName vier preenchido (não apenas COALESCE)
