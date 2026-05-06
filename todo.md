@@ -1185,3 +1185,13 @@
 - [x] Configurar variável WA_BRIDGE_URL e WA_BRIDGE_API_KEY no site Jurema
 - [x] Dockerfile + railway.toml para deploy no Railway
 - [x] 0 erros TypeScript, testes passando
+
+## v154 — Integrar status real do wa-bridge na tela /pdv/whatsapp
+- [x] Backend: endpoint wa.bridgeStatus que consulta GET /status do wa-bridge e retorna status de cada instância
+- [x] Backend: endpoint wa.bridgeReset que chama POST /reset/:id no wa-bridge (admin only)
+- [x] Frontend: seção "Conexões WhatsApp" na tela /pdv/whatsapp com cards por instância
+- [x] Frontend: badge de status ao vivo (Conectado/Aguardando QR/Desconectado) com número do telefone
+- [x] Frontend: botão "Escanear QR" que abre o dashboard do wa-bridge na instância correta
+- [x] Frontend: botão "Reconectar" (admin) para resetar sessão via wa-bridge
+- [x] Frontend: auto-refresh do status a cada 15 segundos
+- [x] Vincular instanceId do banco (wa_instances) ao instanceId do wa-bridge (1, 2, 3)

@@ -4,9 +4,10 @@ import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import {
-  Bot, Save, Plus, Trash2, Wifi, WifiOff, Settings,
-  MessageCircle, Link2, Users, Clock, Zap, Brain,
-  ChevronLeft, Eye, EyeOff, RefreshCw, AlertCircle
+  Bot, Save, Plus, Wifi, WifiOff, Settings,
+  Clock, Zap, Brain, Link2, Users, Trash2,
+  ChevronLeft, Eye, EyeOff, RefreshCw, AlertCircle,
+  QrCode, RotateCcw, CheckCircle2, Radio, ExternalLink
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,6 +86,12 @@ export default function PdvWhatsAppConfig() {
     { instanceId: selectedInstanceId ?? undefined }
   );
 
+  // Status real do wa-bridge (Railway) — atualiza a cada 15s
+  const { data: bridgeData, refetch: refetchBridge, isFetching: bridgeFetching } = trpc.wa.bridgeStatus.useQuery(
+    undefined,
+    { refetchInterval: 15_000 }
+  );
+
   // Preenche o form quando a config da IA é carregada — usa aiConfig?.id como chave para forçar reset
   useEffect(() => {
     if (aiConfig !== undefined) {
@@ -137,6 +144,11 @@ export default function PdvWhatsAppConfig() {
 
   const updateStatus = trpc.wa.updateInstanceStatus.useMutation({
     onSuccess: () => { toast.success("Status atualizado!"); refetchInst(); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const bridgeReset = trpc.wa.bridgeReset.useMutation({
+    onSuccess: () => { toast.success("Sessão resetada — um novo QR Code será gerado."); refetchBridge(); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -260,167 +272,201 @@ export default function PdvWhatsAppConfig() {
         </div>
 
         {/* Conteúdo */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
-
-          {/* ── Tab: Instâncias ─────────────────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">          {/* ── Tab: Instâncias ────────────────────────────────────────────────── */}
           {activeTab === "instancias" && (
-            <div className="max-w-3xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-white font-semibold">Instâncias WhatsApp</h2>
-                  <p className="text-gray-400 text-sm mt-0.5">Gerencie os números conectados ao sistema</p>
+            <div className="max-w-3xl space-y-6">
+
+              {/* ─── Status ao vivo do wa-bridge ─────────────────────────────────── */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h2 className="text-white font-semibold flex items-center gap-2">
+                      <Radio className="w-4 h-4 text-green-400" />
+                      Conexões WhatsApp (wa-bridge)
+                    </h2>
+                    <p className="text-gray-400 text-xs mt-0.5">Status em tempo real das instâncias no Railway — atualiza a cada 15s</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => refetchBridge()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors border-gray-700 text-gray-400 hover:text-white"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${bridgeFetching ? "animate-spin" : ""}`} />
+                      Atualizar
+                    </button>
+                    <a
+                      href="https://wa-bridge-production-c9a2.up.railway.app/dashboard"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors"
+                      style={{ borderColor: "#25D36633", color: "#25D366" }}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Painel QR
+                    </a>
+                  </div>
                 </div>
-                <Button
-                  onClick={() => { setInstForm({ id: 0, name: "", phone: "", instanceId: "", apiKey: "", webhookUrl: "", active: true }); setEditingInst(true); }}
-                  className="bg-green-700 hover:bg-green-600 gap-2 text-sm"
-                >
-                  <Plus className="w-4 h-4" /> Nova Instância
-                </Button>
+
+                {bridgeData && !bridgeData.available && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl text-xs bg-red-950/20 border border-red-800/30 text-red-400 mb-3">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    wa-bridge indisponível — verifique o deploy no Railway.
+                  </div>
+                )}
+
+                {bridgeData?.available && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                    {bridgeData.sessions.map((sess: any) => {
+                      const linkedInst = (instances as any[]).find((i: any) => String(i.instanceId) === String(sess.instanceId));
+                      const isConnected = sess.status === "connected";
+                      const isQr = sess.status === "qr";
+                      return (
+                        <div key={sess.instanceId} className="rounded-xl border p-4 space-y-3"
+                          style={{ background: isConnected ? "rgba(37,211,102,0.05)" : "#111", borderColor: isConnected ? "#25D36633" : isQr ? "#fbbf2433" : "#2a2a2a" }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black"
+                                style={{ background: isConnected ? "#25D36620" : "#1a1a1a", color: isConnected ? "#25D366" : "#555" }}>
+                                {sess.instanceId}
+                              </div>
+                              <div>
+                                <div className="text-white text-xs font-semibold">{sess.name ?? `Instância ${sess.instanceId}`}</div>
+                                {sess.phone && <div className="text-[10px] font-mono" style={{ color: "#25D366" }}>+{sess.phone}</div>}
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                              style={{ background: isConnected ? "#25D36620" : isQr ? "#fbbf2420" : "#1a1a1a", color: isConnected ? "#25D366" : isQr ? "#fbbf24" : "#555" }}>
+                              {isConnected ? "Conectado" : isQr ? "Aguard. QR" : "Desconectado"}
+                            </span>
+                          </div>
+                          <div className="flex justify-center py-1">
+                            {isConnected && <CheckCircle2 className="w-8 h-8" style={{ color: "#25D366" }} />}
+                            {isQr && <QrCode className="w-8 h-8" style={{ color: "#fbbf24" }} />}
+                            {!isConnected && !isQr && <WifiOff className="w-8 h-8" style={{ color: "#444" }} />}
+                          </div>
+                          {linkedInst ? (
+                            <div className="text-[10px] text-center" style={{ color: "#555" }}>
+                              Vinculado: <span style={{ color: "#888" }}>{linkedInst.name}</span>
+                              {linkedInst.phone && <span className="font-mono ml-1" style={{ color: "#666" }}>({linkedInst.phone})</span>}
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-center" style={{ color: "#444" }}>Sem número vinculado</div>
+                          )}
+                          <div className="flex gap-1.5">
+                            {isQr && (
+                              <a href={`https://wa-bridge-production-c9a2.up.railway.app/qr/${sess.instanceId}`}
+                                target="_blank" rel="noopener noreferrer"
+                                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold border"
+                                style={{ color: "#fbbf24", borderColor: "#fbbf2433", background: "#fbbf2410" }}>
+                                <QrCode className="w-3.5 h-3.5" /> Escanear QR
+                              </a>
+                            )}
+                            <button onClick={() => bridgeReset.mutate({ bridgeInstanceId: sess.instanceId })}
+                              disabled={bridgeReset.isPending}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold border"
+                              style={{ color: "#f87171", borderColor: "#f8717122", background: "#f8717108" }}>
+                              <RotateCcw className="w-3.5 h-3.5" /> Reconectar
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {!bridgeData && (
+                  <div className="flex items-center justify-center h-16 text-xs" style={{ color: "#444" }}>
+                    <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Consultando wa-bridge...
+                  </div>
+                )}
               </div>
 
-              {/* Lista de instâncias */}
-              <div className="space-y-3">
-                {instances.map((inst: any) => (
-                  <div key={inst.id} className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                          inst.status === "connected" ? "bg-green-900" : "bg-gray-800"
-                        }`}>
-                          {inst.status === "connected"
-                            ? <Wifi className="w-5 h-5 text-green-400" />
-                            : <WifiOff className="w-5 h-5 text-gray-500" />}
+              {/* ─── Números cadastrados no banco ────────────────────────────────────── */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h2 className="text-white font-semibold">Números cadastrados</h2>
+                    <p className="text-gray-400 text-xs mt-0.5">Vincule cada número a uma instância wa-bridge (1, 2 ou 3)</p>
+                  </div>
+                  <Button
+                    onClick={() => { setInstForm({ id: 0, name: "", phone: "", instanceId: "", apiKey: "", webhookUrl: "", active: true }); setEditingInst(true); }}
+                    className="bg-green-700 hover:bg-green-600 gap-2 text-sm"
+                  >
+                    <Plus className="w-4 h-4" /> Novo Número
+                  </Button>
+                </div>
+              {/* Lista de números */}
+                <div className="space-y-3">
+                  {instances.map((inst: any) => (
+                    <div key={inst.id} className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm"
+                            style={{ background: "#1a1a1a", color: "#25D366" }}>
+                            {inst.instanceId || "?"}
+                          </div>
+                          <div>
+                            <div className="text-white font-semibold text-sm">{inst.name}</div>
+                            <div className="text-gray-400 text-xs font-mono">{inst.phone}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-white font-semibold text-sm">{inst.name}</div>
-                          <div className="text-gray-400 text-xs">{inst.phone}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className={`text-xs ${
-                          inst.status === "connected" ? "bg-green-900/50 text-green-400 border-green-800" :
-                          inst.status === "connecting" ? "bg-yellow-900/50 text-yellow-400 border-yellow-800" :
-                          inst.status === "error" ? "bg-red-900/50 text-red-400 border-red-800" :
-                          "bg-gray-800 text-gray-400 border-gray-700"
-                        }`}>
-                          {inst.status === "connected" ? "Conectado" :
-                           inst.status === "connecting" ? "Conectando..." :
-                           inst.status === "error" ? "Erro" : "Desconectado"}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <Button variant="ghost" size="sm"
                           onClick={() => { setInstForm({ id: inst.id, name: inst.name, phone: inst.phone, instanceId: inst.instanceId ?? "", apiKey: inst.apiKey ?? "", webhookUrl: inst.webhookUrl ?? "", active: inst.active }); setEditingInst(true); }}
-                          className="text-gray-400 hover:text-white text-xs h-7"
-                        >
+                          className="text-gray-400 hover:text-white text-xs h-7">
                           Editar
                         </Button>
                       </div>
-                    </div>
-
-                    {/* Detalhes */}
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-500">
-                      {inst.instanceId && (
-                        <div>
-                          <span className="text-gray-600">ID Evocloud:</span>{" "}
-                          <span className="text-gray-400 font-mono">{inst.instanceId}</span>
-                        </div>
-                      )}
-                      {inst.webhookUrl && (
-                        <div>
-                          <span className="text-gray-600">Webhook:</span>{" "}
-                          <span className="text-gray-400 truncate">{inst.webhookUrl}</span>
+                      {!inst.instanceId && (
+                        <div className="mt-3 flex items-center gap-2 text-xs text-orange-400 bg-orange-950/20 rounded-lg px-3 py-2">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          Defina o <strong>ID da instância wa-bridge</strong> (1, 2 ou 3) para vincular este número.
                         </div>
                       )}
                     </div>
-
-                    {/* Aviso de configuração pendente */}
-                    {(!inst.instanceId || !inst.apiKey) && (
-                      <div className="mt-3 flex items-center gap-2 text-xs text-orange-400 bg-orange-950/20 rounded-lg px-3 py-2">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                        Configure o ID da instância e a API Key do evocloud.pro para conectar este número.
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
-              {/* Form de edição de instância */}
+              {/* Form de edição */}
               {editingInst && (
                 <div className="bg-gray-900 rounded-xl border border-green-800/50 p-5 space-y-4">
                   <h3 className="text-white font-semibold text-sm">
-                    {instForm.id ? "Editar Instância" : "Nova Instância"}
+                    {instForm.id ? "Editar Número" : "Novo Número"}
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-gray-300 text-xs">Nome da instância *</Label>
-                      <Input
-                        value={instForm.name}
-                        onChange={e => setInstForm(f => ({ ...f, name: e.target.value }))}
-                        placeholder="ex: Jumera Principal"
-                        className="bg-gray-800 border-gray-700 text-white text-sm"
-                      />
+                      <Label className="text-gray-300 text-xs">Nome *</Label>
+                      <Input value={instForm.name} onChange={e => setInstForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="ex: Jurema Principal" className="bg-gray-800 border-gray-700 text-white text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-gray-300 text-xs">Número (com DDI) *</Label>
-                      <Input
-                        value={instForm.phone}
-                        onChange={e => setInstForm(f => ({ ...f, phone: e.target.value }))}
-                        placeholder="5511999999999"
-                        className="bg-gray-800 border-gray-700 text-white text-sm font-mono"
-                      />
+                      <Input value={instForm.phone} onChange={e => setInstForm(f => ({ ...f, phone: e.target.value }))}
+                        placeholder="5511999999999" className="bg-gray-800 border-gray-700 text-white text-sm font-mono" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-gray-300 text-xs">Instance ID (evocloud.pro)</Label>
-                      <Input
-                        value={instForm.instanceId}
-                        onChange={e => setInstForm(f => ({ ...f, instanceId: e.target.value }))}
-                        placeholder="Obtido no painel do evocloud.pro"
-                        className="bg-gray-800 border-gray-700 text-white text-sm font-mono"
-                      />
+                      <Label className="text-gray-300 text-xs">ID da instância wa-bridge *</Label>
+                      <Input value={instForm.instanceId} onChange={e => setInstForm(f => ({ ...f, instanceId: e.target.value }))}
+                        placeholder="1, 2 ou 3" className="bg-gray-800 border-gray-700 text-white text-sm font-mono" />
+                      <p className="text-gray-500 text-xs">Corresponde ao número da instância no wa-bridge (1 = Jurema 1, 2 = Jurema 2, 3 = Jurema 3).</p>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-gray-300 text-xs">API Key (evocloud.pro)</Label>
-                      <div className="relative">
-                        <Input
-                          type={showApiKey ? "text" : "password"}
-                          value={instForm.apiKey}
-                          onChange={e => setInstForm(f => ({ ...f, apiKey: e.target.value }))}
-                          placeholder="Chave de autenticação"
-                          className="bg-gray-800 border-gray-700 text-white text-sm font-mono pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowApiKey(v => !v)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                        >
-                          {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="sm:col-span-2 space-y-1.5">
-                      <Label className="text-gray-300 text-xs">URL do Webhook</Label>
-                      <Input
-                        value={instForm.webhookUrl}
-                        onChange={e => setInstForm(f => ({ ...f, webhookUrl: e.target.value }))}
-                        placeholder="https://seu-dominio.com/api/wa/webhook"
-                        className="bg-gray-800 border-gray-700 text-white text-sm font-mono"
-                      />
-                      <p className="text-gray-500 text-xs">Configure esta URL no painel do evocloud.pro para receber mensagens em tempo real.</p>
+                      <Label className="text-gray-300 text-xs">Webhook URL (opcional)</Label>
+                      <Input value={instForm.webhookUrl} onChange={e => setInstForm(f => ({ ...f, webhookUrl: e.target.value }))}
+                        placeholder="https://juremasports2.com.br/api/trpc/wa.receiveWebhook"
+                        className="bg-gray-800 border-gray-700 text-white text-sm font-mono" />
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2">
                     <Button
                       onClick={() => upsertInst.mutate(instForm.id ? instForm : { name: instForm.name, phone: instForm.phone, instanceId: instForm.instanceId || undefined, apiKey: instForm.apiKey || undefined, webhookUrl: instForm.webhookUrl || undefined, active: instForm.active })}
                       disabled={upsertInst.isPending || !instForm.name || !instForm.phone}
-                      className="bg-green-700 hover:bg-green-600 gap-2"
-                    >
+                      className="bg-green-700 hover:bg-green-600 gap-2">
                       {upsertInst.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                       Salvar
                     </Button>
-                    <Button variant="ghost" onClick={() => setEditingInst(false)} className="text-gray-400">
-                      Cancelar
-                    </Button>
+                    <Button variant="ghost" onClick={() => setEditingInst(false)} className="text-gray-400">Cancelar</Button>
                   </div>
                 </div>
               )}
