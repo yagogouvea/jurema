@@ -584,6 +584,51 @@ export const waRouter = router({
       return { success: true };
     }),
 
+  /**
+   * Inicia uma sessão no wa-bridge sem resetar arquivos (gera QR se não conectado).
+   */
+  bridgeStart: protectedProcedure
+    .input(z.object({ bridgeInstanceId: z.number().min(1).max(10) }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAdmin(ctx);
+      const bridgeUrl = process.env.WA_BRIDGE_URL;
+      const bridgeKey = process.env.WA_BRIDGE_API_KEY;
+      if (!bridgeUrl) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "WA_BRIDGE_URL não configurado" });
+      const res = await fetch(`${bridgeUrl}/start/${input.bridgeInstanceId}`, {
+        method: "POST",
+        headers: { "x-wa-bridge-key": bridgeKey ?? "" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `wa-bridge: ${text.substring(0, 200)}` });
+      }
+      return { success: true };
+    }),
+
+  /**
+   * Retorna o QR Code em base64 de uma instância específica (para embed no painel).
+   */
+  bridgeQrImage: protectedProcedure
+    .input(z.object({ bridgeInstanceId: z.number().min(1).max(10) }))
+    .query(async ({ ctx, input }) => {
+      await requireWaAdmin(ctx);
+      const bridgeUrl = process.env.WA_BRIDGE_URL;
+      const bridgeKey = process.env.WA_BRIDGE_API_KEY;
+      if (!bridgeUrl) return { ok: false, qr: null, status: "unavailable" };
+      try {
+        const res = await fetch(`${bridgeUrl}/qr/${input.bridgeInstanceId}/image`, {
+          headers: { "x-wa-bridge-key": bridgeKey ?? "" },
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) return { ok: false, qr: null, status: "error" };
+        const data = await res.json() as { ok: boolean; qr: string | null; status: string };
+        return data;
+      } catch {
+        return { ok: false, qr: null, status: "unavailable" };
+      }
+    }),
+
 });
 
 // ─── Helper: wa-bridge ───────────────────────────────────────────────────────

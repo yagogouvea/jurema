@@ -148,9 +148,21 @@ export default function PdvWhatsAppConfig() {
   });
 
   const bridgeReset = trpc.wa.bridgeReset.useMutation({
-    onSuccess: () => { toast.success("Sessão resetada — um novo QR Code será gerado."); refetchBridge(); },
+    onSuccess: () => { toast.success("Sessão resetada — aguarde o QR Code aparecer."); setTimeout(() => refetchBridge(), 5000); },
     onError: (e) => toast.error(e.message),
   });
+
+  const bridgeStart = trpc.wa.bridgeStart.useMutation({
+    onSuccess: () => { toast.success("Iniciando conexão — aguarde o QR Code aparecer."); setTimeout(() => refetchBridge(), 5000); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  // QR Code inline — instância selecionada para exibir QR no painel
+  const [selectedQrInstance, setSelectedQrInstance] = useState<number | null>(null);
+  const { data: qrImageData, refetch: refetchQrImage } = trpc.wa.bridgeQrImage.useQuery(
+    { bridgeInstanceId: selectedQrInstance! },
+    { enabled: !!selectedQrInstance, refetchInterval: 5_000 }
+  );
 
   const saveAiConfig = trpc.wa.saveAiConfig.useMutation({
     onSuccess: (data) => {
@@ -340,11 +352,35 @@ export default function PdvWhatsAppConfig() {
                               {isConnected ? "Conectado" : isQr ? "Aguard. QR" : "Desconectado"}
                             </span>
                           </div>
+                          {/* Ícone central */}
                           <div className="flex justify-center py-1">
                             {isConnected && <CheckCircle2 className="w-8 h-8" style={{ color: "#25D366" }} />}
-                            {isQr && <QrCode className="w-8 h-8" style={{ color: "#fbbf24" }} />}
+                            {isQr && selectedQrInstance !== sess.instanceId && <QrCode className="w-8 h-8" style={{ color: "#fbbf24" }} />}
                             {!isConnected && !isQr && <WifiOff className="w-8 h-8" style={{ color: "#444" }} />}
                           </div>
+
+                          {/* QR Code inline */}
+                          {isQr && selectedQrInstance === sess.instanceId && (
+                            <div className="flex flex-col items-center gap-2">
+                              {qrImageData?.ok && qrImageData.qr ? (
+                                <>
+                                  <div className="bg-white p-2 rounded-xl">
+                                    <img src={qrImageData.qr} alt="QR Code" className="w-48 h-48" />
+                                  </div>
+                                  <p className="text-[10px] text-center" style={{ color: "#fbbf24" }}>
+                                    Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
+                                  </p>
+                                </>
+                              ) : (
+                                <div className="flex items-center gap-2 text-xs" style={{ color: "#888" }}>
+                                  <RefreshCw className="w-4 h-4 animate-spin" /> Carregando QR...
+                                </div>
+                              )}
+                              <button onClick={() => setSelectedQrInstance(null)}
+                                className="text-[10px]" style={{ color: "#555" }}>Fechar</button>
+                            </div>
+                          )}
+
                           {linkedInst ? (
                             <div className="text-[10px] text-center" style={{ color: "#555" }}>
                               Vinculado: <span style={{ color: "#888" }}>{linkedInst.name}</span>
@@ -353,20 +389,33 @@ export default function PdvWhatsAppConfig() {
                           ) : (
                             <div className="text-[10px] text-center" style={{ color: "#444" }}>Sem número vinculado</div>
                           )}
-                          <div className="flex gap-1.5">
-                            {isQr && (
-                              <a href={`https://wa-bridge-production-c9a2.up.railway.app/qr/${sess.instanceId}`}
-                                target="_blank" rel="noopener noreferrer"
-                                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold border"
-                                style={{ color: "#fbbf24", borderColor: "#fbbf2433", background: "#fbbf2410" }}>
-                                <QrCode className="w-3.5 h-3.5" /> Escanear QR
-                              </a>
+
+                          <div className="flex flex-col gap-1.5">
+                            {/* Desconectado: botão Iniciar */}
+                            {!isConnected && !isQr && (
+                              <button onClick={() => { bridgeStart.mutate({ bridgeInstanceId: sess.instanceId }); }}
+                                disabled={bridgeStart.isPending}
+                                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold border"
+                                style={{ color: "#25D366", borderColor: "#25D36633", background: "#25D36610" }}>
+                                {bridgeStart.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+                                Iniciar Conexão
+                              </button>
                             )}
-                            <button onClick={() => bridgeReset.mutate({ bridgeInstanceId: sess.instanceId })}
+                            {/* QR disponível: botão Escanear */}
+                            {isQr && (
+                              <button onClick={() => { setSelectedQrInstance(selectedQrInstance === sess.instanceId ? null : sess.instanceId); refetchQrImage(); }}
+                                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold border"
+                                style={{ color: "#fbbf24", borderColor: "#fbbf2433", background: "#fbbf2410" }}>
+                                <QrCode className="w-3.5 h-3.5" />
+                                {selectedQrInstance === sess.instanceId ? "Fechar QR" : "Ver QR Code"}
+                              </button>
+                            )}
+                            {/* Botão Reconectar (sempre visível) */}
+                            <button onClick={() => { setSelectedQrInstance(null); bridgeReset.mutate({ bridgeInstanceId: sess.instanceId }); }}
                               disabled={bridgeReset.isPending}
-                              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold border"
+                              className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold border"
                               style={{ color: "#f87171", borderColor: "#f8717122", background: "#f8717108" }}>
-                              <RotateCcw className="w-3.5 h-3.5" /> Reconectar
+                              <RotateCcw className="w-3.5 h-3.5" /> Resetar Sessão
                             </button>
                           </div>
                         </div>

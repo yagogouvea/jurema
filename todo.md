@@ -1195,3 +1195,11 @@
 - [x] Frontend: botão "Reconectar" (admin) para resetar sessão via wa-bridge
 - [x] Frontend: auto-refresh do status a cada 15 segundos
 - [x] Vincular instanceId do banco (wa_instances) ao instanceId do wa-bridge (1, 2, 3)
+
+## v155 — QR Code inline no painel Manus
+- [x] Endpoint /qr/:id/image no wa-bridge (retorna base64)
+- [x] Endpoint /start/:id no wa-bridge (inicia sessão sem resetar)
+- [x] Procedures bridgeStart e bridgeQrImage no waRouter.ts
+- [x] Botão "Iniciar Conexão" nos cards desconectados
+- [x] QR Code exibido inline no painel (sem abrir nova aba)
+- [x] Auto-refresh do QR a cada 5s
