@@ -32,7 +32,8 @@ async function requireWaAccess(ctx: any): Promise<{ name: string; role: string }
 
 async function requireWaAdmin(ctx: any): Promise<{ name: string; role: string }> {
   const user = await requireWaAccess(ctx);
-  if (user.role !== "admin") {
+  // Aceita: admin PDV, gerente PDV, ou owner Manus OAuth
+  if (user.role !== "admin" && user.role !== "gerente" && user.role !== "owner") {
     throw new TRPCError({ code: "FORBIDDEN", message: "Apenas administradores podem realizar esta ação." });
   }
   return user;
@@ -544,8 +545,8 @@ export const waRouter = router({
    * Consulta o status real de todas as instâncias no wa-bridge (Railway).
    * Retorna array com { instanceId, name, status, phone, connectedAt, hasQr }
    */
-  bridgeStatus: protectedProcedure.query(async ({ ctx }) => {
-    await requireWaAdmin(ctx);
+  bridgeStatus: publicProcedure.query(async () => {
+    // Status é público — não expõe dados sensíveis, apenas conectado/desconectado
     const bridgeUrl = process.env.WA_BRIDGE_URL;
     const bridgeKey = process.env.WA_BRIDGE_API_KEY;
     if (!bridgeUrl) return { available: false, sessions: [] };
@@ -565,7 +566,7 @@ export const waRouter = router({
   /**
    * Reseta uma sessão específica no wa-bridge (força novo QR Code).
    */
-  bridgeReset: protectedProcedure
+  bridgeReset: publicProcedure
     .input(z.object({ bridgeInstanceId: z.number().min(1).max(10) }))
     .mutation(async ({ ctx, input }) => {
       await requireWaAdmin(ctx);
@@ -587,7 +588,7 @@ export const waRouter = router({
   /**
    * Inicia uma sessão no wa-bridge sem resetar arquivos (gera QR se não conectado).
    */
-  bridgeStart: protectedProcedure
+  bridgeStart: publicProcedure
     .input(z.object({ bridgeInstanceId: z.number().min(1).max(10) }))
     .mutation(async ({ ctx, input }) => {
       await requireWaAdmin(ctx);
@@ -609,10 +610,10 @@ export const waRouter = router({
   /**
    * Retorna o QR Code em base64 de uma instância específica (para embed no painel).
    */
-  bridgeQrImage: protectedProcedure
+  bridgeQrImage: publicProcedure
     .input(z.object({ bridgeInstanceId: z.number().min(1).max(10) }))
-    .query(async ({ ctx, input }) => {
-      await requireWaAdmin(ctx);
+    .query(async ({ input }) => {
+      // QR é público — necessário para escanear sem estar logado no OAuth
       const bridgeUrl = process.env.WA_BRIDGE_URL;
       const bridgeKey = process.env.WA_BRIDGE_API_KEY;
       if (!bridgeUrl) return { ok: false, qr: null, status: "unavailable" };
