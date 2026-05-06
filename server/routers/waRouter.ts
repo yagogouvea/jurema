@@ -116,7 +116,7 @@ export const waRouter = router({
         let sql = `
           SELECT c.*, i.name AS instanceName, i.phone AS instancePhone
           FROM wa_conversations c
-          LEFT JOIN wa_instances i ON i.id = c.instanceId
+          LEFT JOIN wa_instances i ON i.instanceId = c.instanceId
           WHERE 1=1
         `;
         const params: any[] = [];
@@ -363,35 +363,36 @@ export const waRouter = router({
           [conversationId, input.instanceId, input.messageId, input.fromMe, input.fromMe ? "human" : "customer", input.type, input.content ?? null, input.mediaUrl ?? null, "delivered", msgTimestamp]
         );
 
-        // Processar mensagem do cliente de forma assíncrona
-        if (!input.fromMe) {
-          const { applyAiStatus, checkAwayMessage } = await import("./waStatusClassifier");
-
-          // 1. Verificar se deve enviar mensagem de ausência (tem prioridade sobre a IA)
-          const awayMsg = await checkAwayMessage(db as any, conversationId, input.instanceId).catch(() => null);
-          if (awayMsg) {
-            // Registrar a mensagem de ausência no banco (fromMe=true, senderType='ai')
-            await db.execute(
-              "INSERT INTO wa_messages (conversationId, instanceId, fromMe, senderType, senderName, type, content, status, timestamp) VALUES (?,?,?,?,?,?,?,?,?)",
-              [conversationId, input.instanceId, true, "ai", "Ju", "text", awayMsg, "delivered", new Date()]
+        const capturedConvId = conversationId;
+        const capturedRemoteJid = input.remoteJid;
+        const capturedInstanceId = input.instanceId;
+        const capturedFromMe = input.fromMe;
+        // Retornar imediatamente e processar de forma assíncrona com nova conexão
+        setImmediate(async () => {
+          if (capturedFromMe) return;
+          const asyncDb = await getDb();
+          try {
+            const { applyAiStatus, checkAwayMessage } = await import("./waStatusClassifier");
+            const awayMsg = await checkAwayMessage(asyncDb as any, capturedConvId, capturedInstanceId).catch(() => null);
+            if (awayMsg) {
+              await asyncDb.execute(
+                "INSERT INTO wa_messages (conversationId, instanceId, fromMe, senderType, senderName, type, content, status, timestamp) VALUES (?,?,?,?,?,?,?,?,?)",
+                [capturedConvId, capturedInstanceId, true, "ai", "Ju", "text", awayMsg, "delivered", new Date()]
+              );
+              await asyncDb.execute(
+                "UPDATE wa_conversations SET lastMessage=?, lastMessageAt=NOW() WHERE id=?",
+                [awayMsg.substring(0, 100), capturedConvId]
+              );
+              callWaBridge(capturedInstanceId, capturedRemoteJid, awayMsg).catch(e =>
+                console.error("[webhook] Erro ao enviar ausência via wa-bridge:", e)
+              );
+              console.log(`[webhook] Mensagem de ausência enviada para conversa ${capturedConvId}`);
+            }
+            await applyAiStatus(asyncDb as any, capturedConvId).catch(e =>
+              console.error("[webhook] Erro ao classificar status via IA:", e)
             );
-            await db.execute(
-              "UPDATE wa_conversations SET lastMessage=?, lastMessageAt=NOW() WHERE id=?",
-              [awayMsg.substring(0, 100), conversationId]
-            );
-            // Enviar via wa-bridge (Baileys) se configurado
-            callWaBridge(input.instanceId, input.remoteJid, awayMsg).catch(e =>
-              console.error("[webhook] Erro ao enviar ausência via wa-bridge:", e)
-            );
-            console.log(`[webhook] Mensagem de ausência enviada para conversa ${conversationId}`);
-          }
-
-          // 2. Classificar status via IA (independente da mensagem de ausência)
-          applyAiStatus(db as any, conversationId).catch(e =>
-            console.error("[webhook] Erro ao classificar status via IA:", e)
-          );
-        }
-
+          } finally { await asyncDb.end(); }
+        });
         return { success: true, conversationId };
       } finally { await db.end(); }
     }),
