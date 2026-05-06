@@ -371,6 +371,24 @@ export default function PdvWhatsAppConfig() {
                                     Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
                                   </p>
                                 </>
+                              ) : (qrImageData as any)?.status === "use_dashboard" && (qrImageData as any)?.dashboardUrl ? (
+                                <>
+                                  <p className="text-[10px] text-center" style={{ color: "#fbbf24" }}>
+                                    QR disponível no Railway. Clique para escanear:
+                                  </p>
+                                  <a
+                                    href={(qrImageData as any).dashboardUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold"
+                                    style={{ background: "#fbbf2420", color: "#fbbf24", border: "1px solid #fbbf2440" }}
+                                  >
+                                    <ExternalLink className="w-4 h-4" /> Abrir QR Code
+                                  </a>
+                                  <p className="text-[10px] text-center" style={{ color: "#666" }}>
+                                    Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
+                                  </p>
+                                </>
                               ) : (
                                 <div className="flex items-center gap-2 text-xs" style={{ color: "#888" }}>
                                   <RefreshCw className="w-4 h-4 animate-spin" /> Carregando QR...

@@ -617,18 +617,21 @@ export const waRouter = router({
       // QR é público — necessário para escanear sem estar logado no OAuth
       const bridgeUrl = process.env.WA_BRIDGE_URL;
       const bridgeKey = process.env.WA_BRIDGE_API_KEY;
-      if (!bridgeUrl) return { ok: false, qr: null, status: "unavailable" };
+      if (!bridgeUrl) return { ok: false, qr: null, status: "unavailable", dashboardUrl: null };
+      // Tentar endpoint /qr/:id/image (versão nova do wa-bridge)
       try {
         const res = await fetch(`${bridgeUrl}/qr/${input.bridgeInstanceId}/image`, {
           headers: { "x-wa-bridge-key": bridgeKey ?? "" },
-          signal: AbortSignal.timeout(8_000),
+          signal: AbortSignal.timeout(5_000),
         });
-        if (!res.ok) return { ok: false, qr: null, status: "error" };
-        const data = await res.json() as { ok: boolean; qr: string | null; status: string };
-        return data;
-      } catch {
-        return { ok: false, qr: null, status: "unavailable" };
-      }
+        if (res.ok) {
+          const data = await res.json() as { ok: boolean; qr: string | null; status: string };
+          if (data.ok && data.qr) return { ...data, dashboardUrl: null };
+        }
+      } catch { /* fallback abaixo */ }
+      // Fallback: retornar URL do dashboard do wa-bridge para abrir em nova aba
+      const dashboardUrl = `${bridgeUrl}/qr/${input.bridgeInstanceId}`;
+      return { ok: false, qr: null, status: "use_dashboard", dashboardUrl };
     }),
 
 });
