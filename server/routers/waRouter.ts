@@ -358,9 +358,25 @@ export const waRouter = router({
           );
         }
 
+        // Normalizar o type para os valores aceitos pelo ENUM do banco
+        const VALID_MSG_TYPES = ["text", "image", "audio", "video", "document", "sticker", "location", "contact", "reaction"];
+        const normalizeType = (t: string): string => {
+          if (VALID_MSG_TYPES.includes(t)) return t;
+          if (t.includes("image")) return "image";
+          if (t.includes("video")) return "video";
+          if (t.includes("audio")) return "audio";
+          if (t.includes("document")) return "document";
+          if (t.includes("sticker")) return "sticker";
+          if (t.includes("location")) return "location";
+          if (t.includes("contact")) return "contact";
+          if (t.includes("reaction")) return "reaction";
+          return "text"; // fallback: conversation, extendedTextMessage, etc.
+        };
+        const msgType = normalizeType(input.type);
+
         await db.execute(
           "INSERT INTO wa_messages (conversationId, instanceId, messageId, fromMe, senderType, type, content, mediaUrl, status, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?)",
-          [conversationId, input.instanceId, input.messageId, input.fromMe, input.fromMe ? "human" : "customer", input.type, input.content ?? null, input.mediaUrl ?? null, "delivered", msgTimestamp]
+          [conversationId, input.instanceId, input.messageId, input.fromMe, input.fromMe ? "human" : "customer", msgType, input.content ?? null, input.mediaUrl ?? null, "delivered", msgTimestamp]
         );
 
         const capturedConvId = conversationId;
