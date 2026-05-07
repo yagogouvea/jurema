@@ -14,7 +14,8 @@ import {
   Search, Send, Bot, BotOff, Zap, Paperclip,
   MessageCircle, Circle, CheckCircle2, Clock, Tag, Ban,
   ChevronDown, AlertCircle, Settings, Unlock, Info, ArrowLeft,
-  Phone, User,
+  Phone, User, Mic, Image, Video, FileText, MapPin, Smile,
+  Play, Pause, Volume2, Loader2, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "wouter";
@@ -197,6 +198,187 @@ function Avatar({
       )}
     </div>
   );
+}
+
+// ─── AudioPlayer ────────────────────────────────────────────────────────────
+
+function AudioPlayer({ url, duration }: { url?: string | null; duration?: number | null }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [totalDuration, setTotalDuration] = useState(duration ?? 0);
+
+  function toggle() {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); }
+    else { a.play(); setPlaying(true); }
+  }
+
+  function fmt(s: number) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  }
+
+  if (!url) {
+    return (
+      <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ background: "#ffffff10", minWidth: 180 }}>
+        <Mic size={14} style={{ color: "#888" }} />
+        <span className="text-[11px]" style={{ color: "#888" }}>Áudio indisponível</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ background: "#ffffff10", minWidth: 200 }}>
+      <audio
+        ref={audioRef}
+        src={url}
+        onTimeUpdate={e => {
+          const a = e.currentTarget;
+          setCurrentTime(a.currentTime);
+          if (a.duration) setProgress((a.currentTime / a.duration) * 100);
+        }}
+        onLoadedMetadata={e => setTotalDuration(e.currentTarget.duration)}
+        onEnded={() => { setPlaying(false); setProgress(0); setCurrentTime(0); }}
+      />
+      <button onClick={toggle} className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all"
+        style={{ background: "#25D366", color: "#000" }}>
+        {playing ? <Pause size={12} /> : <Play size={12} />}
+      </button>
+      <div className="flex-1 flex flex-col gap-0.5">
+        <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: "#ffffff20" }}>
+          <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: "#25D366" }} />
+        </div>
+        <div className="flex justify-between text-[9px]" style={{ color: "#888" }}>
+          <span>{fmt(currentTime)}</span>
+          <span>{fmt(totalDuration)}</span>
+        </div>
+      </div>
+      <Volume2 size={12} style={{ color: "#555", flexShrink: 0 }} />
+    </div>
+  );
+}
+
+// ─── MessageContent ───────────────────────────────────────────────────────────
+
+function MessageContent({ msg }: { msg: any }) {
+  const type = msg.type ?? "text";
+  const content = msg.content ?? "";
+  const mediaUrl = msg.mediaUrl ?? null;
+  const caption = msg.mediaCaption ?? null;
+
+  if (type === "audio") {
+    return (
+      <div>
+        <AudioPlayer url={mediaUrl} />
+        {content && content !== "[audio]" && (
+          <p className="text-[11px] mt-1" style={{ color: "#aaa" }}>{content}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (type === "image") {
+    return (
+      <div>
+        {mediaUrl ? (
+          <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
+            <img src={mediaUrl} alt="Imagem" className="rounded-lg max-w-full" style={{ maxHeight: 220, objectFit: "cover" }} />
+          </a>
+        ) : (
+          <div className="flex items-center gap-2 px-2 py-2 rounded-lg" style={{ background: "#ffffff10" }}>
+            <Image size={16} style={{ color: "#888" }} />
+            <span className="text-[11px]" style={{ color: "#888" }}>Imagem</span>
+          </div>
+        )}
+        {(caption || (content && content !== "[image]")) && (
+          <p className="text-[11px] mt-1" style={{ wordBreak: "break-word" }}>{caption || content}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (type === "video") {
+    return (
+      <div>
+        {mediaUrl ? (
+          <video src={mediaUrl} controls className="rounded-lg max-w-full" style={{ maxHeight: 220 }} />
+        ) : (
+          <div className="flex items-center gap-2 px-2 py-2 rounded-lg" style={{ background: "#ffffff10" }}>
+            <Video size={16} style={{ color: "#888" }} />
+            <span className="text-[11px]" style={{ color: "#888" }}>Vídeo</span>
+          </div>
+        )}
+        {(caption || (content && content !== "[video]")) && (
+          <p className="text-[11px] mt-1" style={{ wordBreak: "break-word" }}>{caption || content}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (type === "sticker") {
+    return (
+      <div>
+        {mediaUrl ? (
+          <img src={mediaUrl} alt="Figurinha" className="rounded-lg" style={{ maxWidth: 120, maxHeight: 120 }} />
+        ) : (
+          <div className="flex items-center gap-2 px-2 py-2 rounded-lg" style={{ background: "#ffffff10" }}>
+            <Smile size={16} style={{ color: "#888" }} />
+            <span className="text-[11px]" style={{ color: "#888" }}>Figurinha</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (type === "document") {
+    const filename = content && content !== "[document]" ? content : "Documento";
+    return (
+      <div>
+        {mediaUrl ? (
+          <a href={mediaUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
+            style={{ background: "#ffffff10", color: "#60a5fa" }}>
+            <FileText size={16} />
+            <span className="text-[11px] underline">{filename}</span>
+          </a>
+        ) : (
+          <div className="flex items-center gap-2 px-2 py-2 rounded-lg" style={{ background: "#ffffff10" }}>
+            <FileText size={16} style={{ color: "#888" }} />
+            <span className="text-[11px]" style={{ color: "#888" }}>{filename}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (type === "location") {
+    const [lat, lng] = (content && content !== "[location]" ? content : "").split(",");
+    const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : null;
+    return (
+      <a href={mapsUrl ?? "#"} target="_blank" rel="noopener noreferrer"
+        className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
+        style={{ background: "#ffffff10", color: "#60a5fa" }}>
+        <MapPin size={16} />
+        <span className="text-[11px] underline">Ver localização</span>
+      </a>
+    );
+  }
+
+  // Texto padrão
+  const displayContent = content && !content.startsWith("[") ? content : null;
+  if (!displayContent) {
+    return (
+      <div className="flex items-center gap-1.5" style={{ color: "#666" }}>
+        <MessageCircle size={12} />
+        <span className="text-[11px] italic">{type !== "text" ? `[${type}]` : "Mensagem vazia"}</span>
+      </div>
+    );
+  }
+  return <span style={{ wordBreak: "break-word" }}>{displayContent}</span>;
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -823,7 +1005,7 @@ export default function PdvWhatsApp() {
                                 <Bot size={9} /> Respondido pela Ju
                               </div>
                             )}
-                            <span style={{ wordBreak: "break-word" }}>{msg.content}</span>
+                            <MessageContent msg={msg} />
                             <div className="text-[10px] mt-1 text-right" style={{ color: "#555" }}>
                               {formatMsgTime(msg.timestamp)}
                             </div>

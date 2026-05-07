@@ -340,6 +340,8 @@ export const waRouter = router({
       type: z.string(),
       content: z.string().optional(),
       mediaUrl: z.string().optional(),
+      mediaBase64: z.string().optional(),
+      mediaMimeType: z.string().optional(),
       timestamp: z.number(),
       contactName: z.string().optional(),
       contactPhone: z.string().optional(),
@@ -421,10 +423,46 @@ export const waRouter = router({
         };
         const msgType = normalizeType(input.type);
 
-        await db.execute(
+        // Upload de mídia para S3 se vier base64 do wa-bridge
+        let finalMediaUrl: string | null = input.mediaUrl ?? null;
+        if (input.mediaBase64 && input.mediaMimeType) {
+          try {
+            const { storagePut } = await import("../storage");
+            const buf = Buffer.from(input.mediaBase64, "base64");
+            const ext = input.mediaMimeType.split("/")[1]?.split(";")[0] ?? "bin";
+            const key = `wa-media/${input.instanceId}/${input.messageId ?? Date.now()}.${ext}`;
+            const { url } = await storagePut(key, buf, input.mediaMimeType);
+            finalMediaUrl = url;
+          } catch (e) {
+            console.error("[webhook] Erro ao fazer upload de mídia para S3:", e);
+          }
+        }
+
+        const [insertedMsg] = await db.execute(
           "INSERT INTO wa_messages (conversationId, instanceId, messageId, fromMe, senderType, type, content, mediaUrl, status, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?)",
-          [conversationId, input.instanceId, input.messageId, input.fromMe, input.fromMe ? "human" : "customer", msgType, input.content ?? null, input.mediaUrl ?? null, "delivered", msgTimestamp]
-        );
+          [conversationId, input.instanceId, input.messageId, input.fromMe, input.fromMe ? "human" : "customer", msgType, input.content ?? null, finalMediaUrl, "delivered", msgTimestamp]
+        ) as any;
+        const insertedMsgId = insertedMsg.insertId;
+
+        // Transcrição assíncrona de áudio
+        if (msgType === "audio" && finalMediaUrl) {
+          setImmediate(async () => {
+            const transcribeDb = await getDb();
+            try {
+              const { transcribeAudio } = await import("../_core/voiceTranscription");
+              const result = await transcribeAudio({ audioUrl: finalMediaUrl! });
+              if (result && !('error' in result) && result.text) {
+                await transcribeDb.execute(
+                  "UPDATE wa_messages SET content=? WHERE id=?",
+                  [`[Áudio] ${result.text}`, insertedMsgId]
+                );
+                console.log(`[webhook] Transcrição de áudio salva para mensagem ${insertedMsgId}`);
+              }
+            } catch (e) {
+              console.error("[webhook] Erro ao transcrever áudio:", e);
+            } finally { await transcribeDb.end(); }
+          });
+        }
 
         const capturedConvId = conversationId;
         const capturedRemoteJid = input.remoteJid;

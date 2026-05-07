@@ -1224,3 +1224,10 @@
 - [ ] Mensagens vazias: webhook cria mensagens sem conteúdo (mensagens de status/ACK do próprio número)
 - [ ] Conversas duplicadas: remoteJid não normalizado, criando múltiplas entradas para o mesmo contato
 - [ ] Sincronização lenta: intervalos de refetch muito longos
+
+## Mídia WhatsApp IA (v163)
+- [x] Corrigir "0" espúrio ao lado das mensagens de mídia
+- [x] Player de áudio inline no chat
+- [x] Transcrição de áudio via Whisper
+- [x] IA lê transcrição de áudio no contexto
+- [x] Suporte visual a imagens, vídeos, figurinhas, documentos, localização

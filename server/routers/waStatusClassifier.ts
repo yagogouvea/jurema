@@ -82,7 +82,15 @@ export async function classifyConversationStatus(
 
   // Montar histórico para o prompt (inclui contexto das respostas também)
   const historyText = messages
-    .map((m) => `${m.fromMe ? "[ATENDENTE]" : "[CLIENTE]"}: ${m.content}`)
+    .map((m) => {
+      const role = m.fromMe ? "[ATENDENTE]" : "[CLIENTE]";
+      const content = m.content ?? "";
+      // Se for áudio com transcrição, exibir a transcrição
+      if (content.startsWith("[Áudio]")) return `${role}: ${content}`;
+      // Se for tipo de mídia sem conteúdo, indicar o tipo
+      if (!content || content.startsWith("[")) return `${role}: [mídia]`;
+      return `${role}: ${content}`;
+    })
     .join("\n");
 
   const statusOptions = Object.entries(STATUS_DESCRIPTIONS)
