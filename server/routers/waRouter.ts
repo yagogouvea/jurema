@@ -384,7 +384,8 @@ export const waRouter = router({
           // Nova conversa — status inicial 'novo', classificado por IA
           const [newConv] = await db.execute(
             "INSERT INTO wa_conversations (instanceId, remoteJid, contactName, contactPhone, lastMessage, lastMessageAt, unreadCount, aiEnabled, status, statusSetBy) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            [input.instanceId, normalizedJid, input.contactName ?? null, input.contactPhone ?? null, input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? 0 : 1, true, "novo", "ai"]
+            // Só usa contactName/Phone do payload quando a mensagem é do cliente (fromMe=false)
+            [input.instanceId, normalizedJid, input.fromMe ? null : (input.contactName ?? null), input.fromMe ? null : (input.contactPhone ?? null), input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? 0 : 1, true, "novo", "ai"]
           ) as any;
           conversationId = newConv.insertId;
         } else {
@@ -394,16 +395,16 @@ export const waRouter = router({
           if (conv.remoteJid !== normalizedJid) {
             await db.execute("UPDATE wa_conversations SET remoteJid=? WHERE id=?", [normalizedJid, conv.id]);
           }
-          // Atualizar nome: se vier pushName preenchido, sempre sobrescreve (nome mais recente da agenda)
-          // Se não vier pushName, mantém o nome existente (COALESCE)
-          const newName = input.contactName && input.contactName.trim() ? input.contactName.trim() : null;
+          // Atualizar nome: só atualiza contactName quando a mensagem é do CLIENTE (fromMe=false)
+          // Mensagens do próprio número (fromMe=true) trazem o nome do atendente, não do contato
+          const newName = !input.fromMe && input.contactName && input.contactName.trim() ? input.contactName.trim() : null;
           await db.execute(
             `UPDATE wa_conversations SET lastMessage=?, lastMessageAt=?, unreadCount=?,
              contactName=${newName ? '?' : 'COALESCE(?,contactName)'},
-             contactPhone=COALESCE(?,contactPhone) WHERE id=?`,
+             contactPhone=${!input.fromMe && input.contactPhone ? '?' : 'COALESCE(?,contactPhone)'} WHERE id=?`,
             newName
-              ? [input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? conv.unreadCount : conv.unreadCount + 1, newName, input.contactPhone ?? null, conv.id]
-              : [input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? conv.unreadCount : conv.unreadCount + 1, null, input.contactPhone ?? null, conv.id]
+              ? [input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? conv.unreadCount : conv.unreadCount + 1, newName, !input.fromMe && input.contactPhone ? input.contactPhone : null, conv.id]
+              : [input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? conv.unreadCount : conv.unreadCount + 1, null, !input.fromMe && input.contactPhone ? input.contactPhone : null, conv.id]
           );
         }
 

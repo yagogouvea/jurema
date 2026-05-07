@@ -1,0 +1,9 @@
+{
+  "query": "-- Limpar nomes que claramente são do atendente (Yago Gouvea) e não do contato\nUPDATE wa_conversations SET contactName = NULL WHERE contactName = 'Yago Gouvea';\n-- Também limpar o histórico de teste para novo teste limpo\nDELETE FROM wa_messages;\nDELETE FROM wa_conversations;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 36pMafMrnyn32yD.root --database 9BCf3HWTZf6aELg8wntRub --execute -- Limpar nomes que claramente são do atendente (Yago Gouvea) e não do contato\nUPDATE wa_conversations SET contactName = NULL WHERE contactName = 'Yago Gouvea';\n-- Também limpar o histórico de teste para novo teste limpo\nDELETE FROM wa_messages;\nDELETE FROM wa_conversations;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 123
+}
