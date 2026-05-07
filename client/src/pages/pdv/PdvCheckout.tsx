@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Trash2, CheckCircle, Send,
   CreditCard, Banknote, Smartphone, Building, ChevronDown, ChevronUp,
-  Pencil, Check, X
+  Pencil, Check, X, Camera, ImagePlus, AlertTriangle
 } from "lucide-react";
 
 interface CartItem {
@@ -112,6 +112,38 @@ export default function PdvCheckout({
   const hasSofiaItems = Object.values(sofiaItems).some(v => v);
   const sofiaCount = Object.values(sofiaItems).filter(v => v).length;
 
+  // Imagem obrigatória para pedidos com item Sofia
+  const [sofiaImageBase64, setSofiaImageBase64] = useState<string | null>(null);
+  const [sofiaImageMimeType, setSofiaImageMimeType] = useState<string>("image/jpeg");
+  const [sofiaImagePreview, setSofiaImagePreview] = useState<string | null>(null);
+  const [uploadingSofiaImage, setUploadingSofiaImage] = useState(false);
+
+  function handleSofiaImageSelect(file: File) {
+    if (file.size > 5 * 1024 * 1024) { toast.error("Imagem deve ter no máximo 5MB"); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      const base64 = result.split(",")[1];
+      setSofiaImageBase64(base64);
+      setSofiaImageMimeType(file.type);
+      setSofiaImagePreview(result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeSofiaImage() {
+    setSofiaImageBase64(null);
+    setSofiaImagePreview(null);
+  }
+
+  const uploadFotoCheckoutMutation = trpc.pdvSofia.uploadFoto.useMutation({
+    onSuccess: () => { setUploadingSofiaImage(false); },
+    onError: () => {
+      toast.error("Erro ao salvar imagem Sofia — pedido criado, adicione a foto manualmente no painel Sofia");
+      setUploadingSofiaImage(false);
+    },
+  });
+
   const totalServicos = useMemo(() => services.reduce((sum, s) => sum + s.valor, 0), [services]);
   const totalGeral = totalAplicado + totalServicos;
   const totalPago = useMemo(() => payments.reduce((sum, p) => sum + p.valor, 0), [payments]);
@@ -130,9 +162,16 @@ export default function PdvCheckout({
   const previewMaquininha = !isNaN(previewVal) ? previewVal + previewTaxa : 0;
 
   const createOrderMutation = trpc.pdvOrders.create.useMutation({
-    onSuccess: () => {
-      // Canal WHATSAPP é apenas indicativo de origem da venda
-      // O pedido é finalizado dentro do sistema, sem redirecionamento externo
+    onSuccess: (data) => {
+      // Se há imagem Sofia, fazer upload após criar o pedido
+      if (hasSofiaItems && sofiaImageBase64 && data?.pedidoId) {
+        setUploadingSofiaImage(true);
+        uploadFotoCheckoutMutation.mutate({
+          pedidoId: data.pedidoId,
+          base64: sofiaImageBase64,
+          mimeType: sofiaImageMimeType,
+        });
+      }
       onSuccess();
     },
     onError: (err) => {
@@ -268,6 +307,11 @@ export default function PdvCheckout({
     // Atacado com menos de 6 peças: justificativa obrigatória
     if (isAtacadoMenos6 && !justificativa.trim()) {
       toast.error("Atacado com menos de 6 peças: informe a justificativa no campo Observações");
+      return;
+    }
+    // Imagem obrigatória para pedidos com item Sofia
+    if (hasSofiaItems && !sofiaImageBase64) {
+      toast.error("Pedido com item Sofia requer foto obrigatória. Anexe a imagem antes de finalizar.");
       return;
     }
     createOrderMutation.mutate({
@@ -406,6 +450,63 @@ export default function PdvCheckout({
               </div>
             )}
           </div>
+
+          {/* Imagem Sofia — obrigatória quando há item Sofia */}
+          {hasSofiaItems && (
+            <div className={`rounded-2xl p-4 border transition-all ${
+              !sofiaImageBase64
+                ? "bg-purple-950/30 border-purple-600/70 ring-1 ring-purple-600/30"
+                : "bg-gray-900 border-purple-800/40"
+            }`}>
+              <div className="flex items-center gap-2 mb-3">
+                <Camera className="w-4 h-4 text-purple-400" />
+                <h3 className="text-white font-semibold">Foto do Item Sofia</h3>
+                <span className="text-red-400 text-xs font-semibold">* obrigatória</span>
+              </div>
+
+              {!sofiaImageBase64 ? (
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-purple-700 rounded-xl cursor-pointer hover:border-purple-500 hover:bg-purple-950/20 transition-all group">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSofiaImageSelect(f); }}
+                  />
+                  <ImagePlus className="w-8 h-8 text-purple-500 group-hover:text-purple-400 mb-2" />
+                  <span className="text-purple-400 text-sm font-medium">Clique para anexar foto</span>
+                  <span className="text-purple-600 text-xs mt-0.5">JPG, PNG ou WEBP · máx. 5MB</span>
+                </label>
+              ) : (
+                <div className="relative">
+                  <img
+                    src={sofiaImagePreview!}
+                    alt="Foto Sofia"
+                    className="w-full max-h-48 object-contain rounded-xl border border-purple-800/50 bg-gray-950"
+                  />
+                  <button
+                    onClick={removeSofiaImage}
+                    className="absolute top-2 right-2 bg-gray-900/80 hover:bg-red-900/80 text-gray-400 hover:text-red-400 rounded-full p-1.5 transition-colors"
+                    title="Remover imagem"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <Check className="w-4 h-4 text-green-400" />
+                    <span className="text-green-400 text-xs font-medium">Foto anexada — pronta para envio</span>
+                  </div>
+                </div>
+              )}
+
+              {!sofiaImageBase64 && (
+                <div className="flex items-start gap-2 mt-3 bg-purple-950/40 rounded-xl p-3">
+                  <AlertTriangle className="w-4 h-4 text-purple-400 mt-0.5 shrink-0" />
+                  <p className="text-purple-300 text-xs">
+                    Este pedido contém <strong>{sofiaCount} item{sofiaCount > 1 ? 'ns' : ''} Sofia</strong>. A foto é obrigatória para registrar o pedido.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Canal do Pedido */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
