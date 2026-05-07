@@ -159,10 +159,27 @@ export default function PdvWhatsAppConfig() {
 
   // QR Code inline — instância selecionada para exibir QR no painel
   const [selectedQrInstance, setSelectedQrInstance] = useState<number | null>(null);
-  const { data: qrImageData, refetch: refetchQrImage } = trpc.wa.bridgeQrImage.useQuery(
+  const [qrLastUpdated, setQrLastUpdated] = useState<Date | null>(null);
+  const [qrAge, setQrAge] = useState(0);
+  const { data: qrImageData, refetch: refetchQrImage, isFetching: qrFetching } = trpc.wa.bridgeQrImage.useQuery(
     { bridgeInstanceId: selectedQrInstance! },
-    { enabled: !!selectedQrInstance, refetchInterval: 5_000 }
+    { enabled: !!selectedQrInstance, refetchInterval: 2_000, refetchOnWindowFocus: true }
   );
+  // Atualiza timestamp quando o QR muda
+  const prevQrRef = useState<string | null>(null);
+  useEffect(() => {
+    if (qrImageData?.ok && qrImageData.qr && qrImageData.qr !== prevQrRef[0]) {
+      prevQrRef[1](qrImageData.qr);
+      setQrLastUpdated(new Date());
+      setQrAge(0);
+    }
+  }, [qrImageData?.qr]);
+  // Contador de idade do QR
+  useEffect(() => {
+    if (!qrLastUpdated) return;
+    const t = setInterval(() => setQrAge(Math.floor((Date.now() - qrLastUpdated.getTime()) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [qrLastUpdated]);
 
   const saveAiConfig = trpc.wa.saveAiConfig.useMutation({
     onSuccess: (data) => {
@@ -364,12 +381,30 @@ export default function PdvWhatsAppConfig() {
                             <div className="flex flex-col items-center gap-2">
                               {qrImageData?.ok && qrImageData.qr ? (
                                 <>
-                                  <div className="bg-white p-2 rounded-xl">
-                                    <img src={qrImageData.qr} alt="QR Code" className="w-48 h-48" />
+                                  <div className="relative">
+                                    <div className="bg-white p-2 rounded-xl">
+                                      <img src={qrImageData.qr} alt="QR Code" className="w-48 h-48" />
+                                    </div>
+                                    {/* Indicador de frescor do QR */}
+                                    <div className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold"
+                                      style={{ background: qrAge > 15 ? "#ef444420" : "#25D36620", color: qrAge > 15 ? "#ef4444" : "#25D366", border: `1px solid ${qrAge > 15 ? "#ef444440" : "#25D36640"}` }}>
+                                      {qrFetching ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : null}
+                                      {qrAge}s
+                                    </div>
                                   </div>
                                   <p className="text-[10px] text-center" style={{ color: "#fbbf24" }}>
                                     Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
                                   </p>
+                                  {qrAge > 15 && (
+                                    <p className="text-[9px] text-center" style={{ color: "#ef4444" }}>
+                                      QR antigo — aguarde atualizar antes de escanear
+                                    </p>
+                                  )}
+                                  <button onClick={() => refetchQrImage()}
+                                    className="text-[10px] flex items-center gap-1 px-2 py-1 rounded"
+                                    style={{ color: "#888", background: "#1a1a1a" }}>
+                                    <RefreshCw className="w-3 h-3" /> Atualizar QR
+                                  </button>
                                 </>
                               ) : (qrImageData as any)?.status === "use_dashboard" && (qrImageData as any)?.dashboardUrl ? (
                                 <>
