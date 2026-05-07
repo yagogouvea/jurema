@@ -347,9 +347,32 @@ export const waRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       try {
+        // Normalizar remoteJid: remover sufixo de device multi-device (ex: 5511999:1@s.whatsapp.net → 5511999@s.whatsapp.net)
+        const normalizedJid = input.remoteJid.replace(/:(\d+)@/, "@");
+
+        // Ignorar mensagens sem conteúdo real (segurança extra no servidor)
+        const hasContent = input.content && input.content.trim().length > 0;
+        const MEDIA_TYPES = ["image", "video", "audio", "document", "sticker", "location", "contact"];
+        const isMediaType = MEDIA_TYPES.includes(input.type);
+        if (!hasContent && !isMediaType) {
+          return { ok: true, skipped: true, reason: "empty_content" };
+        }
+
+        // Ignorar mensagens duplicadas (mesmo messageId já existe)
+        if (input.messageId) {
+          const [existingMsg] = await db.execute(
+            "SELECT id FROM wa_messages WHERE messageId=? LIMIT 1",
+            [input.messageId]
+          ) as any;
+          if (existingMsg[0]) {
+            return { ok: true, skipped: true, reason: "duplicate_message" };
+          }
+        }
+
+        // Buscar conversa pelo JID normalizado (também tenta o JID original para retrocompatibilidade)
         const [convRows] = await db.execute(
-          "SELECT * FROM wa_conversations WHERE instanceId=? AND remoteJid=?",
-          [input.instanceId, input.remoteJid]
+          "SELECT * FROM wa_conversations WHERE instanceId=? AND (remoteJid=? OR remoteJid=?) ORDER BY id ASC LIMIT 1",
+          [input.instanceId, normalizedJid, input.remoteJid]
         ) as any;
 
         const msgTimestamp = new Date(input.timestamp * 1000);
@@ -359,12 +382,16 @@ export const waRouter = router({
           // Nova conversa — status inicial 'novo', classificado por IA
           const [newConv] = await db.execute(
             "INSERT INTO wa_conversations (instanceId, remoteJid, contactName, contactPhone, lastMessage, lastMessageAt, unreadCount, aiEnabled, status, statusSetBy) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            [input.instanceId, input.remoteJid, input.contactName ?? null, input.contactPhone ?? null, input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? 0 : 1, true, "novo", "ai"]
+            [input.instanceId, normalizedJid, input.contactName ?? null, input.contactPhone ?? null, input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? 0 : 1, true, "novo", "ai"]
           ) as any;
           conversationId = newConv.insertId;
         } else {
           const conv = convRows[0];
           conversationId = conv.id;
+          // Se o JID armazenado não está normalizado, atualizar
+          if (conv.remoteJid !== normalizedJid) {
+            await db.execute("UPDATE wa_conversations SET remoteJid=? WHERE id=?", [normalizedJid, conv.id]);
+          }
           // Atualizar nome: se vier pushName preenchido, sempre sobrescreve (nome mais recente da agenda)
           // Se não vier pushName, mantém o nome existente (COALESCE)
           const newName = input.contactName && input.contactName.trim() ? input.contactName.trim() : null;
@@ -642,6 +669,73 @@ export const waRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `wa-bridge: ${text.substring(0, 200)}` });
       }
       return { success: true };
+    }),
+
+  /**
+   * Deduplica conversas com o mesmo instanceId+remoteJid, mesclando mensagens na mais antiga.
+   * Admin only.
+   */
+  deduplicateConversations: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      await requireWaAdmin(ctx);
+      const db = await getDb();
+      try {
+        // Encontrar grupos de conversas duplicadas (mesmo instanceId + remoteJid normalizado)
+        const [dupeGroups] = await db.execute(`
+          SELECT instanceId,
+                 REGEXP_REPLACE(remoteJid, ':(\\d+)@', '@') AS normJid,
+                 COUNT(*) AS cnt,
+                 MIN(id) AS keepId,
+                 GROUP_CONCAT(id ORDER BY id ASC) AS allIds
+          FROM wa_conversations
+          GROUP BY instanceId, normJid
+          HAVING cnt > 1
+        `) as any;
+
+        let merged = 0;
+        let deleted = 0;
+
+        for (const group of dupeGroups) {
+          const ids: number[] = group.allIds.split(',').map(Number);
+          const keepId: number = group.keepId;
+          const removeIds = ids.filter(id => id !== keepId);
+
+          // Mover mensagens das conversas duplicadas para a conversa mais antiga
+          for (const removeId of removeIds) {
+            await db.execute(
+              "UPDATE wa_messages SET conversationId=? WHERE conversationId=?",
+              [keepId, removeId]
+            );
+            merged++;
+          }
+
+          // Normalizar o remoteJid da conversa mantida
+          const normJid = group.normJid;
+          await db.execute("UPDATE wa_conversations SET remoteJid=? WHERE id=?", [normJid, keepId]);
+
+          // Atualizar lastMessage e lastMessageAt com a mensagem mais recente
+          await db.execute(`
+            UPDATE wa_conversations c
+            JOIN (
+              SELECT conversationId, content, timestamp
+              FROM wa_messages
+              WHERE conversationId=?
+              ORDER BY timestamp DESC
+              LIMIT 1
+            ) m ON c.id = m.conversationId
+            SET c.lastMessage = SUBSTRING(m.content, 1, 100), c.lastMessageAt = m.timestamp
+            WHERE c.id=?
+          `, [keepId, keepId]);
+
+          // Deletar as conversas duplicadas (mensagens já foram movidas)
+          for (const removeId of removeIds) {
+            await db.execute("DELETE FROM wa_conversations WHERE id=?", [removeId]);
+            deleted++;
+          }
+        }
+
+        return { success: true, groupsProcessed: dupeGroups.length, messagesMerged: merged, conversationsDeleted: deleted };
+      } finally { await db.end(); }
     }),
 
   /**

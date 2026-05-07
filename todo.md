@@ -1219,3 +1219,8 @@
 - [x] Melhorar getDisplayName: formatar número de telefone (+55 (XX) XXXXX-XXXX) quando não há nome
 - [x] Input de mensagem: substituir Input por textarea expansível (auto-resize até 120px, Shift+Enter para nova linha)
 - [x] waRouter: atualizar contactName sempre que pushName vier preenchido (não apenas COALESCE)
+
+## Bugs WhatsApp IA (v162)
+- [ ] Mensagens vazias: webhook cria mensagens sem conteúdo (mensagens de status/ACK do próprio número)
+- [ ] Conversas duplicadas: remoteJid não normalizado, criando múltiplas entradas para o mesmo contato
+- [ ] Sincronização lenta: intervalos de refetch muito longos

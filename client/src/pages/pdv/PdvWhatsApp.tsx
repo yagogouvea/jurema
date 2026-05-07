@@ -226,7 +226,8 @@ export default function PdvWhatsApp() {
   // ── Queries ──────────────────────────────────────────────────────────────────
 
   const { data: instances = [] } = trpc.wa.listInstances.useQuery(undefined, {
-    refetchInterval: 30000,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const convQuery = trpc.wa.listConversations.useQuery({
@@ -235,13 +236,13 @@ export default function PdvWhatsApp() {
     aiEnabled: filterAi === "on" ? true : filterAi === "off" ? false : undefined,
     unreadOnly: filterUnread || undefined,
     search: search || undefined,
-  }, { refetchInterval: 8000 });
+  }, { refetchInterval: 3000, refetchOnWindowFocus: true });
 
   const conversations: any[] = convQuery.data ?? [];
 
   const countQuery = trpc.wa.countByStatus.useQuery({
     instanceId: selectedInstanceId || undefined,
-  }, { refetchInterval: 15000 });
+  }, { refetchInterval: 8000, refetchOnWindowFocus: true });
   const counts: Record<string, { count: number; unread: number }> = countQuery.data ?? {};
 
   const selectedConv = useMemo(
@@ -251,7 +252,7 @@ export default function PdvWhatsApp() {
 
   const messagesQuery = trpc.wa.listMessages.useQuery(
     { conversationId: selectedConvId! },
-    { enabled: selectedConvId !== null, refetchInterval: 4000 }
+    { enabled: selectedConvId !== null, refetchInterval: 2000, refetchOnWindowFocus: true }
   );
   const messages: any[] = messagesQuery.data ?? [];
 
@@ -278,6 +279,19 @@ export default function PdvWhatsApp() {
 
   const markReadMut = trpc.wa.markAsRead.useMutation({
     onSuccess: () => utils.wa.listConversations.invalidate(),
+  });
+
+  const dedupMut = trpc.wa.deduplicateConversations.useMutation({
+    onSuccess: (result) => {
+      if (result.conversationsDeleted === 0) {
+        toast.success("Nenhuma duplicata encontrada!");
+      } else {
+        toast.success(`Limpeza concluída: ${result.conversationsDeleted} conversa(s) duplicada(s) removida(s), ${result.messagesMerged} mensagem(ns) mesclada(s).`);
+      }
+      utils.wa.listConversations.invalidate();
+      utils.wa.countByStatus.invalidate();
+    },
+    onError: (e) => toast.error("Erro ao deduplicar: " + e.message),
   });
 
   const sendMsgMut = trpc.wa.sendMessage.useMutation({
@@ -325,10 +339,14 @@ export default function PdvWhatsApp() {
     }
   }, [messages, selectedConvId, isAtBottom, scrollToBottom]);
 
-  // Marcar como lida ao abrir conversa
+  // Marcar como lida e invalidar mensagens ao abrir conversa
   useEffect(() => {
-    if (selectedConvId && selectedConv?.unreadCount > 0) {
-      markReadMut.mutate({ conversationId: selectedConvId });
+    if (selectedConvId) {
+      // Invalidar imediatamente para buscar mensagens sem esperar o intervalo
+      utils.wa.listMessages.invalidate({ conversationId: selectedConvId });
+      if (selectedConv?.unreadCount > 0) {
+        markReadMut.mutate({ conversationId: selectedConvId });
+      }
     }
   }, [selectedConvId]);
 
@@ -398,15 +416,38 @@ export default function PdvWhatsApp() {
               <span className="text-sm font-bold" style={{ color: "#e0e0e0" }}>WhatsApp IA</span>
             </div>
             {isAdmin && (
-              <Link href="/pdv/whatsapp/config">
+              <div className="flex items-center gap-1">
                 <button
-                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-[#252525]"
+                  onClick={() => {
+                    if (confirm("Mesclar conversas duplicadas? Isso irá unificar conversas do mesmo contato em uma só.")) {
+                      dedupMut.mutate();
+                    }
+                  }}
+                  disabled={dedupMut.isPending}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-[#252525] disabled:opacity-50"
                   style={{ color: "#555" }}
-                  title="Configurar instâncias"
+                  title="Mesclar conversas duplicadas"
                 >
-                  <Settings size={15} />
+                  {dedupMut.isPending ? (
+                    <span className="text-[9px] animate-spin">⟳</span>
+                  ) : (
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                      <path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+                      <path d="M9 12h6"/><path d="M12 9v6"/>
+                    </svg>
+                  )}
                 </button>
-              </Link>
+                <Link href="/pdv/whatsapp/config">
+                  <button
+                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-[#252525]"
+                    style={{ color: "#555" }}
+                    title="Configurar instâncias"
+                  >
+                    <Settings size={15} />
+                  </button>
+                </Link>
+              </div>
             )}
           </div>
 
