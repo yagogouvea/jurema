@@ -115,6 +115,31 @@ async function appendToSheet(range: string, values: any[][]): Promise<boolean> {
     // Calcular range de destino (ex: "PEDIDOS!A79")
     const targetRange = `${sheetName}!${colStart}${nextRow}`;
 
+    // Verificar se a aba tem linhas suficientes e expandir se necessário
+    try {
+      const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`;
+      const metaRes = await fetch(metaUrl, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (metaRes.ok) {
+        const metaData = await metaRes.json() as any;
+        const sheetMeta = metaData.sheets?.find((s: any) => s.properties.title === sheetName);
+        const currentRowCount = sheetMeta?.properties?.gridProperties?.rowCount || 0;
+        const sheetId = sheetMeta?.properties?.sheetId;
+        // Se a próxima linha + buffer (100) ultrapassar o limite, expandir em 2000 linhas
+        if (sheetId !== undefined && nextRow + values.length + 100 > currentRowCount) {
+          console.log(`[SheetsWriter] Expandindo aba ${sheetName} de ${currentRowCount} para ${currentRowCount + 2000} linhas...`);
+          const expandUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`;
+          await fetch(expandUrl, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requests: [{ appendDimension: { sheetId, dimension: 'ROWS', length: 2000 } }] }),
+          });
+        }
+      }
+    } catch (expandErr) {
+      console.warn('[SheetsWriter] Falha ao verificar/expandir linhas:', expandErr);
+      // Continua mesmo se falhar a expansão
+    }
+
     // Usar PUT para gravar na linha exata — sem risco de desalinhamento
     const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(targetRange)}?valueInputOption=USER_ENTERED`;
     const putRes = await fetch(putUrl, {
