@@ -75,7 +75,7 @@ export const waRouter = router({
       instanceId: z.string().optional(),
       apiKey: z.string().optional(),
       webhookUrl: z.string().optional(),
-      active: z.boolean().optional(),
+      active: z.union([z.boolean(), z.number()]).optional().transform(v => v === undefined ? undefined : Boolean(v)),
     }))
     .mutation(async ({ ctx, input }) => {
       await requireWaAdmin(ctx);
