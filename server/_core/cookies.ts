@@ -39,10 +39,14 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  // No Railway (production), sempre usar secure: true pois o proxy já termina TLS
+  const isProduction = process.env.NODE_ENV === "production";
+  const secure = isProduction || isSecureRequest(req);
+
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
+    sameSite: secure ? "none" : "lax",
+    secure,
   };
 }
