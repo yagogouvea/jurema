@@ -43,6 +43,9 @@ async function startServer() {
   registerOAuthRoutes(app);
   // File upload routes
   registerUploadRoutes(app);
+  // Health check para Railway
+  app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
   // tRPC API
   app.use(
     "/api/trpc",
