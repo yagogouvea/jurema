@@ -2,7 +2,7 @@ import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import type { Request, Response } from "express";
 import { getSessionCookieOptions } from "../_core/cookies";

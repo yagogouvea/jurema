@@ -2,7 +2,7 @@ import { getDb } from "../db-connect";
 import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
 

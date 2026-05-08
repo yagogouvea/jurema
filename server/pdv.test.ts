@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import crypto from "crypto";
+import crypto from "node:crypto";
 
 const PDV_SALT = "pdv_salt_jumera";
 const hashPassword = (pwd: string) =>
