@@ -107,7 +107,9 @@ export const pdvAuthRouter = router({
         };
       } catch (err) {
         if (err instanceof TRPCError) throw err;
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao fazer login" });
+        // Log detalhado para debug no Railway
+        console.error("[PDV Login ERROR]", err instanceof Error ? err.message : String(err), err instanceof Error ? err.stack : "");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao fazer login: ${err instanceof Error ? err.message : String(err)}` });
       }
     }),
 
