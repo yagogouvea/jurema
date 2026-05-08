@@ -1,3 +1,4 @@
+import { getDb } from "../db-connect";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 
@@ -120,7 +121,7 @@ export async function runPdvMigration(): Promise<void> {
     return;
   }
   try {
-    const connection = await mysql.createConnection(url);
+    const connection = await getDb(); if (!connection) throw new Error("DB unavailable");
     const statements = PDV_MIGRATION_SQL
       .split(';')
       .map(s => s.trim())
@@ -141,7 +142,7 @@ export async function seedPdvData(): Promise<void> {
   if (!url) return;
   
   try {
-    const connection = await mysql.createConnection(url);
+    const connection = await getDb(); if (!connection) throw new Error("DB unavailable");
     
     // Check if sellers already exist
     const [rows] = await connection.execute("SELECT COUNT(*) as count FROM pdv_sellers");

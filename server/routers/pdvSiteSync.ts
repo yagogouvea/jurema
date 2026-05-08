@@ -32,7 +32,7 @@ async function requirePdvAdmin(ctx: any) {
 async function getDb() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DATABASE_URL not set" });
-  return mysql.createConnection(url);
+  return mysql.createConnection({ uri: url, connectTimeout: 8000, ssl: url.includes("localhost") || url.includes("127.0.0.1") ? undefined : { rejectUnauthorized: false } });
 }
 
 async function dbExecute(sql: string, params?: any[]): Promise<any[]> {

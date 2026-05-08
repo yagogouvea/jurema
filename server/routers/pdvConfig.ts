@@ -1,15 +1,11 @@
+import { getDb } from "../db-connect";
 import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
 
-async function getDb() {
-  const url = process.env.DATABASE_URL;
-  if (!url) return null;
-  return mysql.createConnection(url);
-}
+
 
 async function requirePdvAuth(ctx: any) {
   const req = ctx.req as Request;

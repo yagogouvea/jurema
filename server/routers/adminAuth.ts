@@ -1,3 +1,4 @@
+import { getDb } from "../db-connect";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";

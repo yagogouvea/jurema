@@ -14,7 +14,7 @@ import { verifyPdvToken } from "./pdvAuth";
 async function getDb() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DATABASE_URL não configurado" });
-  return mysql.createConnection(url);
+  return mysql.createConnection({ uri: url, connectTimeout: 8000, ssl: url.includes("localhost") || url.includes("127.0.0.1") ? undefined : { rejectUnauthorized: false } });
 }
 
 // ─── Helpers de permissão ─────────────────────────────────────────────────────

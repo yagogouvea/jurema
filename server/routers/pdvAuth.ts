@@ -18,7 +18,7 @@ async function getDb() {
   const url = process.env.DATABASE_URL;
   if (!url) return null;
   // connectTimeout de 5s para evitar travamento quando o banco está lento
-  return mysql.createConnection({ uri: url, connectTimeout: 5000 });
+  return mysql.createConnection({ uri: url, connectTimeout: 8000, ssl: url.includes("localhost") || url.includes("127.0.0.1") ? undefined : { rejectUnauthorized: false } });
 }
 
 async function createPdvToken(seller: { id: number; name: string; username: string; role: string }) {

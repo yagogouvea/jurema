@@ -1,3 +1,4 @@
+import { getDb } from "../db-connect";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
