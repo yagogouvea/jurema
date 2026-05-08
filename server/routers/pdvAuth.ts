@@ -124,7 +124,7 @@ export const pdvAuthRouter = router({
     const req = ctx.req as Request;
     const res = ctx.res as Response;
     const cookieOpts = getSessionCookieOptions(req);
-    res.clearCookie(PDV_COOKIE, { ...cookieOpts, maxAge: -1 });
+    res.clearCookie(PDV_COOKIE, cookieOpts);
     return { success: true };
   }),
 });
