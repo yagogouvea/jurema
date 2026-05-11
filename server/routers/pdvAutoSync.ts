@@ -206,22 +206,22 @@ export async function runAutoSync(): Promise<{
   for (let i = 0; i < valid.length; i += CHUNK_SIZE) {
     const chunk = valid.slice(i, i + CHUNK_SIZE);
     try {
-      const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())").join(", ");
+      const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())").join(", ");
       const values: any[] = [];
       for (const p of chunk) {
         values.push(
           p.codigo, p.linha, p.modelo, p.time, p.descricao,
-          p.tamanho, p.estoque, p.precoAtacado, p.precoVarejo, p.isActive,
+          p.tamanho, p.tipo, p.estoque, p.precoAtacado, p.precoVarejo, p.isActive,
           p.ptAtacado, p.ptVarejo, p.custo
         );
       }
       await db.execute(
         `INSERT INTO pdv_products
-          (codigo, linha, modelo, \`time\`, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, ptAtacado, ptVarejo, custo, createdAt, updatedAt)
+          (codigo, linha, modelo, \`time\`, descricao, tamanho, tipo, estoque, precoAtacado, precoVarejo, isActive, ptAtacado, ptVarejo, custo, createdAt, updatedAt)
          VALUES ${placeholders}
          ON DUPLICATE KEY UPDATE
            linha=VALUES(linha), modelo=VALUES(modelo), \`time\`=VALUES(\`time\`),
-           descricao=VALUES(descricao), tamanho=VALUES(tamanho),
+           descricao=VALUES(descricao), tamanho=VALUES(tamanho), tipo=VALUES(tipo),
            estoque=VALUES(estoque), precoAtacado=VALUES(precoAtacado),
            precoVarejo=VALUES(precoVarejo), isActive=VALUES(isActive),
            ptAtacado=VALUES(ptAtacado), ptVarejo=VALUES(ptVarejo),
