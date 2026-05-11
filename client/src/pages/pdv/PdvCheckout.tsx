@@ -57,7 +57,6 @@ interface PdvCheckoutProps {
   regime: "ATACADO" | "VAREJO";
   totalVarejo: number;
   totalAtacado: number;
-  totalAplicado: number;
   onBack: () => void;
   onSuccess: () => void;
 }
@@ -68,7 +67,7 @@ function fmt(v: number) {
 
 export default function PdvCheckout({
   cart, regime,
-  totalVarejo, totalAtacado, totalAplicado, onBack, onSuccess
+  totalVarejo, totalAtacado, onBack, onSuccess
 }: PdvCheckoutProps) {
   const { seller } = usePdvAuth();
   // Canal é selecionado aqui na configuração do pedido
@@ -145,7 +144,11 @@ export default function PdvCheckout({
   });
 
   const totalServicos = useMemo(() => services.reduce((sum, s) => sum + s.valor, 0), [services]);
-  const totalGeral = totalAplicado + totalServicos;
+  const subtotalProdutos = useMemo(
+    () => cart.reduce((sum, i) => sum + i.totalItem, 0),
+    [cart]
+  );
+  const totalGeral = subtotalProdutos + totalServicos;
   const totalPago = useMemo(() => payments.reduce((sum, p) => sum + p.valor, 0), [payments]);
   // Pendente: usa valor manual se checkbox ativo, senão calcula automaticamente
   const totalPendente = isPendente
@@ -193,7 +196,7 @@ export default function PdvCheckout({
         `${item.quantidade}x ${item.time} (${item.tamanho}) - R$ ${fmt(item.totalItem)}`
       ),
       ``,
-      `*SUBTOTAL:* R$ ${fmt(totalAplicado)}`,
+      `*SUBTOTAL:* R$ ${fmt(subtotalProdutos)}`,
     ];
 
     if (services.length > 0) {
@@ -384,7 +387,7 @@ export default function PdvCheckout({
                 <p className="text-gray-400 text-sm">
                   {isSomenteServico
                     ? <span className="text-orange-400 text-xs">Nenhum produto — apenas serviços serão lançados</span>
-                    : `${totalPecas} peças · R$ ${fmt(totalAplicado)}`
+                    : `${totalPecas} peças · R$ ${fmt(subtotalProdutos)}`
                   }
                 </p>
               </div>
@@ -429,7 +432,7 @@ export default function PdvCheckout({
                 ))}
                 <div className="border-t border-gray-700 pt-2 flex justify-between font-semibold">
                   <span className="text-gray-300">Subtotal</span>
-                  <span className="text-white">R$ {fmt(totalAplicado)}</span>
+                  <span className="text-white">R$ {fmt(subtotalProdutos)}</span>
                 </div>
                 {hasSofiaItems && (
                   <div className="bg-purple-950/30 border border-purple-900/50 rounded-xl p-3 mt-2 space-y-1">
@@ -945,7 +948,7 @@ export default function PdvCheckout({
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">Subtotal ({regime})</span>
-              <span className="text-white">R$ {fmt(totalAplicado)}</span>
+              <span className="text-white">R$ {fmt(subtotalProdutos)}</span>
             </div>
             {totalServicos > 0 && (
               <div className="flex justify-between text-sm">

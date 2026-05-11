@@ -170,7 +170,11 @@ export default function PdvMain() {
     }, 0);
   }, [cart, productLookup]);
 
-  const totalAplicado = regime === "ATACADO" ? totalAtacado : totalVarejo;
+  // Sempre igual à soma das linhas exibidas no carrinho (cartWithPrices), inclusive itens marcados como Sofia no checkout
+  const totalAplicado = useMemo(
+    () => cartWithPrices.reduce((sum, item) => sum + item.totalItem, 0),
+    [cartWithPrices]
+  );
 
   // Add multiple items from SizePickerModal
   const addItemsToCart = useCallback((newItems: CartItem[]) => {
@@ -256,7 +260,6 @@ export default function PdvMain() {
           regime={regime}
           totalVarejo={totalVarejo}
           totalAtacado={totalAtacado}
-          totalAplicado={totalAplicado}
           onBack={() => setShowCheckout(false)}
           onSuccess={() => {
             clearCart();

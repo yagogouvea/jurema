@@ -93,6 +93,12 @@ export const pdvOrdersRouter = router({
       
       try {
         const pedidoId = generatePedidoId();
+
+        // Total financeiro do pedido no BD = todos os itens (normais + Sofia) + serviços — não usar só o subconjunto da planilha
+        const totalProdutosSomados = input.items.reduce((sum, it) => sum + it.totalItem, 0);
+        const totalServicosSomados = input.services.reduce((sum, s) => sum + s.valor, 0);
+        const totalAplicadoGravacao =
+          Math.round((totalProdutosSomados + totalServicosSomados) * 100) / 100;
         
         // Buscar comissão vigente no momento da venda (para registrar por item — sem retroatividade)
         const [cfgRows] = await db.execute(
@@ -115,7 +121,7 @@ export const pdvOrdersRouter = router({
           [
             pedidoId, seller.sellerId, seller.name, input.canal,
             input.clienteNome || null, input.clienteTelefone || null,
-            input.regime, input.totalVarejo, input.totalAtacado, input.totalAplicado,
+            input.regime, input.totalVarejo, input.totalAtacado, totalAplicadoGravacao,
             input.totalPago, input.totalPendente, input.justificativa || null,
             allSofia ? 1 : 0, input.status
           ]

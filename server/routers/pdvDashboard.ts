@@ -101,7 +101,10 @@ export const pdvDashboardRouter = router({
           params
         );
         
-        // Por forma de pagamento — exclui pedidos 100% Sofia
+        // Por forma de pagamento — inclui pedidos Sofia (o dinheiro entrou no caixa).
+        // Excluir só isSofia aqui deixava o donut ~R$ 5k abaixo do PDV antigo (Manus).
+        const excludeSofiaPayments = process.env.PDV_DASHBOARD_PAYMENTS_EXCLUDE_SOFIA === "1";
+        const paymentSofiaFilter = excludeSofiaPayments ? " AND o.isSofia = 0" : "";
         const [paymentRows] = await db.execute(
           `SELECT p.formaPagamento, 
             COUNT(DISTINCT p.pedidoId) as pedidos,
@@ -110,7 +113,7 @@ export const pdvDashboardRouter = router({
             COALESCE(SUM(p.valorLiquido), 0) as totalLiquido
            FROM pdv_order_payments p
            INNER JOIN pdv_orders o ON p.pedidoId = o.pedidoId
-           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
+           WHERE o.status != 'CANCELADO'${paymentSofiaFilter} ${dateFilter}
            GROUP BY p.formaPagamento
            ORDER BY total DESC`,
           params
