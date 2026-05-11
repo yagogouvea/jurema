@@ -39,8 +39,8 @@ export const pdvSofiaRouter = router({
       try {
         let dateFilter = "";
         const params: any[] = [];
-        if (input.startDate) { dateFilter += " AND DATE(o.createdAt) >= ?"; params.push(input.startDate); }
-        if (input.endDate) { dateFilter += " AND DATE(o.createdAt) <= ?"; params.push(input.endDate); }
+        if (input.startDate) { dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?"; params.push(input.startDate); }
+        if (input.endDate) { dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?"; params.push(input.endDate); }
 
         // Resumo geral de itens Sofia — comissão personalizada por item
         // comissaoLojaSofia é o valor por peça definido no momento da venda
@@ -77,7 +77,7 @@ export const pdvSofiaRouter = router({
         // Por dia
         const [dailyRows] = await db.execute(
           `SELECT 
-            DATE(o.createdAt) as dia,
+            DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d') as dia,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(oi.totalItem), 0) as faturamento,
             COALESCE(SUM(oi.quantidade), 0) as pecas,
@@ -85,7 +85,7 @@ export const pdvSofiaRouter = router({
           FROM pdv_order_items oi
           JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
           WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}
-          GROUP BY DATE(o.createdAt)
+          GROUP BY DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'))
           ORDER BY dia DESC`,
           params
         );
@@ -160,8 +160,8 @@ export const pdvSofiaRouter = router({
         const params: any[] = [];
 
         if (input.sellerId) { query += " AND o.sellerId = ?"; params.push(input.sellerId); }
-        if (input.startDate) { query += " AND DATE(o.createdAt) >= ?"; params.push(input.startDate); }
-        if (input.endDate) { query += " AND DATE(o.createdAt) <= ?"; params.push(input.endDate); }
+        if (input.startDate) { query += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?"; params.push(input.startDate); }
+        if (input.endDate) { query += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?"; params.push(input.endDate); }
 
         const countQuery = query.replace("SELECT DISTINCT o.*", "SELECT COUNT(DISTINCT o.id) as total");
         const [countRows] = await db.execute(countQuery, params);

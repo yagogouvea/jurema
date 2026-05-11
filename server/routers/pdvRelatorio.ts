@@ -37,7 +37,7 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
         COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 AND o.regime = 'ATACADO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoAtacado,
         COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 AND o.regime = 'VAREJO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoVarejo
       FROM pdv_sellers s
-      LEFT JOIN pdv_orders o ON o.sellerId = s.id AND DATE(o.createdAt) >= ? AND DATE(o.createdAt) <= ?
+      LEFT JOIN pdv_orders o ON o.sellerId = s.id AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ? AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
       LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND o.status != 'CANCELADO'
       WHERE s.isActive = 1
       GROUP BY s.id, s.name
@@ -82,7 +82,7 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
         COALESCE(SUM(COALESCE(oi.comissaoLojaSofia, 0) * oi.quantidade), 0) as comissaoTotal
       FROM pdv_order_items oi
       JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
-      WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(o.createdAt) >= ? AND DATE(o.createdAt) <= ?`,
+      WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ? AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
       [startDate, endDate]
     );
 
@@ -95,7 +95,7 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
         COALESCE(SUM(COALESCE(oi.comissaoLojaSofia, 0) * oi.quantidade), 0) as comissao
       FROM pdv_order_items oi
       JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
-      WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(o.createdAt) >= ? AND DATE(o.createdAt) <= ?
+      WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ? AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
       GROUP BY o.sellerId, o.sellerName
       ORDER BY faturamento DESC`,
       [startDate, endDate]

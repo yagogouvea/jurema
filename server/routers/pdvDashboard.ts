@@ -45,12 +45,13 @@ export const pdvDashboardRouter = router({
         let dateFilter = "";
         const params: any[] = [];
         
+        // Filtra por data no horário de Brasília (createdAt é gravado em UTC).
         if (input.startDate) {
-          dateFilter += " AND DATE(o.createdAt) >= ?";
+          dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?";
           params.push(input.startDate);
         }
         if (input.endDate) {
-          dateFilter += " AND DATE(o.createdAt) <= ?";
+          dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?";
           params.push(input.endDate);
         }
         
@@ -101,8 +102,6 @@ export const pdvDashboardRouter = router({
         );
         
         // Por forma de pagamento — exclui pedidos 100% Sofia
-        const dateFilterQualified = dateFilter
-          .replace(/DATE\(o\.createdAt\)/g, 'DATE(o.createdAt)');
         const [paymentRows] = await db.execute(
           `SELECT p.formaPagamento, 
             COUNT(DISTINCT p.pedidoId) as pedidos,
@@ -111,21 +110,23 @@ export const pdvDashboardRouter = router({
             COALESCE(SUM(p.valorLiquido), 0) as totalLiquido
            FROM pdv_order_payments p
            INNER JOIN pdv_orders o ON p.pedidoId = o.pedidoId
-           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilterQualified}
+           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
            GROUP BY p.formaPagamento
            ORDER BY total DESC`,
           params
         );
         
-        // Faturamento por dia — apenas itens não-Sofia, exclui pedidos 100% Sofia
+        // Faturamento por dia — apenas itens não-Sofia, exclui pedidos 100% Sofia.
+        // Usa DATE_FORMAT para retornar string YYYY-MM-DD (evita "Invalid Date" no frontend)
+        // e CONVERT_TZ para que pedidos noturnos caiam no dia correto em horário BR.
         const [dailyRows] = await db.execute(
-          `SELECT DATE(o.createdAt) as dia,
+          `SELECT DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d') as dia,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(oi.totalItem), 0) as faturamento
            FROM pdv_orders o
            JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
            WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
-           GROUP BY DATE(o.createdAt)
+           GROUP BY DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d')
            ORDER BY dia ASC`,
           params
         );
@@ -390,20 +391,20 @@ export const pdvDashboardRouter = router({
         WHERE o.status != 'CANCELADO'
           AND o.isSofia = 0
           AND o.sellerId = ?
-          AND DATE(o.createdAt) >= ?
-          AND DATE(o.createdAt) <= ?`,
+          AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
+          AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
         [seller.sellerId, startDate, endDate]
       );
 
-      // Buscar total de caixinhas no período
+      // Buscar total de caixinhas no período (em horário BR)
       const [caixRows] = await db.execute(
         `SELECT COALESCE(SUM(s.valor), 0) as totalCaixinha, COUNT(s.id) as qtdCaixinha
          FROM pdv_order_services s
          JOIN pdv_orders o ON o.pedidoId = s.pedidoId
          WHERE s.tipo = 'CAIXINHA'
            AND o.sellerId = ?
-           AND DATE(s.createdAt) >= ?
-           AND DATE(s.createdAt) <= ?`,
+           AND DATE(CONVERT_TZ(s.createdAt, '+00:00', '-03:00')) >= ?
+           AND DATE(CONVERT_TZ(s.createdAt, '+00:00', '-03:00')) <= ?`,
         [seller.sellerId, startDate, endDate]
       );
 
@@ -465,8 +466,8 @@ export const pdvDashboardRouter = router({
       try {
         const params: any[] = [seller.sellerId];
         let dateFilter = '';
-        if (input.startDate) { dateFilter += ' AND DATE(o.createdAt) >= ?'; params.push(input.startDate); }
-        if (input.endDate) { dateFilter += ' AND DATE(o.createdAt) <= ?'; params.push(input.endDate); }
+        if (input.startDate) { dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?"; params.push(input.startDate); }
+        if (input.endDate) { dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?"; params.push(input.endDate); }
 
         const countParams = [...params];
         const [countRows] = await db.execute(
@@ -575,8 +576,8 @@ export const pdvDashboardRouter = router({
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.sellerId IN (${placeholders})
             AND o.status != 'CANCELADO'
-            AND DATE(o.createdAt) >= ?
-            AND DATE(o.createdAt) <= ?`,
+            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
+            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
           mkParams()
         );
 
@@ -588,15 +589,15 @@ export const pdvDashboardRouter = router({
           WHERE os.tipo = 'CAIXINHA'
             AND o.status != 'CANCELADO'
             AND o.sellerId IN (${placeholders})
-            AND DATE(o.createdAt) >= ?
-            AND DATE(o.createdAt) <= ?`,
+            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
+            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
           mkParams()
         );
 
-        // Faturamento por dia
+        // Faturamento por dia (dia em horário de Brasília, retorno como string YYYY-MM-DD)
         const [dailyRows] = await db.execute(
           `SELECT
-            DATE(o.createdAt) as dia,
+            DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d') as dia,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as pecas,
             COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
@@ -605,9 +606,9 @@ export const pdvDashboardRouter = router({
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.sellerId IN (${placeholders})
             AND o.status != 'CANCELADO'
-            AND DATE(o.createdAt) >= ?
-            AND DATE(o.createdAt) <= ?
-          GROUP BY DATE(o.createdAt)
+            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
+            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
+          GROUP BY DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d')
           ORDER BY dia ASC`,
           mkParams()
         );
@@ -623,8 +624,8 @@ export const pdvDashboardRouter = router({
           FROM pdv_orders o
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.sellerId IN (${placeholders})
-            AND DATE(o.createdAt) >= ?
-            AND DATE(o.createdAt) <= ?
+            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
+            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
           GROUP BY o.pedidoId, o.createdAt, o.clienteNome, o.regime, o.canal, o.status, o.totalAplicado, o.sellerName
           ORDER BY o.createdAt DESC
           LIMIT 50`,

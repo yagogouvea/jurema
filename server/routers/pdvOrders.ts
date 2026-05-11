@@ -470,8 +470,8 @@ export const pdvOrdersRouter = router({
         if (input.canal) { whereClause += " AND o.canal = ?"; params.push(input.canal); }
         if (input.status) { whereClause += " AND o.status = ?"; params.push(input.status); }
         if (input.regime) { whereClause += " AND o.regime = ?"; params.push(input.regime); }
-        if (input.startDate) { whereClause += " AND DATE(o.createdAt) >= ?"; params.push(input.startDate); }
-        if (input.endDate) { whereClause += " AND DATE(o.createdAt) <= ?"; params.push(input.endDate); }
+        if (input.startDate) { whereClause += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?"; params.push(input.startDate); }
+        if (input.endDate) { whereClause += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?"; params.push(input.endDate); }
         if (input.search) {
           whereClause += " AND (o.pedidoId LIKE ? OR o.clienteNome LIKE ? OR o.sellerName LIKE ?)";
           const s = `%${input.search}%`;
@@ -694,8 +694,8 @@ export const pdvOrdersRouter = router({
           histQuery += ' AND o.sellerId = ?';
           histParams.push(effectiveSellerId);
         }
-        if (input.startDate) { histQuery += ' AND DATE(s.createdAt) >= ?'; histParams.push(input.startDate); }
-        if (input.endDate) { histQuery += ' AND DATE(s.createdAt) <= ?'; histParams.push(input.endDate); }
+        if (input.startDate) { histQuery += " AND DATE(CONVERT_TZ(s.createdAt, '+00:00', '-03:00')) >= ?"; histParams.push(input.startDate); }
+        if (input.endDate) { histQuery += " AND DATE(CONVERT_TZ(s.createdAt, '+00:00', '-03:00')) <= ?"; histParams.push(input.endDate); }
         histQuery += ' ORDER BY s.createdAt DESC';
 
         const [histRows] = await db.execute(histQuery, histParams);
@@ -714,8 +714,8 @@ export const pdvOrdersRouter = router({
             WHERE s.tipo = 'CAIXINHA'
           `;
           const sumParams: any[] = [];
-          if (input.startDate) { sumQuery += ' AND DATE(s.createdAt) >= ?'; sumParams.push(input.startDate); }
-          if (input.endDate) { sumQuery += ' AND DATE(s.createdAt) <= ?'; sumParams.push(input.endDate); }
+          if (input.startDate) { sumQuery += " AND DATE(CONVERT_TZ(s.createdAt, '+00:00', '-03:00')) >= ?"; sumParams.push(input.startDate); }
+          if (input.endDate) { sumQuery += " AND DATE(CONVERT_TZ(s.createdAt, '+00:00', '-03:00')) <= ?"; sumParams.push(input.endDate); }
           sumQuery += ' GROUP BY o.sellerId, o.sellerName ORDER BY totalValor DESC';
           const [sRows] = await db.execute(sumQuery, sumParams);
           summaryRows = sRows as any[];
@@ -730,8 +730,8 @@ export const pdvOrdersRouter = router({
         `;
         const totalParams: any[] = [];
         if (effectiveSellerId !== null) { totalQuery += ' AND o.sellerId = ?'; totalParams.push(effectiveSellerId); }
-        if (input.startDate) { totalQuery += ' AND DATE(s.createdAt) >= ?'; totalParams.push(input.startDate); }
-        if (input.endDate) { totalQuery += ' AND DATE(s.createdAt) <= ?'; totalParams.push(input.endDate); }
+        if (input.startDate) { totalQuery += " AND DATE(CONVERT_TZ(s.createdAt, '+00:00', '-03:00')) >= ?"; totalParams.push(input.startDate); }
+        if (input.endDate) { totalQuery += " AND DATE(CONVERT_TZ(s.createdAt, '+00:00', '-03:00')) <= ?"; totalParams.push(input.endDate); }
         const [totalRows] = await db.execute(totalQuery, totalParams);
 
         await db.end();
