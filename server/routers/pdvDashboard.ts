@@ -166,8 +166,8 @@ export const pdvDashboardRouter = router({
         let query = "SELECT * FROM pdv_cash_flow WHERE 1=1";
         const params: any[] = [];
         
-        if (input.startDate) { query += " AND DATE(createdAt) >= ?"; params.push(input.startDate); }
-        if (input.endDate) { query += " AND DATE(createdAt) <= ?"; params.push(input.endDate); }
+        if (input.startDate) { query += " AND DATE(CONVERT_TZ(createdAt, '+00:00', '-03:00')) >= ?"; params.push(input.startDate); }
+        if (input.endDate) { query += " AND DATE(CONVERT_TZ(createdAt, '+00:00', '-03:00')) <= ?"; params.push(input.endDate); }
         
         const countQuery = query.replace("SELECT *", "SELECT COUNT(*) as total");
         const [countRows] = await db.execute(countQuery, params);
