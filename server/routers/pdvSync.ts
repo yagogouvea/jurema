@@ -192,6 +192,7 @@ interface SheetProduct {
   time: string;
   descricao: string;
   tamanho: string;
+  tipo: string;
   estoque: number;
   precoAtacado: number;
   precoVarejo: number;
@@ -284,6 +285,7 @@ async function fetchSheetData(apiKey: string): Promise<{
       time: norm(row[3]),
       descricao: (row[4] || '').trim(),
       tamanho: norm(row[5]),
+      tipo: (row[6] || 'CAMISETA').toString().trim(),
       estoque: qtd,
       precoAtacado: atc,
       precoVarejo: varejo,
@@ -359,6 +361,7 @@ function normalizeForCompare(dbRow: any): SheetProduct {
     time: (dbRow.time || "").trim(),
     descricao: (dbRow.descricao || "").trim(),
     tamanho: (dbRow.tamanho || "").trim(),
+    tipo: (dbRow.tipo || "CAMISETA").toString().trim(),
     estoque: Number(dbRow.estoque) || 0,
     precoAtacado: Math.round(parseFloat(dbRow.precoAtacado) * 100) / 100,
     precoVarejo: Math.round(parseFloat(dbRow.precoVarejo) * 100) / 100,
@@ -502,29 +505,29 @@ export const pdvSyncRouter = router({
       for (let i = 0; i < valid.length; i += CHUNK_SIZE) {
         const chunk = valid.slice(i, i + CHUNK_SIZE);
         try {
-          const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())").join(", ");
+          const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())").join(", ");
           const values: any[] = [];
           for (const p of chunk) {
             values.push(
               p.codigo, p.linha, p.modelo, p.time, p.descricao,
-              p.tamanho, p.estoque, p.precoAtacado, p.precoVarejo, p.isActive,
+              p.tamanho, p.tipo, p.estoque, p.precoAtacado, p.precoVarejo, p.isActive,
               p.ptAtacado ?? 0, p.ptVarejo ?? 0, p.custo ?? 0
             );
           }
           await db.execute(
             `INSERT INTO pdv_products
-              (codigo, linha, modelo, \`time\`, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, ptAtacado, ptVarejo, custo, createdAt, updatedAt)
+              (codigo, linha, modelo, \`time\`, descricao, tamanho, tipo, estoque, precoAtacado, precoVarejo, isActive, ptAtacado, ptVarejo, custo, createdAt, updatedAt)
              VALUES ${placeholders}
              ON DUPLICATE KEY UPDATE
                linha=VALUES(linha), modelo=VALUES(modelo), \`time\`=VALUES(\`time\`),
-               descricao=VALUES(descricao), tamanho=VALUES(tamanho),
+               descricao=VALUES(descricao), tamanho=VALUES(tamanho), tipo=VALUES(tipo),
                estoque=VALUES(estoque), precoAtacado=VALUES(precoAtacado),
                precoVarejo=VALUES(precoVarejo), isActive=VALUES(isActive),
                ptAtacado=VALUES(ptAtacado), ptVarejo=VALUES(ptVarejo),
                custo=VALUES(custo),
                updatedAt=NOW()`,
             values
-          );;
+          );
 
           for (const p of chunk) {
             if (existingMap.has(p.codigo)) atualizados++;
