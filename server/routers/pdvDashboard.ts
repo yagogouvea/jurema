@@ -30,6 +30,13 @@ async function requirePdvAdmin(ctx: any) {
   return seller;
 }
 
+/** YYYY-MM — offset Manus só entra quando início e fim do filtro estão no mesmo mês. */
+function pontosOffsetMesParam(startDate?: string, endDate?: string): string | null {
+  if (!startDate || !endDate) return null;
+  if (startDate.slice(0, 7) !== endDate.slice(0, 7)) return null;
+  return startDate.slice(0, 7);
+}
+
 export const pdvDashboardRouter = router({
   summary: publicProcedure
     .input(z.object({
@@ -78,27 +85,31 @@ export const pdvDashboardRouter = router({
           params
         );
         
-        // Por vendedor — apenas itens não-Sofia, com pontuação por regime
+        // Por vendedor — todos os vendedores ativos; PT = soma nos itens + ajuste Manus no mês (pontosOffset)
+        const offsetYm = pontosOffsetMesParam(input.startDate, input.endDate);
         const [sellerRows] = await db.execute(
-          `SELECT o.sellerName, 
+          `SELECT s.name as sellerName,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(oi.totalItem), 0) as faturamento,
             COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio,
             COALESCE(SUM(
               CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
                    ELSE oi.ptVarejo * oi.quantidade END
-            ), 0) as pontuacao
-           FROM pdv_orders o
-           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+            ), 0)
+            + (CASE WHEN ? IS NOT NULL AND s.pontosOffsetMes = ? THEN COALESCE(s.pontosOffset, 0) ELSE 0 END) as pontuacao
+           FROM pdv_sellers s
+           LEFT JOIN pdv_orders o ON o.sellerId = s.id
+             AND o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
+           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0 AND o.id IS NOT NULL
            LEFT JOIN (
              SELECT pedidoId, SUM(totalItem) as totalNaoSofia
              FROM pdv_order_items WHERE isSofia = 0
              GROUP BY pedidoId
            ) oi_totals ON oi_totals.pedidoId = o.pedidoId
-           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
-           GROUP BY o.sellerId, o.sellerName
+           WHERE s.isActive = 1
+           GROUP BY s.id, s.name, s.pontosOffset, s.pontosOffsetMes
            ORDER BY pontuacao DESC`,
-          params
+          [...params, offsetYm, offsetYm]
         );
         
         // Por forma de pagamento — inclui pedidos Sofia (o dinheiro entrou no caixa).
@@ -253,6 +264,83 @@ export const pdvDashboardRouter = router({
       return { success: true };
     }),
 
+  /**
+   * Alinha PT ao Manus no mês do período: grava em cada vendedor `pontosOffset` e `pontosOffsetMes`
+   * como (pontuacaoManus − soma atual de PT no período). Novas vendas somam em cima desse total.
+   * Período deve ser inteiro dentro de um único YYYY-MM.
+   */
+  syncPontosManusOffsets: publicProcedure
+    .input(z.object({
+      startDate: z.string(),
+      endDate: z.string(),
+      targets: z.array(z.object({
+        sellerName: z.string().min(1),
+        pontuacaoManus: z.number(),
+      })).min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      if (input.startDate.slice(0, 7) !== input.endDate.slice(0, 7)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Use um período contido em um único mês (ex.: 2026-05-01 a 2026-05-31).",
+        });
+      }
+      const ym = input.startDate.slice(0, 7);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      let dateFilter = "";
+      const params: any[] = [];
+      dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?";
+      params.push(input.startDate);
+      dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?";
+      params.push(input.endDate);
+
+      const results: { sellerName: string; pontosSistema: number; pontuacaoManus: number; offset: number }[] = [];
+
+      try {
+        for (const t of input.targets) {
+          const [sellerRows] = await db.execute(
+            `SELECT id, name FROM pdv_sellers WHERE isActive = 1 AND UPPER(TRIM(name)) = ?`,
+            [t.sellerName.toUpperCase().trim()]
+          );
+          const sellers = sellerRows as any[];
+          if (sellers.length === 0) {
+            throw new TRPCError({ code: "NOT_FOUND", message: `Vendedor não encontrado: ${t.sellerName}` });
+          }
+          const sellerId = sellers[0].id as number;
+
+          const [sumRows] = await db.execute(
+            `SELECT COALESCE(SUM(
+              CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
+                   ELSE oi.ptVarejo * oi.quantidade END
+            ), 0) as pontuacao
+            FROM pdv_orders o
+            JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+            WHERE o.sellerId = ? AND o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}`,
+            [sellerId, ...params]
+          );
+          const pontosSistema = parseFloat((sumRows as any[])[0]?.pontuacao ?? "0");
+          const offset = Math.round((t.pontuacaoManus - pontosSistema) * 100) / 100;
+
+          await db.execute(
+            `UPDATE pdv_sellers SET pontosOffset = ?, pontosOffsetMes = ? WHERE id = ?`,
+            [offset, ym, sellerId]
+          );
+          results.push({
+            sellerName: sellers[0].name,
+            pontosSistema,
+            pontuacaoManus: t.pontuacaoManus,
+            offset,
+          });
+        }
+        return { ok: true as const, mes: ym, results };
+      } finally {
+        await db.end();
+      }
+    }),
+
   getGoals: publicProcedure.query(async ({ ctx }) => {
     await requirePdvAuth(ctx);
     const db = await getDb();
@@ -379,24 +467,28 @@ export const pdvDashboardRouter = router({
       const now = new Date();
       const startDate = input?.startDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
       const endDate = input?.endDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+      const offsetYm = pontosOffsetMesParam(startDate, endDate);
 
       const [rows] = await db.execute(
         `SELECT
           COALESCE(SUM(
             CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
                  ELSE oi.ptVarejo * oi.quantidade END
-          ), 0) as pontuacao,
+          ), 0)
+          + (CASE WHEN ? IS NOT NULL AND se.pontosOffsetMes = ? THEN COALESCE(se.pontosOffset, 0) ELSE 0 END) as pontuacao,
           COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
           COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
           COALESCE(SUM(oi.comissaoUnitaria * oi.quantidade), 0) as totalBonus
-        FROM pdv_orders o
-        JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
-        WHERE o.status != 'CANCELADO'
+        FROM pdv_sellers se
+        LEFT JOIN pdv_orders o ON o.sellerId = se.id
+          AND o.status != 'CANCELADO'
           AND o.isSofia = 0
-          AND o.sellerId = ?
           AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
-          AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
-        [seller.sellerId, startDate, endDate]
+          AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
+        LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0 AND o.id IS NOT NULL
+        WHERE se.id = ?
+        GROUP BY se.id, se.pontosOffset, se.pontosOffsetMes`,
+        [offsetYm, offsetYm, startDate, endDate, seller.sellerId]
       );
 
       // Buscar total de caixinhas no período (em horário BR)

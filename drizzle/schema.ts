@@ -205,6 +205,10 @@ export const pdvSellers = mysqlTable("pdv_sellers", {
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
   role: mysqlEnum("role", ["seller", "admin"]).default("seller").notNull(),
   isActive: boolean("isActive").default(true).notNull(),
+  /** Ajuste para alinhar PT ao Manus no mês `pontosOffsetMes` (somado à soma de itens no período). */
+  pontosOffset: decimal("pontosOffset", { precision: 12, scale: 2 }).default("0").notNull(),
+  /** YYYY-MM em que `pontosOffset` entra na pontuação exibida; fora desse mês o offset é ignorado. */
+  pontosOffsetMes: varchar("pontosOffsetMes", { length: 7 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
