@@ -46,6 +46,29 @@ function rowNumber(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Expressão SQL: “qual dia de calendário” do pedido para filtro/agrupamento.
+ * PDV_DASHBOARD_ORDER_DAY_MODE (Railway):
+ * - (vazio) = America/Sao_Paulo a partir de UTC
+ * - server_date = DATE(createdAt) na sessão MySQL (se createdAt já for “dia local”)
+ * - add3h = DATE(createdAt + 3h) (fallback bruto)
+ */
+function orderDayDateExpr(alias: string): string {
+  const mode = (process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "").trim().toLowerCase();
+  const c = `${alias}.createdAt`;
+  if (mode === "server_date") return `DATE(${c})`;
+  if (mode === "add3h") return `DATE(DATE_ADD(${c}, INTERVAL 3 HOUR))`;
+  return `DATE(CONVERT_TZ(${c}, '+00:00', '-03:00'))`;
+}
+
+function orderDayYmdExpr(alias: string): string {
+  const mode = (process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "").trim().toLowerCase();
+  const c = `${alias}.createdAt`;
+  if (mode === "server_date") return `DATE_FORMAT(${c}, '%Y-%m-%d')`;
+  if (mode === "add3h") return `DATE_FORMAT(DATE_ADD(${c}, INTERVAL 3 HOUR), '%Y-%m-%d')`;
+  return `DATE_FORMAT(CONVERT_TZ(${c}, '+00:00', '-03:00'), '%Y-%m-%d')`;
+}
+
 /** Itens que entram em faturamento/PT de metas (import legado: NULL em isSofia = tratar como peça normal). */
 const SQL_OI_NAO_SOFIA = "(COALESCE(oi.isSofia, 0) = 0)";
 /** Mesmo critério na subquery sem alias de tabela. */
@@ -72,102 +95,107 @@ export const pdvDashboardRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       
       try {
+        const dayCmp = orderDayDateExpr("o");
+        const dayYmd = orderDayYmdExpr("o");
         let dateFilter = "";
         const params: any[] = [];
-        
-        // Filtra por data no horário de Brasília (createdAt é gravado em UTC).
+
         if (input.startDate) {
-          dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?";
+          dateFilter += ` AND ${dayCmp} >= ?`;
           params.push(input.startDate);
         }
         if (input.endDate) {
-          dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?";
+          dateFilter += ` AND ${dayCmp} <= ?`;
           params.push(input.endDate);
         }
-        
-        // Dashboard geral: faturamento/PT só em itens não-Sofia (COALESCE: import com NULL em isSofia).
-        // Não filtra o.isSofia — flag do pedido pode estar errada no legado; o JOIN já exclui só linhas Sofia.
+
+        // KPIs e R$ por vendedor/dia: total do pedido (totalAplicado). Não depende de linhas em pdv_order_items.
         const [totalRows] = await db.execute(
           `SELECT 
-            COUNT(DISTINCT o.id) as totalPedidos,
-            COALESCE(SUM(oi.totalItem), 0) as faturamento,
-            COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio,
-            COALESCE(SUM(CASE WHEN o.regime = 'ATACADO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoAtacado,
-            COALESCE(SUM(CASE WHEN o.regime = 'VAREJO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoVarejo,
-            COALESCE(SUM(CASE WHEN o.canal = 'BALCAO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoBalcao,
-            COALESCE(SUM(CASE WHEN o.canal = 'WHATSAPP' THEN oi.totalItem ELSE 0 END), 0) as faturamentoWhatsapp
+            COUNT(*) as totalPedidos,
+            COALESCE(SUM(o.totalAplicado), 0) as faturamento,
+            COALESCE(AVG(o.totalAplicado), 0) as ticketMedio,
+            COALESCE(SUM(CASE WHEN o.regime = 'ATACADO' THEN o.totalAplicado ELSE 0 END), 0) as faturamentoAtacado,
+            COALESCE(SUM(CASE WHEN o.regime = 'VAREJO' THEN o.totalAplicado ELSE 0 END), 0) as faturamentoVarejo,
+            COALESCE(SUM(CASE WHEN o.canal = 'BALCAO' THEN o.totalAplicado ELSE 0 END), 0) as faturamentoBalcao,
+            COALESCE(SUM(CASE WHEN o.canal = 'WHATSAPP' THEN o.totalAplicado ELSE 0 END), 0) as faturamentoWhatsapp
            FROM pdv_orders o
-           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
-           LEFT JOIN (
-             SELECT pedidoId, SUM(totalItem) as totalNaoSofia
-             FROM pdv_order_items WHERE ${SQL_ITEMS_NAO_SOFIA_WHERE}
-             GROUP BY pedidoId
-           ) oi_totals ON oi_totals.pedidoId = o.pedidoId
            WHERE o.status != 'CANCELADO' ${dateFilter}`,
           params
         );
-        
-        // Por vendedor — com ajuste Manus (pontosOffset) se a migração 0017 existir; senão query legada só por pedidos
+
+        // Por vendedor: R$ = soma totalAplicado; PT = só itens não-Sofia (+ offset Manus no mês).
         const offsetYm = pontosOffsetMesParam(input.startDate, input.endDate);
-        // Agregação por pedido dentro do subselect evita JOIN “explodido” vendedor×pedido×item
         const sqlBySellerComOffset = `SELECT s.name as sellerName,
-            COALESCE(a.pedidos, 0) as pedidos,
-            COALESCE(a.faturamento, 0) as faturamento,
-            COALESCE(a.ticketMedio, 0) as ticketMedio,
-            COALESCE(a.pontuacao, 0)
-            + (CASE WHEN ? IS NOT NULL AND s.pontosOffsetMes = ? THEN COALESCE(s.pontosOffset, 0) ELSE 0 END) as pontuacao
+            COALESCE(m.pedidos, 0) as pedidos,
+            COALESCE(m.faturamento, 0) as faturamento,
+            COALESCE(m.ticketMedio, 0) as ticketMedio,
+            COALESCE(pt.pontuacao, 0)
+              + (CASE WHEN ? IS NOT NULL AND s.pontosOffsetMes = ? THEN COALESCE(s.pontosOffset, 0) ELSE 0 END) as pontuacao
            FROM pdv_sellers s
            LEFT JOIN (
              SELECT o.sellerId,
-               COUNT(DISTINCT o.id) as pedidos,
-               COALESCE(SUM(oi.totalItem), 0) as faturamento,
-               COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio,
+               COUNT(*) as pedidos,
+               COALESCE(SUM(o.totalAplicado), 0) as faturamento,
+               COALESCE(AVG(o.totalAplicado), 0) as ticketMedio
+             FROM pdv_orders o
+             WHERE o.status != 'CANCELADO' ${dateFilter}
+             GROUP BY o.sellerId
+           ) m ON m.sellerId = s.id
+           LEFT JOIN (
+             SELECT o.sellerId,
                COALESCE(SUM(
                  CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
                       ELSE oi.ptVarejo * oi.quantidade END
                ), 0) as pontuacao
              FROM pdv_orders o
-             JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
-             LEFT JOIN (
-               SELECT pedidoId, SUM(totalItem) as totalNaoSofia
-               FROM pdv_order_items WHERE ${SQL_ITEMS_NAO_SOFIA_WHERE}
-               GROUP BY pedidoId
-             ) oi_totals ON oi_totals.pedidoId = o.pedidoId
+             INNER JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
              WHERE o.status != 'CANCELADO' ${dateFilter}
              GROUP BY o.sellerId
-           ) a ON a.sellerId = s.id
+           ) pt ON pt.sellerId = s.id
            WHERE s.isActive = 1
-           ORDER BY pontuacao DESC`;
-        const sqlBySellerLegacy = `SELECT o.sellerName,
-            COUNT(DISTINCT o.id) as pedidos,
-            COALESCE(SUM(oi.totalItem), 0) as faturamento,
-            COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio,
-            COALESCE(SUM(
-              CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
-                   ELSE oi.ptVarejo * oi.quantidade END
-            ), 0) as pontuacao
-           FROM pdv_orders o
-           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
+           ORDER BY COALESCE(m.faturamento, 0) DESC, s.name`;
+        const sqlBySellerLegacy = `SELECT s.name as sellerName,
+            COALESCE(m.pedidos, 0) as pedidos,
+            COALESCE(m.faturamento, 0) as faturamento,
+            COALESCE(m.ticketMedio, 0) as ticketMedio,
+            COALESCE(pt.pontuacao, 0) as pontuacao
+           FROM pdv_sellers s
            LEFT JOIN (
-             SELECT pedidoId, SUM(totalItem) as totalNaoSofia
-             FROM pdv_order_items WHERE ${SQL_ITEMS_NAO_SOFIA_WHERE}
-             GROUP BY pedidoId
-           ) oi_totals ON oi_totals.pedidoId = o.pedidoId
-           WHERE o.status != 'CANCELADO' ${dateFilter}
-           GROUP BY o.sellerId, o.sellerName
-           ORDER BY pontuacao DESC`;
+             SELECT o.sellerId,
+               COUNT(*) as pedidos,
+               COALESCE(SUM(o.totalAplicado), 0) as faturamento,
+               COALESCE(AVG(o.totalAplicado), 0) as ticketMedio
+             FROM pdv_orders o
+             WHERE o.status != 'CANCELADO' ${dateFilter}
+             GROUP BY o.sellerId
+           ) m ON m.sellerId = s.id
+           LEFT JOIN (
+             SELECT o.sellerId,
+               COALESCE(SUM(
+                 CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
+                      ELSE oi.ptVarejo * oi.quantidade END
+               ), 0) as pontuacao
+             FROM pdv_orders o
+             INNER JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
+             WHERE o.status != 'CANCELADO' ${dateFilter}
+             GROUP BY o.sellerId
+           ) pt ON pt.sellerId = s.id
+           WHERE s.isActive = 1
+           ORDER BY COALESCE(m.faturamento, 0) DESC, s.name`;
+        // dateFilter aparece em duas subqueries (m e pt); cada uma precisa da mesma lista de params.
+        const sellerDateParams = [...params, ...params];
         let sellerRows: any[];
         try {
-          const [r] = await db.execute(sqlBySellerComOffset, [...params, offsetYm, offsetYm]);
+          const [r] = await db.execute(sqlBySellerComOffset, [offsetYm, offsetYm, ...sellerDateParams]);
           sellerRows = r as any[];
         } catch (e) {
           if (!isMissingPontosOffsetColumn(e)) throw e;
-          const [r] = await db.execute(sqlBySellerLegacy, params);
+          const [r] = await db.execute(sqlBySellerLegacy, sellerDateParams);
           sellerRows = r as any[];
         }
-        
+
         // Por forma de pagamento — inclui pedidos Sofia (o dinheiro entrou no caixa).
-        // Excluir só isSofia aqui deixava o donut ~R$ 5k abaixo do PDV antigo (Manus).
         const excludeSofiaPayments = process.env.PDV_DASHBOARD_PAYMENTS_EXCLUDE_SOFIA === "1";
         const paymentSofiaFilter = excludeSofiaPayments ? " AND o.isSofia = 0" : "";
         const [paymentRows] = await db.execute(
@@ -183,25 +211,22 @@ export const pdvDashboardRouter = router({
            ORDER BY total DESC`,
           params
         );
-        
-        // Faturamento por dia — apenas itens não-Sofia, exclui pedidos 100% Sofia.
-        // Usa DATE_FORMAT para retornar string YYYY-MM-DD (evita "Invalid Date" no frontend)
-        // e CONVERT_TZ para que pedidos noturnos caiam no dia correto em horário BR.
+
+        // Faturamento por dia — total do pedido (igual KPI).
         const [dailyRows] = await db.execute(
-          `SELECT DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d') as dia,
-            COUNT(DISTINCT o.id) as pedidos,
-            COALESCE(SUM(oi.totalItem), 0) as faturamento
+          `SELECT ${dayYmd} as dia,
+            COUNT(*) as pedidos,
+            COALESCE(SUM(o.totalAplicado), 0) as faturamento
            FROM pdv_orders o
-           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
            WHERE o.status != 'CANCELADO' ${dateFilter}
-           GROUP BY DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d')
+           GROUP BY ${dayYmd}
            ORDER BY dia ASC`,
           params
         );
-        
+
         // Metas
         const [goalRows] = await db.execute("SELECT * FROM pdv_goals ORDER BY value ASC");
-        
+
         await db.end();
 
         const rawSummary = (totalRows as any[])[0] || {};
@@ -214,6 +239,14 @@ export const pdvDashboardRouter = router({
           faturamentoBalcao: rowNumber(rawSummary.faturamentoBalcao),
           faturamentoWhatsapp: rowNumber(rawSummary.faturamentoWhatsapp),
         };
+
+        if (summary.totalPedidos === 0) {
+          console.warn("[pdvDashboard.summary] zero pedidos no período", {
+            startDate: input.startDate,
+            endDate: input.endDate,
+            orderDayMode: process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "convert_tz",
+          });
+        }
 
         const bySeller = (sellerRows as any[]).map((r) => ({
           sellerName: String(r.sellerName ?? ""),
@@ -248,6 +281,11 @@ export const pdvDashboardRouter = router({
           byPayment,
           byDay,
           goals,
+          meta: {
+            orderDayMode: process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "convert_tz",
+            startDate: input.startDate ?? null,
+            endDate: input.endDate ?? null,
+          },
         };
       } catch (err) {
         if (err instanceof TRPCError) throw err;
@@ -382,11 +420,12 @@ export const pdvDashboardRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
+      const dayCmp = orderDayDateExpr("o");
       let dateFilter = "";
       const params: any[] = [];
-      dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?";
+      dateFilter += ` AND ${dayCmp} >= ?`;
       params.push(input.startDate);
-      dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?";
+      dateFilter += ` AND ${dayCmp} <= ?`;
       params.push(input.endDate);
 
       const results: { sellerName: string; pontosSistema: number; pontuacaoManus: number; offset: number }[] = [];
@@ -573,6 +612,7 @@ export const pdvDashboardRouter = router({
 
     try {
       let rows: any[];
+      const dayCmp = orderDayDateExpr("o");
       try {
         const [r] = await db.execute(
           `SELECT
@@ -587,8 +627,8 @@ export const pdvDashboardRouter = router({
         FROM pdv_sellers se
         LEFT JOIN pdv_orders o ON o.sellerId = se.id
           AND o.status != 'CANCELADO'
-          AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
-          AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
+          AND ${dayCmp} >= ?
+          AND ${dayCmp} <= ?
         LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND (COALESCE(oi.isSofia, 0) = 0) AND o.id IS NOT NULL
         WHERE se.id = ?
         GROUP BY se.id, se.pontosOffset, se.pontosOffsetMes`,
@@ -610,8 +650,8 @@ export const pdvDashboardRouter = router({
         JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND (COALESCE(oi.isSofia, 0) = 0)
         WHERE o.status != 'CANCELADO'
           AND o.sellerId = ?
-          AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
-          AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
+          AND ${dayCmp} >= ?
+          AND ${dayCmp} <= ?`,
           [seller.sellerId, startDate, endDate]
         );
         rows = r as any[];
@@ -687,9 +727,10 @@ export const pdvDashboardRouter = router({
       if (!db) return { orders: [], total: 0, pages: 0 };
       try {
         const params: any[] = [seller.sellerId];
+        const dayCmp = orderDayDateExpr("o");
         let dateFilter = '';
-        if (input.startDate) { dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?"; params.push(input.startDate); }
-        if (input.endDate) { dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?"; params.push(input.endDate); }
+        if (input.startDate) { dateFilter += ` AND ${dayCmp} >= ?`; params.push(input.startDate); }
+        if (input.endDate) { dateFilter += ` AND ${dayCmp} <= ?`; params.push(input.endDate); }
 
         const countParams = [...params];
         const [countRows] = await db.execute(
@@ -779,6 +820,8 @@ export const pdvDashboardRouter = router({
 
         const sellerIds = sellers.map((s: any) => s.id);
         const placeholders = sellerIds.map(() => "?").join(",");
+        const dayCmpO = orderDayDateExpr("o");
+        const dayYmdO = orderDayYmdExpr("o");
         // Cada query recebe seu próprio array de parâmetros para evitar reutilização
         const mkParams = () => [...sellerIds, input.startDate, input.endDate];
 
@@ -798,8 +841,8 @@ export const pdvDashboardRouter = router({
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.sellerId IN (${placeholders})
             AND o.status != 'CANCELADO'
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
+            AND ${dayCmpO} >= ?
+            AND ${dayCmpO} <= ?`,
           mkParams()
         );
 
@@ -811,15 +854,15 @@ export const pdvDashboardRouter = router({
           WHERE os.tipo = 'CAIXINHA'
             AND o.status != 'CANCELADO'
             AND o.sellerId IN (${placeholders})
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
+            AND ${dayCmpO} >= ?
+            AND ${dayCmpO} <= ?`,
           mkParams()
         );
 
         // Faturamento por dia (dia em horário de Brasília, retorno como string YYYY-MM-DD)
         const [dailyRows] = await db.execute(
           `SELECT
-            DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d') as dia,
+            ${dayYmdO} as dia,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade ELSE 0 END), 0) as pecas,
             COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.totalItem ELSE 0 END), 0) as faturamento,
@@ -828,9 +871,9 @@ export const pdvDashboardRouter = router({
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.sellerId IN (${placeholders})
             AND o.status != 'CANCELADO'
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
-          GROUP BY DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d')
+            AND ${dayCmpO} >= ?
+            AND ${dayCmpO} <= ?
+          GROUP BY ${dayYmdO}
           ORDER BY dia ASC`,
           mkParams()
         );
@@ -846,8 +889,8 @@ export const pdvDashboardRouter = router({
           FROM pdv_orders o
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.sellerId IN (${placeholders})
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
+            AND ${dayCmpO} >= ?
+            AND ${dayCmpO} <= ?
           GROUP BY o.pedidoId, o.createdAt, o.clienteNome, o.regime, o.canal, o.status, o.totalAplicado, o.sellerName
           ORDER BY o.createdAt DESC
           LIMIT 50`,
