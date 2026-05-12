@@ -29,12 +29,13 @@ interface CartItem {
 
 export default function PdvMain() {
   const { seller, isAdmin } = usePdvAuth();
+  const authed = !!seller;
   const utils = trpc.useUtils();
 
   // Progresso de metas do vendedor (apenas para nao-admins)
   const { data: myProgress } = trpc.pdvDashboard.getMyProgress.useQuery(
     undefined,
-    { enabled: !isAdmin, refetchInterval: 60000, staleTime: 30000 }
+    { enabled: authed && !isAdmin, refetchInterval: 60000, staleTime: 30000 }
   );
 
   // Modal de sincronização
@@ -44,12 +45,12 @@ export default function PdvMain() {
 
   const { data: previewData, isLoading: isLoadingPreview, refetch: refetchPreview } = trpc.pdvSync.preview.useQuery(
     undefined,
-    { enabled: showSyncModal && isAdmin, staleTime: 0 }
+    { enabled: authed && showSyncModal && isAdmin, staleTime: 0 }
   );
 
   const { data: unreadData } = trpc.pdvNotifications.unreadCount.useQuery(
     undefined,
-    { enabled: isAdmin, refetchInterval: 30000 }
+    { enabled: authed && isAdmin, refetchInterval: 30000 }
   );
 
   const syncMutation = trpc.pdvSync.sync.useMutation({
@@ -117,10 +118,14 @@ export default function PdvMain() {
     page: safePage,
     limit: safeLimit,
   }, {
+    enabled: authed,
     placeholderData: (prev) => prev,
   });
 
-  const { data: linhas } = trpc.pdvProducts.getLinhas.useQuery(undefined, { staleTime: 10000 });
+  const { data: linhas } = trpc.pdvProducts.getLinhas.useQuery(undefined, {
+    enabled: authed,
+    staleTime: 10000,
+  });
 
   const groups: GroupedProduct[] = groupedData?.groups || [];
 
