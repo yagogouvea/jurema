@@ -945,6 +945,61 @@ export const pdvDashboardRouter = router({
           mkParams()
         );
 
+        // PT (pontuação) — soma ptAtacado*qtd ou ptVarejo*qtd (itens não-Sofia, pedidos não-cancelados)
+        // Reusa exatamente a lógica do summary do dashboard, calibrando com pontosOffset Manus
+        // quando o filtro do período é um único mês (YYYY-MM) e o vendedor tem pontosOffsetMes
+        // igual a esse mês.
+        const offsetYm = pontosOffsetMesParam(input.startDate, input.endDate);
+        const sqlPtComOffset = `
+          SELECT COALESCE(SUM(
+            CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
+                 ELSE oi.ptVarejo * oi.quantidade END
+          ), 0) AS pontuacaoBase,
+          (
+            SELECT COALESCE(SUM(s2.pontosOffset), 0)
+            FROM pdv_sellers s2
+            WHERE s2.id IN (${placeholders})
+              AND ? IS NOT NULL
+              AND s2.pontosOffsetMes = ?
+          ) AS pontosOffsetTotal
+          FROM pdv_orders o
+          INNER JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
+          WHERE o.sellerId IN (${placeholders})
+            AND o.status != 'CANCELADO'
+            AND ${dayCmpO} >= ?
+            AND ${dayCmpO} <= ?`;
+        const sqlPtLegacy = `
+          SELECT COALESCE(SUM(
+            CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
+                 ELSE oi.ptVarejo * oi.quantidade END
+          ), 0) AS pontuacaoBase,
+          0 AS pontosOffsetTotal
+          FROM pdv_orders o
+          INNER JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
+          WHERE o.sellerId IN (${placeholders})
+            AND o.status != 'CANCELADO'
+            AND ${dayCmpO} >= ?
+            AND ${dayCmpO} <= ?`;
+
+        let pontuacaoBase = 0;
+        let pontosOffsetTotal = 0;
+        try {
+          const [ptRows] = await db.execute(sqlPtComOffset, [
+            ...sellerIds, offsetYm, offsetYm,
+            ...sellerIds, input.startDate, input.endDate,
+          ]);
+          const r = (ptRows as any[])[0] || {};
+          pontuacaoBase = parseFloat(r.pontuacaoBase || '0');
+          pontosOffsetTotal = parseFloat(r.pontosOffsetTotal || '0');
+        } catch (e) {
+          if (!isMissingPontosOffsetColumn(e)) throw e;
+          const [ptRows] = await db.execute(sqlPtLegacy, mkParams());
+          const r = (ptRows as any[])[0] || {};
+          pontuacaoBase = parseFloat(r.pontuacaoBase || '0');
+          pontosOffsetTotal = 0;
+        }
+        const pontuacao = pontuacaoBase + pontosOffsetTotal;
+
         // Metas
         const [goalRows] = await db.execute("SELECT \`key\`, value FROM pdv_goals");
         const goals: Record<string, number> = {};
@@ -957,6 +1012,15 @@ export const pdvDashboardRouter = router({
         const totalBonus = parseFloat(kpi.totalBonus || '0');
         const totalCaixinha = parseFloat((caixRows as any[])[0]?.totalCaixinha || '0');
 
+        // Meta atingida agora compara PONTOS, não R$ — alinhado com Bronze/Prata/Ouro do Manus
+        const metaAtingida = pontuacao >= (goals.OURO || 0) && goals.OURO
+          ? 'OURO'
+          : pontuacao >= (goals.PRATA || 0) && goals.PRATA
+            ? 'PRATA'
+            : pontuacao >= (goals.BRONZE || 0) && goals.BRONZE
+              ? 'BRONZE'
+              : null;
+
         return {
           sellers,
           kpis: {
@@ -965,15 +1029,21 @@ export const pdvDashboardRouter = router({
             faturamento,
             totalBonus,
             totalCaixinha,
+            pontuacao,
+            pontuacaoBase,
+            pontosOffsetTotal,
             faturamentoAtacado: parseFloat(kpi.faturamentoAtacado || '0'),
             faturamentoVarejo: parseFloat(kpi.faturamentoVarejo || '0'),
             faturamentoBalcao: parseFloat(kpi.faturamentoBalcao || '0'),
             faturamentoWhatsapp: parseFloat(kpi.faturamentoWhatsapp || '0'),
             pedidosCancelados: parseInt(kpi.pedidosCancelados || '0'),
-            metaAtingida: faturamento >= (goals.BRONZE || 0)
-              ? faturamento >= (goals.OURO || 0) ? 'OURO'
-                : faturamento >= (goals.PRATA || 0) ? 'PRATA' : 'BRONZE'
-              : null,
+            metaAtingida,
+          },
+          meta: {
+            startDate: input.startDate,
+            endDate: input.endDate,
+            /** Quando não é null, o PT soma `pontosOffset` apenas nos vendedores cujo `pontosOffsetMes` é igual a este YYYY-MM. */
+            pontosOffsetYm: offsetYm,
           },
           daily: (dailyRows as any[]).map(d => ({
             dia: d.dia,

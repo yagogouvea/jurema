@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import {
   Users, DollarSign, ShoppingBag, Package, TrendingUp,
-  Award, Calendar, ArrowLeft, ChevronRight, Wallet,
+  Award, Calendar, ArrowLeft, ChevronRight, Wallet, Trophy, Sparkles,
 } from "lucide-react";
 
 const SELLER_COLORS = ["#16a34a", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#ec4899"];
@@ -29,9 +29,25 @@ const META_BG: Record<string, string> = {
 function formatCurrency(v: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 }
+function formatPontos(v: number) {
+  return `${Math.round(v).toLocaleString("pt-BR")} PT`;
+}
 function formatDate(s: string) {
   return new Date(s + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
+
+const META_RING: Record<string, string> = {
+  OURO: "ring-2 ring-yellow-400 shadow-lg shadow-yellow-500/20",
+  PRATA: "ring-2 ring-gray-300 shadow-lg shadow-gray-300/20",
+  BRONZE: "ring-2 ring-orange-400 shadow-lg shadow-orange-400/20",
+  META_LOJA: "ring-2 ring-green-400 shadow-lg shadow-green-500/20",
+};
+const META_BAR: Record<string, string> = {
+  OURO: "bg-yellow-400",
+  PRATA: "bg-gray-300",
+  BRONZE: "bg-orange-400",
+  META_LOJA: "bg-green-500",
+};
 
 export default function PdvSellerPanel() {
   const { isAdmin } = usePdvAuth();
@@ -162,14 +178,21 @@ export default function PdvSellerPanel() {
           </div>
         </div>
 
-        {/* Título do vendedor selecionado */}
-        <div className="flex items-center gap-3">
+        {/* Título + PT atuais do vendedor selecionado (ou loja) */}
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: selectedColor }} />
           <h2 className="text-white text-lg font-bold">{selectedSellerName}</h2>
+          {kpis && (
+            <div className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-xl px-3 py-1.5">
+              <Trophy className="w-4 h-4 text-yellow-400" />
+              <span className="text-gray-400 text-xs">Pontos do período:</span>
+              <span className="text-white text-sm font-bold">{formatPontos(kpis.pontuacao ?? 0)}</span>
+            </div>
+          )}
           {kpis?.metaAtingida && (
             <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold ${META_BG[kpis.metaAtingida]} ${META_COLORS[kpis.metaAtingida]}`}>
               <Award className="w-3 h-3 inline mr-1" />
-              {kpis.metaAtingida}
+              Meta {kpis.metaAtingida} batida
             </span>
           )}
         </div>
@@ -186,8 +209,9 @@ export default function PdvSellerPanel() {
         ) : (
           <>
             {/* KPIs principais */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
               {[
+                { label: "Pontos (PT)", value: formatPontos(kpis.pontuacao ?? 0), icon: Trophy, color: "text-amber-300", bg: "bg-amber-950/40 border-amber-800/50" },
                 { label: "Faturamento", value: formatCurrency(kpis.faturamento), icon: DollarSign, color: "text-green-400", bg: "bg-green-950/30 border-green-900/50" },
                 { label: "Pedidos", value: String(kpis.totalPedidos), icon: ShoppingBag, color: "text-blue-400", bg: "bg-blue-950/30 border-blue-900/50" },
                 { label: "Peças", value: String(kpis.totalPecas), icon: Package, color: "text-purple-400", bg: "bg-purple-950/30 border-purple-900/50" },
@@ -293,42 +317,80 @@ export default function PdvSellerPanel() {
               </div>
             )}
 
-            {/* Metas */}
+            {/* Metas (em PONTOS — Bronze/Prata/Ouro são individuais; Meta Loja vale só quando "Todos") */}
             {Object.keys(goals).length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-                <h3 className="text-white font-semibold mb-3">Metas do Período</h3>
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <h3 className="text-white font-semibold">Metas do Período (em PT)</h3>
+                  <div className="text-xs text-gray-400">
+                    Atual: <span className="text-amber-300 font-bold">{formatPontos(kpis.pontuacao ?? 0)}</span>
+                    {selectedSellerId
+                      ? <span className="text-gray-500 ml-2">— metas individuais</span>
+                      : <span className="text-gray-500 ml-2">— soma de todos os vendedores</span>}
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   {[
-                    { key: "BRONZE", label: "Bronze", color: "text-orange-400", bg: "bg-orange-950/30 border-orange-900/50" },
-                    { key: "PRATA", label: "Prata", color: "text-gray-300", bg: "bg-gray-800/60 border-gray-700/50" },
-                    { key: "OURO", label: "Ouro", color: "text-yellow-400", bg: "bg-yellow-950/30 border-yellow-900/50" },
-                    { key: "META_LOJA", label: "Meta Loja", color: "text-green-500", bg: "bg-green-950/30 border-green-900/50" },
+                    { key: "BRONZE", label: "Bronze", color: "text-orange-400", bg: "bg-orange-950/30 border-orange-900/50", soloLoja: false },
+                    { key: "PRATA", label: "Prata", color: "text-gray-300", bg: "bg-gray-800/60 border-gray-700/50", soloLoja: false },
+                    { key: "OURO", label: "Ouro", color: "text-yellow-400", bg: "bg-yellow-950/30 border-yellow-900/50", soloLoja: false },
+                    { key: "META_LOJA", label: "Meta Loja", color: "text-green-500", bg: "bg-green-950/30 border-green-900/50", soloLoja: true },
                   ].map(m => {
                     const goalValue = goals[m.key] || 0;
-                    const reached = kpis.faturamento >= goalValue && goalValue > 0;
+                    // META_LOJA só faz sentido quando "Todos" está selecionado
+                    const aplicavel = m.soloLoja ? !selectedSellerId : true;
+                    const pontos = kpis.pontuacao ?? 0;
+                    const reached = aplicavel && goalValue > 0 && pontos >= goalValue;
+                    const pct = aplicavel && goalValue > 0
+                      ? Math.min(100, (pontos / goalValue) * 100)
+                      : 0;
+                    const faltam = aplicavel && goalValue > 0 ? Math.max(0, goalValue - pontos) : 0;
+
                     return (
-                      <div key={m.key} className={`border rounded-xl p-3 ${m.bg} ${reached ? "ring-1 ring-current" : ""}`}>
-                        <div className="flex items-center justify-between">
-                          <div className={`text-xs font-semibold ${m.color}`}>{m.label}</div>
-                          {reached && <Award className={`w-3.5 h-3.5 ${m.color}`} />}
-                        </div>
-                        <div className="text-white font-bold text-sm mt-1">{formatCurrency(goalValue)}</div>
-                        {goalValue > 0 && (
-                          <div className="mt-2">
-                            <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                              <div
-                                className="h-full rounded-full transition-all"
-                                style={{
-                                  width: `${Math.min(100, (kpis.faturamento / goalValue) * 100).toFixed(0)}%`,
-                                  backgroundColor: reached ? "#16a34a" : "#4b5563",
-                                }}
-                              />
-                            </div>
-                            <div className="text-gray-500 text-xs mt-1">
-                              {Math.min(100, (kpis.faturamento / goalValue) * 100).toFixed(0)}%
-                            </div>
+                      <div
+                        key={m.key}
+                        className={`relative border rounded-xl p-3 transition-all ${m.bg} ${
+                          reached ? META_RING[m.key] : ""
+                        } ${!aplicavel ? "opacity-40" : ""}`}
+                        title={!aplicavel ? "Meta da loja se aplica apenas quando 'Todos' está selecionado" : undefined}
+                      >
+                        {reached && (
+                          <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-lg">
+                            <Sparkles className="w-3 h-3" />
+                            BATIDA
                           </div>
                         )}
+                        <div className="flex items-center justify-between">
+                          <div className={`text-xs font-semibold ${m.color}`}>{m.label}</div>
+                          {reached && <Trophy className={`w-4 h-4 ${m.color}`} />}
+                        </div>
+                        <div className="text-white font-bold text-sm mt-1">{formatPontos(goalValue)}</div>
+                        {aplicavel && goalValue > 0 ? (
+                          <div className="mt-2">
+                            <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  reached ? META_BAR[m.key] : "bg-gray-500"
+                                }`}
+                                style={{ width: `${pct.toFixed(1)}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between mt-1">
+                              <span className={`text-[11px] font-semibold ${reached ? m.color : "text-gray-400"}`}>
+                                {pct.toFixed(0)}%
+                              </span>
+                              <span className="text-gray-500 text-[10px]">
+                                {reached
+                                  ? `+${formatPontos(pontos - goalValue)} acima`
+                                  : `faltam ${formatPontos(faltam)}`}
+                              </span>
+                            </div>
+                          </div>
+                        ) : !aplicavel ? (
+                          <div className="text-[10px] text-gray-500 mt-2 italic">
+                            Aplica em "Todos"
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
