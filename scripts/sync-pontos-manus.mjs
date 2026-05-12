@@ -1,20 +1,24 @@
 /**
  * Sincroniza PT com o Manus: grava pdv_sellers.pontosOffset = (Manus − soma PT no período).
  *
- * IMPORTANTE: a soma de PT aqui é a MESMA regra do dashboard / syncPontosManusOffsets:
- * - itens com (COALESCE(oi.isSofia, 0) = 0)
- * - sem filtrar o.isSofia no pedido
- * - filtro de dia do pedido = mesmo PDV_DASHBOARD_ORDER_DAY_MODE do Railway (vazio = CONVERT_TZ -03)
+ * Mesma regra do dashboard / syncPontosManusOffsets:
+ * - itens (COALESCE(oi.isSofia, 0) = 0)
+ * - sem filtrar o.isSofia
+ * - dia do pedido = PDV_DASHBOARD_ORDER_DAY_MODE (Railway)
  *
- * Uso (na raiz do repo, com DATABASE_URL e opcionalmente PDV_DASHBOARD_ORDER_DAY_MODE):
- *   node scripts/sync-pontos-manus.mjs [startDate] [endDate]
+ * ## Manus “até ontem” + Railway “hoje”
+ * O print do Manus em geral **não inclui o dia atual**. O offset deve ser calibrado com
+ * **endDate = último dia que entrou no Manus (normalmente ontem em America/Sao_Paulo)**.
+ * No dashboard, use filtro com **data fim = hoje**: a soma no banco inclui as vendas de hoje
+ * no Railway e o total fica Manus(ontem) + PT de hoje.
  *
- * O período deve ser o MESMO do relatório Manus do print (um único YYYY-MM).
- * Se o print é “até ontem” e hoje já houve venda, use endDate = ontem para o baseline bater;
- * depois, no dashboard com o mês inteiro, o PT = baseline + vendas novas.
+ * Uso:
+ *   node --import dotenv/config scripts/sync-pontos-manus.mjs [startDate] [endDate]
  *
- * Exemplo:
- *   node scripts/sync-pontos-manus.mjs 2026-05-01 2026-05-31
+ * Sem argumentos: start = dia 1 do mês de **ontem** (SP), end = **ontem** (SP).
+ *
+ * Exemplo explícito (Manus fechou em 11/05, hoje é 12/05):
+ *   node --import dotenv/config scripts/sync-pontos-manus.mjs 2026-05-01 2026-05-11
  */
 import mysql from "mysql2/promise";
 
@@ -22,6 +26,28 @@ const url = process.env.DATABASE_URL;
 if (!url) {
   console.error("Defina DATABASE_URL");
   process.exit(1);
+}
+
+/** Hoje (YYYY-MM-DD) em America/Sao_Paulo */
+function todayYmdSaoPaulo() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/** Ontem (YYYY-MM-DD) em America/Sao_Paulo (Brasil sem horário de verão: -03 fixo na âncora) */
+function yesterdayYmdSaoPaulo() {
+  const today = todayYmdSaoPaulo();
+  const ms = new Date(`${today}T12:00:00-03:00`).getTime() - 86400000;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(ms));
 }
 
 /** Mesma lógica que server/routers/pdvDashboard.ts — orderDayDateExpr */
@@ -34,20 +60,23 @@ function orderDayDateExpr(alias) {
 }
 
 /**
- * Valores do painel Manus (print de referência).
- * Atualize esta lista quando o Manus mudar; rode o script com o MESMO intervalo de datas do filtro do dashboard.
+ * PT do Manus no print (fechamento até ontem / último dia do relatório).
+ * Atualize quando tiver novo export do Manus.
  */
 const TARGETS = [
-  { sellerName: "GABRIEL", pontuacaoManus: 17820 },
-  { sellerName: "MURILO", pontuacaoManus: 8184 },
-  { sellerName: "FLAVIO", pontuacaoManus: 8727 },
-  { sellerName: "VINICIUS", pontuacaoManus: 5310 },
+  { sellerName: "GABRIEL", pontuacaoManus: 14121 },
+  { sellerName: "MURILO", pontuacaoManus: 6845 },
+  { sellerName: "FLAVIO", pontuacaoManus: 6493 },
+  { sellerName: "VINICIUS", pontuacaoManus: 3975 },
   { sellerName: "VANESSA", pontuacaoManus: 390 },
   { sellerName: "TESTE", pontuacaoManus: 0 },
 ];
 
-const startDate = process.argv[2] || "2026-05-01";
-const endDate = process.argv[3] || new Date().toISOString().slice(0, 10);
+const defaultEnd = process.env.SYNC_MANUS_END_DATE || yesterdayYmdSaoPaulo();
+const defaultStart = defaultEnd.slice(0, 7) + "-01";
+
+const startDate = process.argv[2] || defaultStart;
+const endDate = process.argv[3] || defaultEnd;
 
 if (startDate.slice(0, 7) !== endDate.slice(0, 7)) {
   console.error("startDate e endDate precisam estar no mesmo mês (YYYY-MM).");
@@ -55,13 +84,22 @@ if (startDate.slice(0, 7) !== endDate.slice(0, 7)) {
 }
 const ym = startDate.slice(0, 7);
 
+const todaySp = todayYmdSaoPaulo();
+if (endDate >= todaySp) {
+  console.warn(
+    `Aviso: endDate (${endDate}) é hoje ou futuro em America/Sao_Paulo (${todaySp}). ` +
+      `O Manus costuma fechar até ontem; o ideal é endDate = ontem para depois somar o dia de hoje só pelo banco (Railway).`
+  );
+}
+
 const dayCmp = orderDayDateExpr("o");
 const dateFilter = ` AND ${dayCmp} >= ? AND ${dayCmp} <= ?`;
 const dateParams = [startDate, endDate];
 
 const modeLabel = process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "(vazio=convert_tz -03)";
 console.log(`PDV_DASHBOARD_ORDER_DAY_MODE=${modeLabel}`);
-console.log(`Período: ${startDate} .. ${endDate} (mês ${ym})`);
+console.log(`Hoje (SP)=${todaySp} | Período sync: ${startDate} .. ${endDate} (mês ${ym})`);
+console.log(`Dica dashboard: mesmo mês com data fim = hoje (${todaySp}) para incluir vendas do Railway.`);
 
 const db = await mysql.createConnection(url);
 
@@ -99,4 +137,4 @@ for (const t of TARGETS) {
 }
 
 await db.end();
-console.log("Concluído. Colunas pontosOffset / pontosOffsetMes exigem migration 0017 se ainda não aplicada.");
+console.log("Concluído. Migration 0017 necessária se pontosOffset / pontosOffsetMes não existirem.");

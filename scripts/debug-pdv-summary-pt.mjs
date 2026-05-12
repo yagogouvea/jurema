@@ -26,11 +26,12 @@ const params = [startDate, endDate];
 const offsetYm =
   startDate.slice(0, 7) === endDate.slice(0, 7) ? startDate.slice(0, 7) : null;
 
+/** Edite para o último print Manus (período “até ontem” se for o caso). */
 const MANUS_REF = {
-  GABRIEL: 17820,
-  MURILO: 8184,
-  FLAVIO: 8727,
-  VINICIUS: 5310,
+  GABRIEL: 14121,
+  MURILO: 6845,
+  FLAVIO: 6493,
+  VINICIUS: 3975,
   VANESSA: 390,
   TESTE: 0,
 };

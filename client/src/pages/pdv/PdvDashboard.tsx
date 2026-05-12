@@ -318,7 +318,9 @@ export default function PdvDashboard() {
                     PT pode incluir <span className="text-gray-400">pontosOffset</span> (Manus): só quando o filtro de
                     datas é <strong className="text-gray-400">um único mês</strong> ({data.meta.pontosOffsetYm}) e o
                     vendedor tem <span className="text-gray-400">pontosOffsetMes</span> igual a esse mês. Caso contrário
-                    entra só a soma dos itens.
+                    entra só a soma dos itens. Calibre o sync com o Manus até ontem; com a{" "}
+                    <strong className="text-gray-400">data fim = hoje</strong>, entram também as vendas do dia no
+                    Railway.
                   </>
                 ) : (
                   <>
