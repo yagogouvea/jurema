@@ -38,10 +38,16 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       headers() {
-        // Prioridade: admin_token (painel admin) > pdv_token (painel PDV)
-        const adminToken = localStorage.getItem("admin_token");
-        if (adminToken) return { Authorization: `Bearer ${adminToken}` };
+        // Em /pdv/* usar só pdv_token; admin_token no mesmo origin quebraria o JWT do PDV nas rotas pdv.*.
+        const path = typeof window !== "undefined" ? window.location.pathname : "";
+        const isPdv = path.startsWith("/pdv");
         const pdvToken = localStorage.getItem("pdv_token");
+        const adminToken = localStorage.getItem("admin_token");
+        if (isPdv) {
+          if (pdvToken) return { Authorization: `Bearer ${pdvToken}` };
+          return {};
+        }
+        if (adminToken) return { Authorization: `Bearer ${adminToken}` };
         if (pdvToken) return { Authorization: `Bearer ${pdvToken}` };
         return {};
       },
