@@ -907,6 +907,23 @@ export const pdvDashboardRouter = router({
           mkParams()
         );
 
+        // Sofia: faturamento, comissão da loja e reembolso do vendedor
+        // (faturamento - comissaoLoja). Mesma fórmula usada em pdvSofia/pdvRelatorio.
+        const [sofiaRows] = await db.execute(
+          `SELECT
+            COUNT(DISTINCT o.id) as totalPedidosSofia,
+            COALESCE(SUM(oi.quantidade), 0) as totalPecasSofia,
+            COALESCE(SUM(oi.totalItem), 0) as faturamentoSofia,
+            COALESCE(SUM(COALESCE(oi.comissaoLojaSofia, 0) * oi.quantidade), 0) as comissaoLojaSofia
+          FROM pdv_orders o
+          JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 1
+          WHERE o.status != 'CANCELADO'
+            AND o.sellerId IN (${placeholders})
+            AND ${dayCmpO} >= ?
+            AND ${dayCmpO} <= ?`,
+          mkParams()
+        );
+
         // Faturamento por dia (dia em horário de Brasília, retorno como string YYYY-MM-DD)
         const [dailyRows] = await db.execute(
           `SELECT
@@ -1012,6 +1029,13 @@ export const pdvDashboardRouter = router({
         const totalBonus = parseFloat(kpi.totalBonus || '0');
         const totalCaixinha = parseFloat((caixRows as any[])[0]?.totalCaixinha || '0');
 
+        const sofia = (sofiaRows as any[])[0] || {};
+        const totalPedidosSofia = parseInt(sofia.totalPedidosSofia || '0');
+        const totalPecasSofia = parseInt(sofia.totalPecasSofia || '0');
+        const faturamentoSofia = parseFloat(sofia.faturamentoSofia || '0');
+        const comissaoLojaSofia = parseFloat(sofia.comissaoLojaSofia || '0');
+        const reembolsoSofia = Math.max(0, faturamentoSofia - comissaoLojaSofia);
+
         // Meta atingida agora compara PONTOS, não R$ — alinhado com Bronze/Prata/Ouro do Manus
         const metaAtingida = pontuacao >= (goals.OURO || 0) && goals.OURO
           ? 'OURO'
@@ -1032,6 +1056,11 @@ export const pdvDashboardRouter = router({
             pontuacao,
             pontuacaoBase,
             pontosOffsetTotal,
+            totalPedidosSofia,
+            totalPecasSofia,
+            faturamentoSofia,
+            comissaoLojaSofia,
+            reembolsoSofia,
             faturamentoAtacado: parseFloat(kpi.faturamentoAtacado || '0'),
             faturamentoVarejo: parseFloat(kpi.faturamentoVarejo || '0'),
             faturamentoBalcao: parseFloat(kpi.faturamentoBalcao || '0'),

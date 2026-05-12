@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import {
   Users, DollarSign, ShoppingBag, Package, TrendingUp,
-  Award, Calendar, ArrowLeft, ChevronRight, Wallet, Trophy, Sparkles,
+  Award, Calendar, ArrowLeft, ChevronRight, Wallet, Trophy, Sparkles, RotateCcw,
 } from "lucide-react";
 
 const SELLER_COLORS = ["#16a34a", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#ec4899"];
@@ -209,7 +209,7 @@ export default function PdvSellerPanel() {
         ) : (
           <>
             {/* KPIs principais */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
               {[
                 { label: "Pontos (PT)", value: formatPontos(kpis.pontuacao ?? 0), icon: Trophy, color: "text-amber-300", bg: "bg-amber-950/40 border-amber-800/50" },
                 { label: "Faturamento", value: formatCurrency(kpis.faturamento), icon: DollarSign, color: "text-green-400", bg: "bg-green-950/30 border-green-900/50" },
@@ -217,14 +217,27 @@ export default function PdvSellerPanel() {
                 { label: "Peças", value: String(kpis.totalPecas), icon: Package, color: "text-purple-400", bg: "bg-purple-950/30 border-purple-900/50" },
                 { label: "Bônus Total", value: formatCurrency(kpis.totalBonus), icon: TrendingUp, color: "text-yellow-400", bg: "bg-yellow-950/30 border-yellow-900/50" },
                 { label: "Caixinha", value: formatCurrency(kpis.totalCaixinha), icon: Wallet, color: "text-orange-400", bg: "bg-orange-950/30 border-orange-900/50" },
+                {
+                  label: "Reembolso Sofia",
+                  value: formatCurrency(kpis.reembolsoSofia ?? 0),
+                  subValue: (kpis.totalPedidosSofia ?? 0) > 0
+                    ? `${kpis.totalPedidosSofia} ped · ${kpis.totalPecasSofia} pç`
+                    : "sem pedidos Sofia",
+                  icon: RotateCcw,
+                  color: "text-fuchsia-400",
+                  bg: "bg-fuchsia-950/30 border-fuchsia-900/50",
+                },
                 { label: "Ticket Médio", value: kpis.totalPedidos > 0 ? formatCurrency(kpis.faturamento / kpis.totalPedidos) : "R$ 0,00", icon: Award, color: "text-pink-400", bg: "bg-pink-950/30 border-pink-900/50" },
-              ].map((kpi) => (
+              ].map((kpi: any) => (
                 <div key={kpi.label} className={`border rounded-2xl p-4 ${kpi.bg}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
                     <span className="text-gray-400 text-xs">{kpi.label}</span>
                   </div>
                   <div className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
+                  {kpi.subValue && (
+                    <div className="text-gray-500 text-[10px] mt-0.5">{kpi.subValue}</div>
+                  )}
                 </div>
               ))}
             </div>
