@@ -6,6 +6,18 @@ import superjson from "superjson";
 import App from "./App";
 import "./index.css";
 
+/** Umami só carrega se VITE_ANALYTICS_ENDPOINT e VITE_ANALYTICS_WEBSITE_ID estiverem definidos no build. */
+const analyticsEndpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT as string | undefined;
+const analyticsWebsiteId = import.meta.env.VITE_ANALYTICS_WEBSITE_ID as string | undefined;
+if (analyticsEndpoint?.trim() && analyticsWebsiteId?.trim()) {
+  const base = analyticsEndpoint.replace(/\/$/, "");
+  const s = document.createElement("script");
+  s.defer = true;
+  s.src = `${base}/umami`;
+  s.dataset.websiteId = analyticsWebsiteId;
+  document.body.appendChild(s);
+}
+
 const queryClient = new QueryClient();
 
 queryClient.getQueryCache().subscribe(event => {

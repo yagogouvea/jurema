@@ -37,6 +37,15 @@ function pontosOffsetMesParam(startDate?: string, endDate?: string): string | nu
   return startDate.slice(0, 7);
 }
 
+/** Migração 0017 ainda não aplicada no MySQL (Unknown column 'pontosOffset'). */
+function isMissingPontosOffsetColumn(err: unknown): boolean {
+  const e = err as { code?: string; errno?: number; message?: string };
+  if (e?.errno === 1054) return true;
+  if (e?.code === "ER_BAD_FIELD_ERROR") return true;
+  const msg = typeof e?.message === "string" ? e.message : "";
+  return msg.includes("Unknown column") && (msg.includes("pontosOffset") || msg.includes("pontosOffsetMes"));
+}
+
 export const pdvDashboardRouter = router({
   summary: publicProcedure
     .input(z.object({
@@ -85,10 +94,9 @@ export const pdvDashboardRouter = router({
           params
         );
         
-        // Por vendedor — todos os vendedores ativos; PT = soma nos itens + ajuste Manus no mês (pontosOffset)
+        // Por vendedor — com ajuste Manus (pontosOffset) se a migração 0017 existir; senão query legada só por pedidos
         const offsetYm = pontosOffsetMesParam(input.startDate, input.endDate);
-        const [sellerRows] = await db.execute(
-          `SELECT s.name as sellerName,
+        const sqlBySellerComOffset = `SELECT s.name as sellerName,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(oi.totalItem), 0) as faturamento,
             COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio,
@@ -108,9 +116,34 @@ export const pdvDashboardRouter = router({
            ) oi_totals ON oi_totals.pedidoId = o.pedidoId
            WHERE s.isActive = 1
            GROUP BY s.id, s.name, s.pontosOffset, s.pontosOffsetMes
-           ORDER BY pontuacao DESC`,
-          [...params, offsetYm, offsetYm]
-        );
+           ORDER BY pontuacao DESC`;
+        const sqlBySellerLegacy = `SELECT o.sellerName,
+            COUNT(DISTINCT o.id) as pedidos,
+            COALESCE(SUM(oi.totalItem), 0) as faturamento,
+            COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio,
+            COALESCE(SUM(
+              CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
+                   ELSE oi.ptVarejo * oi.quantidade END
+            ), 0) as pontuacao
+           FROM pdv_orders o
+           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+           LEFT JOIN (
+             SELECT pedidoId, SUM(totalItem) as totalNaoSofia
+             FROM pdv_order_items WHERE isSofia = 0
+             GROUP BY pedidoId
+           ) oi_totals ON oi_totals.pedidoId = o.pedidoId
+           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
+           GROUP BY o.sellerId, o.sellerName
+           ORDER BY pontuacao DESC`;
+        let sellerRows: any[];
+        try {
+          const [r] = await db.execute(sqlBySellerComOffset, [...params, offsetYm, offsetYm]);
+          sellerRows = r as any[];
+        } catch (e) {
+          if (!isMissingPontosOffsetColumn(e)) throw e;
+          const [r] = await db.execute(sqlBySellerLegacy, params);
+          sellerRows = r as any[];
+        }
         
         // Por forma de pagamento — inclui pedidos Sofia (o dinheiro entrou no caixa).
         // Excluir só isSofia aqui deixava o donut ~R$ 5k abaixo do PDV antigo (Manus).
@@ -324,10 +357,21 @@ export const pdvDashboardRouter = router({
           const pontosSistema = parseFloat((sumRows as any[])[0]?.pontuacao ?? "0");
           const offset = Math.round((t.pontuacaoManus - pontosSistema) * 100) / 100;
 
-          await db.execute(
-            `UPDATE pdv_sellers SET pontosOffset = ?, pontosOffsetMes = ? WHERE id = ?`,
-            [offset, ym, sellerId]
-          );
+          try {
+            await db.execute(
+              `UPDATE pdv_sellers SET pontosOffset = ?, pontosOffsetMes = ? WHERE id = ?`,
+              [offset, ym, sellerId]
+            );
+          } catch (e) {
+            if (isMissingPontosOffsetColumn(e)) {
+              throw new TRPCError({
+                code: "PRECONDITION_FAILED",
+                message:
+                  "Colunas pontosOffset/pontosOffsetMes inexistentes. Execute no MySQL o arquivo drizzle/0017_pdv_sellers_pontos_manus.sql (ou o ALTER equivalente) e tente de novo.",
+              });
+            }
+            throw e;
+          }
           results.push({
             sellerName: sellers[0].name,
             pontosSistema,
@@ -462,15 +506,17 @@ export const pdvDashboardRouter = router({
     const seller = await requirePdvAuth(ctx);
     const db = await getDb();
     if (!db) return null;
-    try {
-      // Pontuação do período (padrão: mês atual)
-      const now = new Date();
-      const startDate = input?.startDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-      const endDate = input?.endDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
-      const offsetYm = pontosOffsetMesParam(startDate, endDate);
+    // Pontuação do período (padrão: mês atual)
+    const now = new Date();
+    const startDate = input?.startDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const endDate = input?.endDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+    const offsetYm = pontosOffsetMesParam(startDate, endDate);
 
-      const [rows] = await db.execute(
-        `SELECT
+    try {
+      let rows: any[];
+      try {
+        const [r] = await db.execute(
+          `SELECT
           COALESCE(SUM(
             CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
                  ELSE oi.ptVarejo * oi.quantidade END
@@ -488,8 +534,31 @@ export const pdvDashboardRouter = router({
         LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0 AND o.id IS NOT NULL
         WHERE se.id = ?
         GROUP BY se.id, se.pontosOffset, se.pontosOffsetMes`,
-        [offsetYm, offsetYm, startDate, endDate, seller.sellerId]
-      );
+          [offsetYm, offsetYm, startDate, endDate, seller.sellerId]
+        );
+        rows = r as any[];
+      } catch (e) {
+        if (!isMissingPontosOffsetColumn(e)) throw e;
+        const [r] = await db.execute(
+          `SELECT
+          COALESCE(SUM(
+            CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
+                 ELSE oi.ptVarejo * oi.quantidade END
+          ), 0) as pontuacao,
+          COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
+          COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+          COALESCE(SUM(oi.comissaoUnitaria * oi.quantidade), 0) as totalBonus
+        FROM pdv_orders o
+        JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+        WHERE o.status != 'CANCELADO'
+          AND o.isSofia = 0
+          AND o.sellerId = ?
+          AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
+          AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
+          [seller.sellerId, startDate, endDate]
+        );
+        rows = r as any[];
+      }
 
       // Buscar total de caixinhas no período (em horário BR)
       const [caixRows] = await db.execute(
@@ -507,8 +576,6 @@ export const pdvDashboardRouter = router({
       const [goalRows] = await db.execute("SELECT `key`, value FROM pdv_goals");
       const goals: Record<string, number> = {};
       (goalRows as any[]).forEach((g: any) => { goals[g.key] = parseFloat(g.value); });
-
-      await db.end();
 
       const result = (rows as any[])[0];
       const caixResult = (caixRows as any[])[0];
@@ -542,7 +609,10 @@ export const pdvDashboardRouter = router({
       };
     } catch (err) {
       if (err instanceof TRPCError) throw err;
+      console.error("[pdvDashboard.getMyProgress]", err);
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    } finally {
+      await db.end();
     }
   }),
 
