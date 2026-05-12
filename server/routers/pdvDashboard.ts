@@ -37,6 +37,11 @@ function pontosOffsetMesParam(startDate?: string, endDate?: string): string | nu
   return startDate.slice(0, 7);
 }
 
+/** Itens que entram em faturamento/PT de metas (import legado: NULL em isSofia = tratar como peça normal). */
+const SQL_OI_NAO_SOFIA = "(COALESCE(oi.isSofia, 0) = 0)";
+/** Mesmo critério na subquery sem alias de tabela. */
+const SQL_ITEMS_NAO_SOFIA_WHERE = "COALESCE(isSofia, 0) = 0";
+
 /** Migração 0017 ainda não aplicada no MySQL (Unknown column 'pontosOffset'). */
 function isMissingPontosOffsetColumn(err: unknown): boolean {
   const e = err as { code?: string; errno?: number; message?: string };
@@ -71,9 +76,8 @@ export const pdvDashboardRouter = router({
           params.push(input.endDate);
         }
         
-        // Dashboard geral: exclui pedidos 100% Sofia (isSofia=1)
-        // Para pedidos mistos (isSofia=0 mas com alguns itens Sofia), 
-        // contabiliza apenas os itens NÃO-Sofia via JOIN com pdv_order_items
+        // Dashboard geral: faturamento/PT só em itens não-Sofia (COALESCE: import com NULL em isSofia).
+        // Não filtra o.isSofia — flag do pedido pode estar errada no legado; o JOIN já exclui só linhas Sofia.
         const [totalRows] = await db.execute(
           `SELECT 
             COUNT(DISTINCT o.id) as totalPedidos,
@@ -84,13 +88,13 @@ export const pdvDashboardRouter = router({
             COALESCE(SUM(CASE WHEN o.canal = 'BALCAO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoBalcao,
             COALESCE(SUM(CASE WHEN o.canal = 'WHATSAPP' THEN oi.totalItem ELSE 0 END), 0) as faturamentoWhatsapp
            FROM pdv_orders o
-           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
            LEFT JOIN (
              SELECT pedidoId, SUM(totalItem) as totalNaoSofia
-             FROM pdv_order_items WHERE isSofia = 0
+             FROM pdv_order_items WHERE ${SQL_ITEMS_NAO_SOFIA_WHERE}
              GROUP BY pedidoId
            ) oi_totals ON oi_totals.pedidoId = o.pedidoId
-           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}`,
+           WHERE o.status != 'CANCELADO' ${dateFilter}`,
           params
         );
         
@@ -114,13 +118,13 @@ export const pdvDashboardRouter = router({
                       ELSE oi.ptVarejo * oi.quantidade END
                ), 0) as pontuacao
              FROM pdv_orders o
-             JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+             JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
              LEFT JOIN (
                SELECT pedidoId, SUM(totalItem) as totalNaoSofia
-               FROM pdv_order_items WHERE isSofia = 0
+               FROM pdv_order_items WHERE ${SQL_ITEMS_NAO_SOFIA_WHERE}
                GROUP BY pedidoId
              ) oi_totals ON oi_totals.pedidoId = o.pedidoId
-             WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
+             WHERE o.status != 'CANCELADO' ${dateFilter}
              GROUP BY o.sellerId
            ) a ON a.sellerId = s.id
            WHERE s.isActive = 1
@@ -134,13 +138,13 @@ export const pdvDashboardRouter = router({
                    ELSE oi.ptVarejo * oi.quantidade END
             ), 0) as pontuacao
            FROM pdv_orders o
-           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
            LEFT JOIN (
              SELECT pedidoId, SUM(totalItem) as totalNaoSofia
-             FROM pdv_order_items WHERE isSofia = 0
+             FROM pdv_order_items WHERE ${SQL_ITEMS_NAO_SOFIA_WHERE}
              GROUP BY pedidoId
            ) oi_totals ON oi_totals.pedidoId = o.pedidoId
-           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
+           WHERE o.status != 'CANCELADO' ${dateFilter}
            GROUP BY o.sellerId, o.sellerName
            ORDER BY pontuacao DESC`;
         let sellerRows: any[];
@@ -179,8 +183,8 @@ export const pdvDashboardRouter = router({
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(oi.totalItem), 0) as faturamento
            FROM pdv_orders o
-           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
-           WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
+           JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}
+           WHERE o.status != 'CANCELADO' ${dateFilter}
            GROUP BY DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d')
            ORDER BY dia ASC`,
           params
@@ -358,8 +362,8 @@ export const pdvDashboardRouter = router({
                    ELSE oi.ptVarejo * oi.quantidade END
             ), 0) as pontuacao
             FROM pdv_orders o
-            JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
-            WHERE o.sellerId = ? AND o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}`,
+            JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND (COALESCE(oi.isSofia, 0) = 0)
+            WHERE o.sellerId = ? AND o.status != 'CANCELADO' ${dateFilter}`,
             [sellerId, ...params]
           );
           const pontosSistema = parseFloat((sumRows as any[])[0]?.pontuacao ?? "0");
@@ -530,16 +534,15 @@ export const pdvDashboardRouter = router({
                  ELSE oi.ptVarejo * oi.quantidade END
           ), 0)
           + (CASE WHEN ? IS NOT NULL AND se.pontosOffsetMes = ? THEN COALESCE(se.pontosOffset, 0) ELSE 0 END) as pontuacao,
-          COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
-          COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+          COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
+          COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.totalItem ELSE 0 END), 0) as faturamento,
           COALESCE(SUM(oi.comissaoUnitaria * oi.quantidade), 0) as totalBonus
         FROM pdv_sellers se
         LEFT JOIN pdv_orders o ON o.sellerId = se.id
           AND o.status != 'CANCELADO'
-          AND o.isSofia = 0
           AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
           AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
-        LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0 AND o.id IS NOT NULL
+        LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND (COALESCE(oi.isSofia, 0) = 0) AND o.id IS NOT NULL
         WHERE se.id = ?
         GROUP BY se.id, se.pontosOffset, se.pontosOffsetMes`,
           [offsetYm, offsetYm, startDate, endDate, seller.sellerId]
@@ -553,13 +556,12 @@ export const pdvDashboardRouter = router({
             CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
                  ELSE oi.ptVarejo * oi.quantidade END
           ), 0) as pontuacao,
-          COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
-          COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+          COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
+          COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.totalItem ELSE 0 END), 0) as faturamento,
           COALESCE(SUM(oi.comissaoUnitaria * oi.quantidade), 0) as totalBonus
         FROM pdv_orders o
-        JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+        JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND (COALESCE(oi.isSofia, 0) = 0)
         WHERE o.status != 'CANCELADO'
-          AND o.isSofia = 0
           AND o.sellerId = ?
           AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
           AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
@@ -644,7 +646,7 @@ export const pdvDashboardRouter = router({
 
         const countParams = [...params];
         const [countRows] = await db.execute(
-          `SELECT COUNT(*) as total FROM pdv_orders o WHERE o.sellerId = ? AND o.isSofia = 0 AND o.status != 'CANCELADO'${dateFilter}`,
+          `SELECT COUNT(*) as total FROM pdv_orders o WHERE o.sellerId = ? AND o.status != 'CANCELADO'${dateFilter}`,
           countParams
         );
         const total = (countRows as any[])[0].total;
@@ -670,8 +672,8 @@ export const pdvDashboardRouter = router({
               WHERE s.pedidoId = o.pedidoId AND s.tipo = 'CAIXINHA'
             ), 0) as caixinhaTotal
           FROM pdv_orders o
-          LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
-          WHERE o.sellerId = ? AND o.isSofia = 0 AND o.status != 'CANCELADO'${dateFilter}
+          LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND (COALESCE(oi.isSofia, 0) = 0)
+          WHERE o.sellerId = ? AND o.status != 'CANCELADO'${dateFilter}
           GROUP BY o.pedidoId, o.createdAt, o.clienteNome, o.regime, o.status, o.totalAplicado
           ORDER BY o.createdAt DESC
           LIMIT ${input.limit} OFFSET ${offset}`,
@@ -737,13 +739,13 @@ export const pdvDashboardRouter = router({
         const [kpiRows] = await db.execute(
           `SELECT
             COUNT(DISTINCT o.id) as totalPedidos,
-            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
-            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
-            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as totalBonus,
-            COALESCE(SUM(CASE WHEN o.regime = 'ATACADO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamentoAtacado,
-            COALESCE(SUM(CASE WHEN o.regime = 'VAREJO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamentoVarejo,
-            COALESCE(SUM(CASE WHEN o.canal = 'BALCAO' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamentoBalcao,
-            COALESCE(SUM(CASE WHEN o.canal = 'WHATSAPP' AND oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamentoWhatsapp,
+            COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
+            COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+            COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as totalBonus,
+            COALESCE(SUM(CASE WHEN o.regime = 'ATACADO' AND (COALESCE(oi.isSofia, 0) = 0) THEN oi.totalItem ELSE 0 END), 0) as faturamentoAtacado,
+            COALESCE(SUM(CASE WHEN o.regime = 'VAREJO' AND (COALESCE(oi.isSofia, 0) = 0) THEN oi.totalItem ELSE 0 END), 0) as faturamentoVarejo,
+            COALESCE(SUM(CASE WHEN o.canal = 'BALCAO' AND (COALESCE(oi.isSofia, 0) = 0) THEN oi.totalItem ELSE 0 END), 0) as faturamentoBalcao,
+            COALESCE(SUM(CASE WHEN o.canal = 'WHATSAPP' AND (COALESCE(oi.isSofia, 0) = 0) THEN oi.totalItem ELSE 0 END), 0) as faturamentoWhatsapp,
             COUNT(CASE WHEN o.status = 'CANCELADO' THEN 1 END) as pedidosCancelados
           FROM pdv_orders o
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
@@ -772,9 +774,9 @@ export const pdvDashboardRouter = router({
           `SELECT
             DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d') as dia,
             COUNT(DISTINCT o.id) as pedidos,
-            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as pecas,
-            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
-            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as bonus
+            COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade ELSE 0 END), 0) as pecas,
+            COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.totalItem ELSE 0 END), 0) as faturamento,
+            COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as bonus
           FROM pdv_orders o
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.sellerId IN (${placeholders})
@@ -791,8 +793,8 @@ export const pdvDashboardRouter = router({
           `SELECT
             o.pedidoId, o.createdAt, o.clienteNome, o.regime, o.canal,
             o.status, o.totalAplicado, o.sellerName,
-            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
-            COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as bonusTotal,
+            COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
+            COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as bonusTotal,
             COALESCE((SELECT SUM(os2.valor) FROM pdv_order_services os2 WHERE os2.pedidoId = o.pedidoId AND os2.tipo = 'CAIXINHA'), 0) as caixinhaTotal
           FROM pdv_orders o
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
