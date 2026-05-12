@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
   FileText, Download, Calendar, Filter, TrendingUp, Package, Wallet,
-  Image as ImageIcon, Loader2
+  Image as ImageIcon, Loader2, Truck, PiggyBank, Mail
 } from "lucide-react";
 import PdvLayout from "./PdvLayout";
 import { firstOfMonthYmdSaoPaulo, lastOfMonthYmdSaoPaulo } from "@shared/spCalendar";
@@ -61,6 +61,11 @@ export default function PdvRelatorio() {
     comissoes: true,
     sofia: true,
     descontos: true,
+    servicos: {
+      correios: false,
+      caixinhas: false,
+      carretos: false,
+    },
   });
   const [includeSofiaPhotos, setIncludeSofiaPhotos] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
@@ -77,7 +82,9 @@ export default function PdvRelatorio() {
       toast.error("Selecione o período");
       return;
     }
-    if (!sections.comissoes && !sections.sofia && !sections.descontos) {
+    const algumServico =
+      sections.servicos.correios || sections.servicos.caixinhas || sections.servicos.carretos;
+    if (!sections.comissoes && !sections.sofia && !sections.descontos && !algumServico) {
       toast.error("Selecione ao menos uma seção");
       return;
     }
@@ -254,6 +261,43 @@ export default function PdvRelatorio() {
             <ImageIcon className="w-4 h-4 text-purple-500" />
             <span className="text-white text-sm">Fotos Sofia no PDF</span>
           </label>
+        </div>
+
+        {/* Serviços (cada um pode ser emitido isoladamente) */}
+        <div className="mb-2">
+          <div className="text-gray-400 text-xs mb-2">Serviços (emita cada um separadamente ou combine)</div>
+          <div className="flex flex-wrap gap-3 mb-5">
+            <label className="flex items-center gap-2 cursor-pointer bg-gray-800 rounded-lg px-4 py-2.5 border border-gray-700 hover:border-blue-600 transition-colors">
+              <input
+                type="checkbox"
+                checked={sections.servicos.correios}
+                onChange={(e) => { setSections(s => ({ ...s, servicos: { ...s.servicos, correios: e.target.checked } })); setShowPreview(false); }}
+                className="accent-blue-600 w-4 h-4"
+              />
+              <Mail className="w-4 h-4 text-blue-400" />
+              <span className="text-white text-sm">Correios</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer bg-gray-800 rounded-lg px-4 py-2.5 border border-gray-700 hover:border-pink-600 transition-colors">
+              <input
+                type="checkbox"
+                checked={sections.servicos.caixinhas}
+                onChange={(e) => { setSections(s => ({ ...s, servicos: { ...s.servicos, caixinhas: e.target.checked } })); setShowPreview(false); }}
+                className="accent-pink-600 w-4 h-4"
+              />
+              <PiggyBank className="w-4 h-4 text-pink-400" />
+              <span className="text-white text-sm">Caixinhas</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer bg-gray-800 rounded-lg px-4 py-2.5 border border-gray-700 hover:border-orange-600 transition-colors">
+              <input
+                type="checkbox"
+                checked={sections.servicos.carretos}
+                onChange={(e) => { setSections(s => ({ ...s, servicos: { ...s.servicos, carretos: e.target.checked } })); setShowPreview(false); }}
+                className="accent-orange-600 w-4 h-4"
+              />
+              <Truck className="w-4 h-4 text-orange-400" />
+              <span className="text-white text-sm">Carretos</span>
+            </label>
+          </div>
         </div>
 
         {/* Botões */}
@@ -523,6 +567,42 @@ function ReportContent({ data, startDate, endDate, includeSofiaPhotos }: {
         </div>
       )}
 
+      {/* SERVIÇOS — uma seção por tipo selecionado, podendo ser impressas separadamente */}
+      {data.servicos?.correios && (
+        <ServicoSection
+          tipo="CORREIO"
+          titulo="Correios"
+          icone="📮"
+          cor="#1d4ed8"
+          bg="#eff6ff"
+          borda="#bfdbfe"
+          dados={data.servicos.correios}
+          showCep
+        />
+      )}
+      {data.servicos?.caixinhas && (
+        <ServicoSection
+          tipo="CAIXINHA"
+          titulo="Caixinhas"
+          icone="🐷"
+          cor="#be185d"
+          bg="#fdf2f8"
+          borda="#fbcfe8"
+          dados={data.servicos.caixinhas}
+        />
+      )}
+      {data.servicos?.carretos && (
+        <ServicoSection
+          tipo="CARRETO"
+          titulo="Carretos"
+          icone="🚚"
+          cor="#c2410c"
+          bg="#fff7ed"
+          borda="#fed7aa"
+          dados={data.servicos.carretos}
+        />
+      )}
+
       {/* DESCONTOS EM FOLHA */}
       {data.descontos && (
         <div className="section" style={{ marginBottom: 24 }}>
@@ -623,3 +703,132 @@ const tdStyleCenter: React.CSSProperties = {
   ...tdStyle,
   textAlign: "center",
 };
+
+// ============================================================
+// Seção genérica de Serviços (CORREIO / CAIXINHA / CARRETO)
+// ============================================================
+function ServicoSection({
+  tipo,
+  titulo,
+  icone,
+  cor,
+  bg,
+  borda,
+  dados,
+  showCep,
+}: {
+  tipo: "CORREIO" | "CAIXINHA" | "CARRETO";
+  titulo: string;
+  icone: string;
+  cor: string;
+  bg: string;
+  borda: string;
+  dados: {
+    items: Array<{
+      pedidoId: string;
+      tipo: string;
+      descricao: string | null;
+      valor: number;
+      cep: string | null;
+      sellerName: string;
+      clienteNome: string | null;
+      clienteTelefone: string | null;
+      canal: string | null;
+      status: string | null;
+      regime: string | null;
+      orderCreatedAt: string | null;
+      dia: string;
+      somenteServico: boolean;
+    }>;
+    totalLancamentos: number;
+    totalValor: number;
+    totalPedidos: number;
+    totalSomenteServico: number;
+  };
+  showCep?: boolean;
+}) {
+  const ticketMedio = dados.totalLancamentos > 0 ? dados.totalValor / dados.totalLancamentos : 0;
+  return (
+    <div className="section" style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: cor, marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid #e5e7eb" }}>
+        {icone} {titulo}
+      </div>
+
+      <div style={{ background: bg, border: `1px solid ${borda}`, borderRadius: 8, padding: "12px 16px", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+          <span style={{ color: "#666", fontSize: 11 }}>Lançamentos</span>
+          <span style={{ fontWeight: 700, fontSize: 12 }}>{dados.totalLancamentos}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+          <span style={{ color: "#666", fontSize: 11 }}>Pedidos com {titulo.toLowerCase()}</span>
+          <span style={{ fontWeight: 700, fontSize: 12 }}>{dados.totalPedidos}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+          <span style={{ color: "#666", fontSize: 11 }}>Pedidos só com serviço (sem itens)</span>
+          <span style={{ fontWeight: 700, fontSize: 12 }}>{dados.totalSomenteServico}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+          <span style={{ color: "#666", fontSize: 11 }}>Ticket médio</span>
+          <span style={{ fontWeight: 700, fontSize: 12 }}>{formatCurrency(ticketMedio)}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+          <span style={{ color: "#666", fontSize: 11 }}>Total Recebido</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: cor }}>{formatCurrency(dados.totalValor)}</span>
+        </div>
+      </div>
+
+      {dados.items.length === 0 ? (
+        <div style={{ fontSize: 11, color: "#9ca3af", padding: "8px 0", fontStyle: "italic" }}>
+          Nenhum lançamento de {titulo.toLowerCase()} no período.
+        </div>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
+          <thead>
+            <tr>
+              <th style={thStyle}>Data/Hora</th>
+              <th style={thStyle}>Pedido</th>
+              <th style={thStyle}>Vendedor</th>
+              <th style={thStyle}>Cliente</th>
+              <th style={thStyle}>Telefone</th>
+              <th style={thStyle}>Canal</th>
+              {showCep && <th style={thStyle}>CEP</th>}
+              <th style={thStyle}>Descrição</th>
+              <th style={thStyle}>Tipo Pedido</th>
+              <th style={thStyle}>Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dados.items.map((it, i) => (
+              <tr key={i}>
+                <td style={tdStyle}>{it.orderCreatedAt ? formatDateTime(it.orderCreatedAt) : "—"}</td>
+                <td style={tdStyle}><strong>{it.pedidoId}</strong></td>
+                <td style={tdStyle}>{it.sellerName || "—"}</td>
+                <td style={tdStyle}>{it.clienteNome || "—"}</td>
+                <td style={tdStyle}>{it.clienteTelefone || "—"}</td>
+                <td style={tdStyleCenter}>{it.canal || "—"}</td>
+                {showCep && <td style={tdStyleCenter}>{it.cep || "—"}</td>}
+                <td style={tdStyle}>{it.descricao || "—"}</td>
+                <td style={tdStyleCenter}>
+                  {it.somenteServico ? (
+                    <span style={{ color: "#7c2d12", background: "#fed7aa", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600 }}>
+                      Avulso
+                    </span>
+                  ) : (
+                    <span style={{ color: "#1e40af", background: "#dbeafe", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600 }}>
+                      Com produtos
+                    </span>
+                  )}
+                </td>
+                <td style={{ ...tdStyle, fontWeight: 700, color: cor, textAlign: "right" }}>{formatCurrency(it.valor)}</td>
+              </tr>
+            ))}
+            <tr>
+              <td style={{ ...tdStyle, fontWeight: 700, background: bg }} colSpan={showCep ? 9 : 8}>TOTAL</td>
+              <td style={{ ...tdStyle, fontWeight: 700, color: cor, background: bg, textAlign: "right" }}>{formatCurrency(dados.totalValor)}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}

@@ -18,8 +18,17 @@ async function requirePdvAdmin(ctx: any) {
   return seller;
 }
 
+type ServicoTipo = "CORREIO" | "CAIXINHA" | "CARRETO";
+
+interface SectionsInput {
+  comissoes: boolean;
+  sofia: boolean;
+  descontos: boolean;
+  servicos?: { correios: boolean; caixinhas: boolean; carretos: boolean };
+}
+
 // Gera dados consolidados para o relatório — agora usa isSofia por ITEM
-async function fetchRelatorioData(db: Connection, startDate: string, endDate: string, sections: { comissoes: boolean; sofia: boolean; descontos: boolean }) {  // taxaComissao é sempre buscada das configurações
+async function fetchRelatorioData(db: Connection, startDate: string, endDate: string, sections: SectionsInput) {  // taxaComissao é sempre buscada das configurações
   // Buscar taxa de comissão das configurações do sistema
   const [cfgRows] = await db.execute("SELECT value FROM pdv_config WHERE `key` = 'comissao_peca' LIMIT 1");
   const taxaComissao = parseFloat((cfgRows as any[])[0]?.value || '0.50');
@@ -223,6 +232,97 @@ async function fetchRelatorioData(db: Connection, startDate: string, endDate: st
     };
   }
 
+  // ===================== SERVIÇOS (CORREIOS / CAIXINHAS / CARRETOS) =====================
+  // Cada tipo gera seu próprio bloco e pode ser emitido isoladamente.
+  const servicosFlags = sections.servicos;
+  const tiposSelecionados: ServicoTipo[] = [];
+  if (servicosFlags?.correios) tiposSelecionados.push("CORREIO");
+  if (servicosFlags?.caixinhas) tiposSelecionados.push("CAIXINHA");
+  if (servicosFlags?.carretos) tiposSelecionados.push("CARRETO");
+
+  if (tiposSelecionados.length > 0) {
+    // Busca todos os tipos selecionados em UMA query e agrupa em código.
+    // Pedidos CANCELADOS são excluídos do relatório (mantém coerência com Faturamento/Comissões).
+    const placeholders = tiposSelecionados.map(() => "?").join(",");
+    const [serviceRows] = await db.execute(
+      `SELECT
+         s.id            AS servicoId,
+         s.tipo          AS tipo,
+         s.descricao     AS descricao,
+         s.valor         AS valor,
+         s.cep           AS cep,
+         s.createdAt     AS servicoCreatedAt,
+         o.pedidoId      AS pedidoId,
+         o.sellerName    AS sellerName,
+         o.clienteNome   AS clienteNome,
+         o.clienteTelefone AS clienteTelefone,
+         o.canal         AS canal,
+         o.status        AS status,
+         o.regime        AS regime,
+         o.createdAt     AS orderCreatedAt,
+         ${orderDayDateExpr("o")} AS dia,
+         (SELECT COUNT(*) FROM pdv_order_items oi WHERE oi.pedidoId = o.pedidoId) AS qtdItensPedido
+       FROM pdv_order_services s
+       JOIN pdv_orders o ON o.pedidoId = s.pedidoId
+       WHERE o.status != 'CANCELADO'
+         AND ${orderDayDateExpr("o")} >= ?
+         AND ${orderDayDateExpr("o")} <= ?
+         AND s.tipo IN (${placeholders})
+       ORDER BY o.createdAt ASC, s.id ASC`,
+      [startDate, endDate, ...tiposSelecionados]
+    );
+
+    const buckets: Record<ServicoTipo, any[]> = {
+      CORREIO: [],
+      CAIXINHA: [],
+      CARRETO: [],
+    };
+
+    for (const r of serviceRows as any[]) {
+      const tipo = String(r.tipo) as ServicoTipo;
+      if (!buckets[tipo]) continue;
+      buckets[tipo].push({
+        servicoId: Number(r.servicoId),
+        pedidoId: String(r.pedidoId),
+        tipo,
+        descricao: r.descricao ? String(r.descricao) : null,
+        valor: parseFloat(r.valor) || 0,
+        cep: r.cep ? String(r.cep) : null,
+        sellerName: r.sellerName ? String(r.sellerName) : "—",
+        clienteNome: r.clienteNome ? String(r.clienteNome) : null,
+        clienteTelefone: r.clienteTelefone ? String(r.clienteTelefone) : null,
+        canal: r.canal ? String(r.canal) : null,
+        status: r.status ? String(r.status) : null,
+        regime: r.regime ? String(r.regime) : null,
+        orderCreatedAt: r.orderCreatedAt instanceof Date
+          ? r.orderCreatedAt.toISOString()
+          : (r.orderCreatedAt ? String(r.orderCreatedAt) : null),
+        dia: r.dia instanceof Date
+          ? r.dia.toISOString().slice(0, 10)
+          : String(r.dia ?? "").slice(0, 10),
+        somenteServico: (parseInt(r.qtdItensPedido) || 0) === 0,
+      });
+    }
+
+    const summarize = (items: any[]) => {
+      const totalValor = items.reduce((acc, it) => acc + (it.valor || 0), 0);
+      const pedidosUnicos = new Set(items.map((it) => it.pedidoId)).size;
+      const somenteServico = items.filter((it) => it.somenteServico).length;
+      return {
+        totalLancamentos: items.length,
+        totalValor,
+        totalPedidos: pedidosUnicos,
+        totalSomenteServico: somenteServico,
+      };
+    };
+
+    const servicos: any = {};
+    if (servicosFlags?.correios) servicos.correios = { items: buckets.CORREIO, ...summarize(buckets.CORREIO) };
+    if (servicosFlags?.caixinhas) servicos.caixinhas = { items: buckets.CAIXINHA, ...summarize(buckets.CAIXINHA) };
+    if (servicosFlags?.carretos) servicos.carretos = { items: buckets.CARRETO, ...summarize(buckets.CARRETO) };
+    result.servicos = servicos;
+  }
+
   return result;
 }
 
@@ -236,6 +336,11 @@ export const pdvRelatorioRouter = router({
         comissoes: z.boolean().default(true),
         sofia: z.boolean().default(true),
         descontos: z.boolean().default(true),
+        servicos: z.object({
+          correios: z.boolean().default(false),
+          caixinhas: z.boolean().default(false),
+          carretos: z.boolean().default(false),
+        }).optional(),
       }),
     }))
     .query(async ({ input, ctx }) => {
