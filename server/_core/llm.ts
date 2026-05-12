@@ -209,13 +209,40 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+type Provider = {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  isOpenAI: boolean;
+};
+
+const resolveProvider = (): Provider => {
+  const looksLikePlaceholder = (v: string) =>
+    !v || v.trim().length === 0 || v.trim().startsWith("<");
+
+  if (!looksLikePlaceholder(ENV.openaiApiKey)) {
+    return {
+      baseUrl: (ENV.openaiBaseUrl || "https://api.openai.com").replace(/\/$/, ""),
+      apiKey: ENV.openaiApiKey,
+      model: ENV.openaiModel || "gpt-4o-mini",
+      isOpenAI: true,
+    };
+  }
+  return {
+    baseUrl: (ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+      ? ENV.forgeApiUrl
+      : "https://forge.manus.im").replace(/\/$/, ""),
+    apiKey: ENV.forgeApiKey,
+    model: "gemini-2.5-flash",
+    isOpenAI: false,
+  };
+};
+
+const resolveApiUrl = () => `${resolveProvider().baseUrl}/v1/chat/completions`;
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
+  const p = resolveProvider();
+  if (!p.apiKey) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
 };
@@ -267,6 +294,7 @@ const normalizeResponseFormat = ({
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   assertApiKey();
+  const provider = resolveProvider();
 
   const {
     messages,
@@ -277,10 +305,12 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
     responseFormat,
     response_format,
+    maxTokens,
+    max_tokens,
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model: provider.model,
     messages: messages.map(normalizeMessage),
   };
 
@@ -296,9 +326,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_tokens = 32768
-  payload.thinking = {
-    "budget_tokens": 128
+  // OpenAI suporta apenas max_tokens (sem "thinking"); o forge da Manus aceita ambos.
+  payload.max_tokens = maxTokens ?? max_tokens ?? (provider.isOpenAI ? 1024 : 32768);
+  if (!provider.isOpenAI) {
+    payload.thinking = { budget_tokens: 128 };
   }
 
   const normalizedResponseFormat = normalizeResponseFormat({
@@ -316,7 +347,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      authorization: `Bearer ${provider.apiKey}`,
     },
     body: JSON.stringify(payload),
   });

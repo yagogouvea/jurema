@@ -74,19 +74,27 @@ export async function transcribeAudio(
   options: TranscribeOptions
 ): Promise<TranscriptionResponse | TranscriptionError> {
   try {
-    // Step 1: Validate environment configuration
-    if (!ENV.forgeApiUrl) {
+    // Step 1: Provider — prefere OPENAI_API_KEY (OpenAI Whisper direto),
+    // cai para o forge da Manus se OpenAI não estiver configurado.
+    const isPlaceholder = (v: string) => !v || v.trim().length === 0 || v.trim().startsWith("<");
+    const useOpenAI = !isPlaceholder(ENV.openaiApiKey);
+    const apiBaseUrl = useOpenAI
+      ? (ENV.openaiBaseUrl || "https://api.openai.com")
+      : ENV.forgeApiUrl;
+    const apiKey = useOpenAI ? ENV.openaiApiKey : ENV.forgeApiKey;
+
+    if (!apiBaseUrl) {
       return {
         error: "Voice transcription service is not configured",
         code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_URL is not set"
+        details: "OPENAI_API_KEY ou BUILT_IN_FORGE_API_URL devem estar configurados"
       };
     }
-    if (!ENV.forgeApiKey) {
+    if (!apiKey) {
       return {
         error: "Voice transcription service authentication is missing",
         code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_KEY is not set"
+        details: "OPENAI_API_KEY ou BUILT_IN_FORGE_API_KEY ausentes"
       };
     }
 
@@ -143,10 +151,8 @@ export async function transcribeAudio(
     formData.append("prompt", prompt);
 
     // Step 4: Call the transcription service
-    const baseUrl = ENV.forgeApiUrl.endsWith("/")
-      ? ENV.forgeApiUrl
-      : `${ENV.forgeApiUrl}/`;
-    
+    const baseUrl = apiBaseUrl.endsWith("/") ? apiBaseUrl : `${apiBaseUrl}/`;
+
     const fullUrl = new URL(
       "v1/audio/transcriptions",
       baseUrl
@@ -155,7 +161,7 @@ export async function transcribeAudio(
     const response = await fetch(fullUrl, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${ENV.forgeApiKey}`,
+        authorization: `Bearer ${apiKey}`,
         "Accept-Encoding": "identity",
       },
       body: formData,
