@@ -78,16 +78,22 @@ export const pdvAuthRouter = router({
         
         const sellers = rows as any[];
         if (sellers.length === 0) {
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[pdvAuth.login] usuário não encontrado:", normalizedUsername);
+          }
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário ou senha inválidos" });
         }
-        
+
         const seller = sellers[0];
         if (!seller.isActive) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Usuário inativo" });
         }
-        
+
         const expectedHash = hashPassword(input.password);
         if (seller.passwordHash !== expectedHash) {
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[pdvAuth.login] senha incorreta para usuário:", normalizedUsername);
+          }
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário ou senha inválidos" });
         }
         
@@ -112,6 +118,9 @@ export const pdvAuthRouter = router({
         };
       } catch (err) {
         if (err instanceof TRPCError) throw err;
+        if (process.env.NODE_ENV === "development") {
+          console.error("[pdvAuth.login] erro de banco/rede:", err);
+        }
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao fazer login" });
       }
     }),

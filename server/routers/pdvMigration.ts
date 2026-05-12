@@ -154,7 +154,7 @@ export async function seedPdvData(): Promise<void> {
         { name: 'MURILO', username: 'murilo', hash: 'f5121f4c4e2519524b3a667ddb00fd4a21a990ca7b2fdc246cfbd3c5cc3ba024', role: 'seller' },
         { name: 'VINICIUS', username: 'vinicius', hash: 'cb55abf37f4c137e3f4c10e579826cb51478439b071d0b00994538b3963636f4', role: 'seller' },
         { name: 'KAWANE', username: 'kawane', hash: 'ef19553f9d12fb2bab42db0c4f589acacbe5cdf2c564295ee404f65b8b5e2896', role: 'seller' },
-        { name: 'VANESSA', username: 'vanessa', hash: '0e9c4604b9b7e7d585c23c4adeb05314274f20c0156584375e4021c3238cded9', role: 'admin' },
+        { name: 'VANESSA', username: 'vanessa', hash: 'eb9c319457f93f9de95660aeeb60ddd9e9b64bd1ca969f596fb188bd8a29d677', role: 'admin' },
       ];
       
       for (const s of sellers) {
@@ -181,7 +181,19 @@ export async function seedPdvData(): Promise<void> {
       }
       console.log("[PDV Seed] Goals created");
     }
-    
+
+    // Bancos já populados com seed antigo: hash da Vanessa ≠ jurema@123 (SHA256 com PDV_SALT do pdvAuth).
+    const LEGACY_VANESSA_HASH = "0e9c4604b9b7e7d585c23c4adeb05314274f20c0156584375e4021c3238cded9";
+    const VANESSA_JUREMA123_HASH = "eb9c319457f93f9de95660aeeb60ddd9e9b64bd1ca969f596fb188bd8a29d677";
+    const [upVanessa] = await connection.execute(
+      "UPDATE pdv_sellers SET passwordHash = ? WHERE LOWER(username) = 'vanessa' AND passwordHash = ?",
+      [VANESSA_JUREMA123_HASH, LEGACY_VANESSA_HASH]
+    );
+    const n = Number((upVanessa as { affectedRows?: number }).affectedRows ?? 0);
+    if (n > 0) {
+      console.log("[PDV Seed] Vanessa: senha alinhada ao padrão local (jurema@123).");
+    }
+
     await connection.end();
   } catch (error) {
     console.error("[PDV Seed] Error:", error);

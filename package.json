@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx watch server/_core/index.ts",
     "pdv:debug-pt": "node --import dotenv/config scripts/debug-pdv-summary-pt.mjs",
-    "pdv:sync-manus": "node --import dotenv/config scripts/sync-pontos-manus.mjs",
+    "pdv:set-password": "node --import dotenv/config scripts/set-pdv-password.mjs",
     "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc --noEmit",

@@ -38,6 +38,13 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  if (!process.env.DATABASE_URL?.trim()) {
+    console.warn(
+      "\n[PDV] DATABASE_URL não definido: login PDV e leitura de dados falham. " +
+        "Crie `.env` na raiz com DATABASE_URL=mysql://...\n"
+    );
+  }
+
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
