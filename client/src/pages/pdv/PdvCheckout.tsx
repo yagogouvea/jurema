@@ -5,8 +5,10 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Trash2, CheckCircle, Send,
   CreditCard, Banknote, Smartphone, Building, ChevronDown, ChevronUp,
-  Pencil, Check, X, Camera, ImagePlus, AlertTriangle
+  Pencil, Check, X, Camera, ImagePlus, AlertTriangle,
+  Loader2, XCircle, MapPin
 } from "lucide-react";
+import { useCepLookup } from "@/hooks/useCepLookup";
 
 interface CartItem {
   productId?: number;
@@ -93,6 +95,8 @@ export default function PdvCheckout({
   const [newServiceDescricao, setNewServiceDescricao] = useState("");
   const [newServiceValor, setNewServiceValor] = useState("");
   const [newServiceCep, setNewServiceCep] = useState("");
+  // Validação automática de CEP via ViaCEP (debounce 350 ms)
+  const cepLookup = useCepLookup(newServiceCep);
   const [newPaymentMethod, setNewPaymentMethod] = useState<typeof PAYMENT_METHODS[number]["key"]>("PIX");
   const [newPaymentValor, setNewPaymentValor] = useState("");
   const [newPaymentNomePix, setNewPaymentNomePix] = useState("");
@@ -279,15 +283,25 @@ export default function PdvCheckout({
       toast.error("O valor mínimo para Correio é R$ 45,00");
       return;
     }
-    // Regra: Correio requer CEP
+    // Regra: Correio requer CEP válido (verificado nos Correios via ViaCEP)
     if (newServiceTipo === "CORREIO") {
       const cepLimpo = newServiceCep.replace(/\D/g, '');
       if (cepLimpo.length !== 8) {
         toast.error("CEP obrigatório para Correio (8 dígitos)");
         return;
       }
+      if (cepLookup.status === "loading") {
+        toast.error("Aguarde a validação do CEP…");
+        return;
+      }
+      if (cepLookup.status !== "valid") {
+        toast.error(cepLookup.errorMessage || "CEP inválido — confira o número");
+        return;
+      }
     }
-    const cepFormatado = newServiceTipo === "CORREIO" ? newServiceCep.replace(/\D/g, '').replace(/(\d{5})(\d{3})/, '$1-$2') : undefined;
+    const cepFormatado = newServiceTipo === "CORREIO"
+      ? (cepLookup.cepFormatado || newServiceCep.replace(/\D/g, '').replace(/(\d{5})(\d{3})/, '$1-$2'))
+      : undefined;
     setServices(prev => [...prev, { tipo: newServiceTipo, descricao: newServiceDescricao || undefined, valor, cep: cepFormatado }]);
     setNewServiceValor("");
     setNewServiceDescricao("");
@@ -694,27 +708,74 @@ export default function PdvCheckout({
                   placeholder="Descrição (opcional)"
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-3 md:py-3.5 text-white text-sm md:text-base focus:outline-none focus:border-green-600"
                 />
-                {newServiceTipo === "CORREIO" && (
-                  <div>
-                    <input
-                      type="text"
-                      value={newServiceCep}
-                      onChange={(e) => {
-                        // Aplica máscara 99999-999
-                        const v = e.target.value.replace(/\D/g, '').slice(0, 8);
-                        setNewServiceCep(v.length > 5 ? v.replace(/(\d{5})(\d+)/, '$1-$2') : v);
-                      }}
-                      placeholder="CEP do destinatário *"
-                      maxLength={9}
-                      className="w-full bg-gray-700 border border-orange-500 rounded-lg px-3 py-3 md:py-3.5 text-white text-sm md:text-base focus:outline-none focus:border-orange-400 placeholder-orange-300/60"
-                    />
-                    <p className="text-orange-400 text-xs mt-1">CEP obrigatório para envio pelos Correios</p>
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <button onClick={addService} className="flex-1 bg-green-700 hover:bg-green-800 active:bg-green-900 text-white text-sm md:text-base py-3 md:py-3.5 rounded-lg font-medium transition-colors">Adicionar</button>
-                  <button onClick={() => setShowAddService(false)} className="px-4 md:px-6 text-gray-400 hover:text-white text-sm md:text-base py-3 md:py-3.5 rounded-lg transition-colors">Cancelar</button>
-                </div>
+                {newServiceTipo === "CORREIO" && (() => {
+                  const cepDigits = newServiceCep.replace(/\D/g, "");
+                  const showStatus = cepDigits.length === 8;
+                  const status = cepLookup.status;
+                  // Cor da borda em função do status (foco mantém o tom mais vivo).
+                  const borderClass =
+                    showStatus && status === "valid"
+                      ? "border-green-500 focus:border-green-400"
+                      : showStatus && status === "invalid"
+                        ? "border-red-500 focus:border-red-400"
+                        : "border-orange-500 focus:border-orange-400";
+                  return (
+                    <div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={newServiceCep}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/\D/g, '').slice(0, 8);
+                            setNewServiceCep(v.length > 5 ? v.replace(/(\d{5})(\d+)/, '$1-$2') : v);
+                          }}
+                          placeholder="CEP do destinatário *"
+                          maxLength={9}
+                          aria-invalid={showStatus && status === "invalid"}
+                          className={`w-full bg-gray-700 ${borderClass} rounded-lg px-3 pr-10 py-3 md:py-3.5 text-white text-sm md:text-base focus:outline-none placeholder-orange-300/60`}
+                        />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          {status === "loading" && <Loader2 className="w-5 h-5 text-orange-300 animate-spin" />}
+                          {showStatus && status === "valid" && <CheckCircle className="w-5 h-5 text-green-400" />}
+                          {showStatus && status === "invalid" && <XCircle className="w-5 h-5 text-red-400" />}
+                        </div>
+                      </div>
+                      {showStatus && status === "valid" && cepLookup.enderecoResumo && (
+                        <p className="text-green-400 text-xs mt-1 flex items-start gap-1">
+                          <MapPin className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <span className="break-words">{cepLookup.enderecoResumo}</span>
+                        </p>
+                      )}
+                      {showStatus && status === "invalid" && (
+                        <p className="text-red-400 text-xs mt-1">
+                          {cepLookup.errorMessage || "CEP inválido — confira o número"}
+                        </p>
+                      )}
+                      {!showStatus && (
+                        <p className="text-orange-400 text-xs mt-1">CEP obrigatório para envio pelos Correios</p>
+                      )}
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  const cepDigits = newServiceCep.replace(/\D/g, "");
+                  const blockingCep =
+                    newServiceTipo === "CORREIO" &&
+                    (cepDigits.length !== 8 || cepLookup.status === "loading" || cepLookup.status === "invalid");
+                  return (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={addService}
+                        disabled={blockingCep}
+                        className="flex-1 bg-green-700 hover:bg-green-800 active:bg-green-900 text-white text-sm md:text-base py-3 md:py-3.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-green-700"
+                      >
+                        {newServiceTipo === "CORREIO" && cepLookup.status === "loading" ? "Validando CEP…" : "Adicionar"}
+                      </button>
+                      <button onClick={() => setShowAddService(false)} className="px-4 md:px-6 text-gray-400 hover:text-white text-sm md:text-base py-3 md:py-3.5 rounded-lg transition-colors">Cancelar</button>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
