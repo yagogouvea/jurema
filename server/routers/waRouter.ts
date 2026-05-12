@@ -476,6 +476,7 @@ export const waRouter = router({
           try {
             const { applyAiStatus, checkAwayMessage } = await import("./waStatusClassifier");
             const awayMsg = await checkAwayMessage(asyncDb as any, capturedConvId, capturedInstanceId).catch(() => null);
+            let awaySent = false;
             if (awayMsg) {
               await asyncDb.execute(
                 "INSERT INTO wa_messages (conversationId, instanceId, fromMe, senderType, senderName, type, content, status, timestamp) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -488,11 +489,33 @@ export const waRouter = router({
               callWaBridge(capturedInstanceId, capturedRemoteJid, awayMsg).catch(e =>
                 console.error("[webhook] Erro ao enviar ausência via wa-bridge:", e)
               );
+              awaySent = true;
               console.log(`[webhook] Mensagem de ausência enviada para conversa ${capturedConvId}`);
             }
             await applyAiStatus(asyncDb as any, capturedConvId).catch(e =>
               console.error("[webhook] Erro ao classificar status via IA:", e)
             );
+            // Geração de resposta automática pela IA
+            // - Só dispara se não tivermos enviado a awayMessage (fora do horário)
+            // - generateAiResponse já verifica enabled/aiEnabled/horário/escalação/anti-loop
+            if (!awaySent) {
+              try {
+                const { generateAiResponse } = await import("./waAiResponder");
+                const result = await generateAiResponse(
+                  asyncDb as any,
+                  capturedConvId,
+                  capturedInstanceId,
+                  (iid, jid, content) => callWaBridge(iid, jid, content)
+                );
+                if (result.ok) {
+                  console.log(`[webhook] IA respondeu conversa ${capturedConvId}${result.escalated ? " (escalada)" : ""}: ${result.content.substring(0, 80)}`);
+                } else if (result.skipped !== "last_message_was_us" && result.skipped !== "ai_disabled_after_delay") {
+                  console.log(`[webhook] IA pulou conversa ${capturedConvId}: ${result.skipped}`);
+                }
+              } catch (e) {
+                console.error("[webhook] Erro ao gerar resposta IA:", e);
+              }
+            }
           } finally { await asyncDb.end(); }
         });
         return { success: true, conversationId };
