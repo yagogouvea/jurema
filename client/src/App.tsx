@@ -2,7 +2,7 @@ import React from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { CartProvider } from "./contexts/CartContext";
@@ -55,7 +55,11 @@ function Layout({ children }: { children: React.ReactNode }) {
 }
 
 function Router() {
-  return (
+  const [location] = useLocation();
+  /** Um único provider para todo /pdv/* — evita desmontar o contexto ao trocar de rota e reusar cache `me: null`. */
+  const pdvShell = location.startsWith("/pdv");
+
+  const routes = (
     <Switch>
       <Route path="/" component={() => <Layout><Home /></Layout>} />
       <Route path="/produtos" component={() => <Layout><Products /></Layout>} />
@@ -67,28 +71,29 @@ function Router() {
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminPanel} />
       <Route path="/admin/:rest*" component={AdminPanel} />
-      {/* PDV independente — PdvAuthProvider aqui para isolar o cookie pdv_token das outras páginas */}
-      <Route path="/pdv/login" component={() => <PdvAuthProvider><PdvLogin /></PdvAuthProvider>} />
-      <Route path="/pdv/dashboard" component={() => <PdvAuthProvider><PdvDashboard /></PdvAuthProvider>} />
-      <Route path="/pdv/vendedores" component={() => <PdvAuthProvider><PdvVendedores /></PdvAuthProvider>} />
-      <Route path="/pdv/historico" component={() => <PdvAuthProvider><PdvHistorico /></PdvAuthProvider>} />
-      <Route path="/pdv/configuracoes" component={() => <PdvAuthProvider><PdvConfiguracoes /></PdvAuthProvider>} />
-      <Route path="/pdv/comissoes" component={() => <PdvAuthProvider><PdvComissoes /></PdvAuthProvider>} />
-      <Route path="/pdv/sofia" component={() => <PdvAuthProvider><PdvSofia /></PdvAuthProvider>} />
-      <Route path="/pdv/desconto-folha" component={() => <PdvAuthProvider><PdvDescontoFolha /></PdvAuthProvider>} />
-      <Route path="/pdv/relatorio" component={() => <PdvAuthProvider><PdvRelatorio /></PdvAuthProvider>} />
-      <Route path="/pdv/cadastro-produtos" component={() => <PdvAuthProvider><PdvCadastroProdutos /></PdvAuthProvider>} />
-      <Route path="/pdv/gestao-site" component={() => <PdvAuthProvider><PdvGestaoSite /></PdvAuthProvider>} />
-      <Route path="/pdv/meu-perfil" component={() => <PdvAuthProvider><PdvMeuPerfil /></PdvAuthProvider>} />
-      <Route path="/pdv/whatsapp/config" component={() => <PdvAuthProvider><PdvWhatsAppConfig /></PdvAuthProvider>} />
-      <Route path="/pdv/painel-vendedor" component={() => <PdvAuthProvider><PdvSellerPanel /></PdvAuthProvider>} />
-      <Route path="/pdv/whatsapp" component={() => <PdvAuthProvider><PdvWhatsApp /></PdvAuthProvider>} />
-      <Route path="/pdv/notificacoes" component={() => <PdvNotificacoes />} />
-      <Route path="/pdv" component={() => <PdvAuthProvider><PdvMain /></PdvAuthProvider>} />
+      <Route path="/pdv/login" component={PdvLogin} />
+      <Route path="/pdv/dashboard" component={PdvDashboard} />
+      <Route path="/pdv/vendedores" component={PdvVendedores} />
+      <Route path="/pdv/historico" component={PdvHistorico} />
+      <Route path="/pdv/configuracoes" component={PdvConfiguracoes} />
+      <Route path="/pdv/comissoes" component={PdvComissoes} />
+      <Route path="/pdv/sofia" component={PdvSofia} />
+      <Route path="/pdv/desconto-folha" component={PdvDescontoFolha} />
+      <Route path="/pdv/relatorio" component={PdvRelatorio} />
+      <Route path="/pdv/cadastro-produtos" component={PdvCadastroProdutos} />
+      <Route path="/pdv/gestao-site" component={PdvGestaoSite} />
+      <Route path="/pdv/meu-perfil" component={PdvMeuPerfil} />
+      <Route path="/pdv/whatsapp/config" component={PdvWhatsAppConfig} />
+      <Route path="/pdv/painel-vendedor" component={PdvSellerPanel} />
+      <Route path="/pdv/whatsapp" component={PdvWhatsApp} />
+      <Route path="/pdv/notificacoes" component={PdvNotificacoes} />
+      <Route path="/pdv" component={PdvMain} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
+
+  return pdvShell ? <PdvAuthProvider>{routes}</PdvAuthProvider> : routes;
 }
 
 function App() {

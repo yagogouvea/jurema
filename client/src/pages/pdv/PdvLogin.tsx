@@ -20,7 +20,8 @@ export default function PdvLogin() {
       if (data.token) {
         localStorage.setItem("pdv_token", data.token);
       }
-      refetch();
+      // Atualiza pdvAuth.me antes de navegar (evita layout redirecionar com cache null)
+      await refetch();
       navigate("/pdv");
     },
     onError: (err) => {

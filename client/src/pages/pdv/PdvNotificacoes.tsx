@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { PdvAuthProvider, usePdvAuth } from "@/contexts/PdvAuthContext";
+import { usePdvAuth } from "@/contexts/PdvAuthContext";
 
 const TIPOS = [
   { value: "", label: "Todos" },
@@ -16,7 +16,7 @@ const TIPO_LABELS: Record<string, { label: string; color: string; bg: string }> 
   alteracao_produto: { label: "Alteração", color: "text-yellow-400", bg: "bg-yellow-900/30 border-yellow-700/40" },
 };
 
-function PdvNotificacoesContent() {
+export default function PdvNotificacoes() {
   const { seller, isAdmin } = usePdvAuth();
   const [tipoFiltro, setTipoFiltro] = useState("");
   const [apenasNaoLidas, setApenasNaoLidas] = useState(false);
@@ -239,10 +239,3 @@ function PdvNotificacoesContent() {
   );
 }
 
-export default function PdvNotificacoes() {
-  return (
-    <PdvAuthProvider>
-      <PdvNotificacoesContent />
-    </PdvAuthProvider>
-  );
-}
