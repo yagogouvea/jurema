@@ -94,8 +94,11 @@ export const pdvOrdersRouter = router({
       try {
         const pedidoId = generatePedidoId();
 
-        // Total financeiro do pedido no BD = todos os itens (normais + Sofia) + serviços — não usar só o subconjunto da planilha
-        const totalProdutosSomados = input.items.reduce((sum, it) => sum + it.totalItem, 0);
+        // Total financeiro do pedido no BD = soma (preço unitário × qtd) de todos os itens + serviços
+        const totalProdutosSomados = input.items.reduce(
+          (sum, it) => sum + Math.round(it.precoUnitario * it.quantidade * 100) / 100,
+          0
+        );
         const totalServicosSomados = input.services.reduce((sum, s) => sum + s.valor, 0);
         const totalAplicadoGravacao =
           Math.round((totalProdutosSomados + totalServicosSomados) * 100) / 100;
@@ -147,6 +150,7 @@ export const pdvOrdersRouter = router({
               ptVarejo = parseFloat(ptRow.ptVarejo || '0');
             }
           }
+          const lineTotal = Math.round(item.precoUnitario * item.quantidade * 100) / 100;
           await db.execute(
             `INSERT INTO pdv_order_items 
              (pedidoId, productId, linha, modelo, time, descricao, tipo, tamanho, quantidade, precoUnitario, totalItem, isSofia, comissaoUnitaria, comissaoLojaSofia, ptAtacado, ptVarejo)
@@ -154,7 +158,7 @@ export const pdvOrdersRouter = router({
             [
               pedidoId, item.productId || null, item.linha || null, item.modelo || null,
               item.time, item.descricao || null, item.tipo || null, item.tamanho, item.quantidade,
-              item.precoUnitario, item.totalItem, item.isSofia ? 1 : 0, comissaoItem, comissaoLojaSofia,
+              item.precoUnitario, lineTotal, item.isSofia ? 1 : 0, comissaoItem, comissaoLojaSofia,
               ptAtacado, ptVarejo
             ]
           );

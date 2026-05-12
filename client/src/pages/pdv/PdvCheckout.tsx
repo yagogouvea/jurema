@@ -65,6 +65,15 @@ function fmt(v: number) {
   return v.toFixed(2).replace(".", ",");
 }
 
+function roundMoney(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+function parseMoney(s: string) {
+  const n = parseFloat(s.replace(",", "."));
+  return Number.isFinite(n) ? n : NaN;
+}
+
 export default function PdvCheckout({
   cart, regime,
   totalVarejo, totalAtacado, onBack, onSuccess
@@ -96,17 +105,45 @@ export default function PdvCheckout({
   const [valorPendenteManual, setValorPendenteManual] = useState("");
   // Sofia por item: mapa de índice do carrinho -> boolean
   const [sofiaItems, setSofiaItems] = useState<Record<number, boolean>>({});
+  /** Preço unitário negociado na venda (Sofia) — não usar só o preço do catálogo × regime */
+  const [sofiaPrecoUnitario, setSofiaPrecoUnitario] = useState<Record<number, string>>({});
   // Comissão da loja por item Sofia (personalizada): mapa de índice -> valor string
   const [sofiaComissao, setSofiaComissao] = useState<Record<number, string>>({});
   const toggleSofiaItem = (idx: number) => {
-    setSofiaItems(prev => ({ ...prev, [idx]: !prev[idx] }));
-    // Ao marcar como Sofia, inicializar comissão com valor padrão se não existir
-    if (!sofiaItems[idx] && !sofiaComissao[idx]) {
-      setSofiaComissao(prev => ({ ...prev, [idx]: '10' }));
-    }
+    setSofiaItems(prev => {
+      const nextOn = !prev[idx];
+      if (nextOn) {
+        const base = cart[idx]?.precoUnitario ?? 0;
+        setSofiaPrecoUnitario(sp => ({
+          ...sp,
+          [idx]: sp[idx] ?? String(base).replace(".", ","),
+        }));
+        setSofiaComissao(c =>
+          c[idx] != null && String(c[idx]).trim() !== "" ? c : { ...c, [idx]: "10" }
+        );
+      } else {
+        setSofiaPrecoUnitario(sp => {
+          const { [idx]: _, ...rest } = sp;
+          return rest;
+        });
+      }
+      return { ...prev, [idx]: nextOn };
+    });
   };
   const updateSofiaComissao = (idx: number, val: string) => {
     setSofiaComissao(prev => ({ ...prev, [idx]: val }));
+  };
+  const updateSofiaPrecoUnitario = (idx: number, val: string) => {
+    setSofiaPrecoUnitario(prev => ({ ...prev, [idx]: val }));
+  };
+
+  const lineTotalCheckout = (idx: number, item: CartItem) => {
+    if (sofiaItems[idx]) {
+      const pu = parseMoney(sofiaPrecoUnitario[idx] ?? "");
+      if (!Number.isFinite(pu)) return item.totalItem;
+      return roundMoney(pu * item.quantidade);
+    }
+    return roundMoney(item.totalItem);
   };
   const hasSofiaItems = Object.values(sofiaItems).some(v => v);
   const sofiaCount = Object.values(sofiaItems).filter(v => v).length;
@@ -145,8 +182,8 @@ export default function PdvCheckout({
 
   const totalServicos = useMemo(() => services.reduce((sum, s) => sum + s.valor, 0), [services]);
   const subtotalProdutos = useMemo(
-    () => cart.reduce((sum, i) => sum + i.totalItem, 0),
-    [cart]
+    () => cart.reduce((sum, item, idx) => sum + lineTotalCheckout(idx, item), 0),
+    [cart, sofiaItems, sofiaPrecoUnitario]
   );
   const totalGeral = subtotalProdutos + totalServicos;
   const totalPago = useMemo(() => payments.reduce((sum, p) => sum + p.valor, 0), [payments]);
@@ -192,8 +229,8 @@ export default function PdvCheckout({
       clienteNome ? `*Cliente:* ${clienteNome}` : "",
       ``,
       `*ITENS:*`,
-      ...cart.map(item =>
-        `${item.quantidade}x ${item.time} (${item.tamanho}) - R$ ${fmt(item.totalItem)}`
+      ...cart.map((item, idx) =>
+        `${item.quantidade}x ${item.time} (${item.tamanho}) - R$ ${fmt(lineTotalCheckout(idx, item))}`
       ),
       ``,
       `*SUBTOTAL:* R$ ${fmt(subtotalProdutos)}`,
@@ -317,6 +354,14 @@ export default function PdvCheckout({
       toast.error("Pedido com item Sofia requer foto obrigatória. Anexe a imagem antes de finalizar.");
       return;
     }
+    for (let idx = 0; idx < cart.length; idx++) {
+      if (!sofiaItems[idx]) continue;
+      const pu = parseMoney(sofiaPrecoUnitario[idx] ?? "");
+      if (!Number.isFinite(pu) || pu < 0) {
+        toast.error(`Informe o preço por peça (R$) válido no item Sofia: ${cart[idx].time}`);
+        return;
+      }
+    }
     createOrderMutation.mutate({
       canal,
       clienteNome: clienteNome.trim() as string,
@@ -330,20 +375,27 @@ export default function PdvCheckout({
       totalPendente,
       justificativa: justificativa || undefined,
       status: statusPedido,
-      items: cart.map((item, idx) => ({
-        productId: item.productId,
-        linha: item.linha,
-        modelo: item.modelo,
-        time: item.time,
-        descricao: item.descricao,
-        tipo: item.tipo,
-        tamanho: item.tamanho,
-        quantidade: item.quantidade,
-        precoUnitario: item.precoUnitario,
-        totalItem: item.totalItem,
-        isSofia: !!sofiaItems[idx],
-        comissaoLojaSofia: sofiaItems[idx] ? parseFloat((sofiaComissao[idx] || '0').replace(',', '.')) || 0 : undefined,
-      })),
+      items: cart.map((item, idx) => {
+        const isSof = !!sofiaItems[idx];
+        const precoUnitario = isSof
+          ? roundMoney(parseMoney(sofiaPrecoUnitario[idx] ?? "") || 0)
+          : roundMoney(item.precoUnitario);
+        const totalItem = roundMoney(precoUnitario * item.quantidade);
+        return {
+          productId: item.productId,
+          linha: item.linha,
+          modelo: item.modelo,
+          time: item.time,
+          descricao: item.descricao,
+          tipo: item.tipo,
+          tamanho: item.tamanho,
+          quantidade: item.quantidade,
+          precoUnitario,
+          totalItem,
+          isSofia: isSof,
+          comissaoLojaSofia: isSof ? parseFloat((sofiaComissao[idx] || "0").replace(",", ".")) || 0 : undefined,
+        };
+      }),
       payments,
       services,
     });
@@ -413,20 +465,33 @@ export default function PdvCheckout({
                         Sofia
                       </button>
                       {sofiaItems[i] && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-purple-400 text-[10px]">Bôn.</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={sofiaComissao[i] || ''}
-                            onChange={e => updateSofiaComissao(i, e.target.value)}
-                            placeholder="10"
-                            className="w-14 text-[11px] px-1.5 py-0.5 rounded bg-purple-950/50 border border-purple-800 text-purple-200 text-center placeholder-purple-600 focus:outline-none focus:border-purple-500"
-                            title="Bônus da loja por peça (R$)"
-                          />
-                        </div>
+                        <>
+                          <div className="flex items-center gap-0.5">
+                            <span className="text-purple-400 text-[10px] whitespace-nowrap">R$/pç</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={sofiaPrecoUnitario[i] ?? ""}
+                              onChange={e => updateSofiaPrecoUnitario(i, e.target.value)}
+                              className="w-[3.25rem] text-[11px] px-1 py-0.5 rounded bg-purple-950/50 border border-purple-800 text-purple-200 text-center focus:outline-none focus:border-purple-500"
+                              title="Preço unitário negociado na venda (Sofia — não só catálogo)"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-purple-400 text-[10px]">Bôn.</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={sofiaComissao[i] || ""}
+                              onChange={e => updateSofiaComissao(i, e.target.value)}
+                              placeholder="10"
+                              className="w-14 text-[11px] px-1.5 py-0.5 rounded bg-purple-950/50 border border-purple-800 text-purple-200 text-center placeholder-purple-600 focus:outline-none focus:border-purple-500"
+                              title="Bônus da loja por peça (R$)"
+                            />
+                          </div>
+                        </>
                       )}
-                      <span className="text-white font-medium">R$ {fmt(item.totalItem)}</span>
+                      <span className="text-white font-medium">R$ {fmt(lineTotalCheckout(i, item))}</span>
                     </div>
                   </div>
                 ))}
@@ -440,12 +505,12 @@ export default function PdvCheckout({
                       {sofiaCount} {sofiaCount === 1 ? 'item marcado' : 'itens marcados'} como Sofia (terceirizado)
                     </p>
                     <p className="text-purple-400/70 text-[10px]">
-                      Esses itens não entram no bônus do vendedor. Informe o bônus da loja (R$/peça) ao lado de cada item Sofia.
+                      Ajuste R$/peça ao preço negociado (Sofia). Informe o bônus da loja ao lado. Esses itens não entram no bônus do vendedor.
                     </p>
                     {cart.map((item, i) => sofiaItems[i] ? (
                       <div key={i} className="flex items-center justify-between text-[11px] text-purple-300">
                         <span className="truncate">{item.time} ({item.tamanho}) x{item.quantidade}</span>
-                        <span>Bôn: R$ {(parseFloat((sofiaComissao[i] || '0').replace(',', '.')) || 0).toFixed(2)}/pç → Reemb: R$ {Math.max(0, item.totalItem - ((parseFloat((sofiaComissao[i] || '0').replace(',', '.')) || 0) * item.quantidade)).toFixed(2)}</span>
+                        <span>Bôn: R$ {(parseFloat((sofiaComissao[i] || "0").replace(",", ".")) || 0).toFixed(2)}/pç → Reemb: R$ {Math.max(0, lineTotalCheckout(i, item) - ((parseFloat((sofiaComissao[i] || "0").replace(",", ".")) || 0) * item.quantidade)).toFixed(2)}</span>
                       </div>
                     ) : null)}
                   </div>
