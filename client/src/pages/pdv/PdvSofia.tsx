@@ -29,7 +29,8 @@ function formatDateTime(dateStr: string): string {
 const STATUS_COLORS: Record<string, string> = {
   PAGO: "bg-green-950/50 text-green-400 border-green-900/50",
   PENDENTE: "bg-yellow-950/50 text-yellow-400 border-yellow-900/50",
-  CANCELADO: "bg-red-950/50 text-red-400 border-red-900/50",
+  // Cancelado fica em destaque (sobre o card vermelho): fundo escuro + texto branco
+  CANCELADO: "bg-red-900 text-white border-red-700 font-bold uppercase tracking-wide",
 };
 
 export default function PdvSofia() {
@@ -339,11 +340,22 @@ export default function PdvSofia() {
                 </div>
               ) : (
                 <>
-                  {pedidos.map((order: any) => (
-                    <div key={order.pedidoId} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                  {pedidos.map((order: any) => {
+                    const isCancelado = order.status === "CANCELADO";
+                    return (
+                    <div
+                      key={order.pedidoId}
+                      className={`border rounded-2xl overflow-hidden ${
+                        isCancelado
+                          ? "bg-red-950/40 border-red-900/50"
+                          : "bg-gray-900 border-gray-800"
+                      }`}
+                    >
                       {/* Order header */}
                       <div
-                        className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-800/30 transition-colors"
+                        className={`px-5 py-4 flex items-center justify-between cursor-pointer transition-colors ${
+                          isCancelado ? "hover:bg-red-900/40" : "hover:bg-gray-800/30"
+                        }`}
                         onClick={() => setExpandedOrder(expandedOrder === order.pedidoId ? null : order.pedidoId)}
                       >
                         <div className="flex items-center gap-3 flex-wrap">
@@ -515,7 +527,8 @@ export default function PdvSofia() {
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
 
                   {/* Pagination */}
                   {totalPagesPedidos > 1 && (

@@ -12,7 +12,8 @@ import {
 const STATUS_COLORS: Record<string, string> = {
   PAGO: "bg-green-950/50 text-green-400 border-green-900/50",
   PENDENTE: "bg-yellow-950/50 text-yellow-400 border-yellow-900/50",
-  CANCELADO: "bg-green-950/50 text-green-500 border-green-900/50",
+  // Cancelado fica em destaque (sobre a linha vermelha): fundo escuro + texto branco
+  CANCELADO: "bg-red-900 text-white border-red-700 font-bold uppercase tracking-wide",
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -173,10 +174,16 @@ export default function PdvHistorico() {
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((order: any) => (
+                  {orders.map((order: any) => {
+                    const isCancelado = order.status === "CANCELADO";
+                    return (
                     <tr
                       key={order.id}
-                      className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-pointer"
+                      className={`border-b transition-colors cursor-pointer ${
+                        isCancelado
+                          ? "bg-red-950/50 border-red-900/40 hover:bg-red-900/50"
+                          : "border-gray-800/50 hover:bg-gray-800/30"
+                      }`}
                       onClick={() => setSelectedOrder(order)}
                     >
                       <td className="px-4 py-3">
@@ -228,7 +235,8 @@ export default function PdvHistorico() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
