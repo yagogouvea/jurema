@@ -33,13 +33,17 @@ function orderDayDateExpr(alias) {
   return `DATE(CONVERT_TZ(${c}, '+00:00', '-03:00'))`;
 }
 
-/** Valores do painel Manus (print de referência). Ajuste os nomes se no banco forem diferentes. */
+/**
+ * Valores do painel Manus (print de referência).
+ * Atualize esta lista quando o Manus mudar; rode o script com o MESMO intervalo de datas do filtro do dashboard.
+ */
 const TARGETS = [
-  { sellerName: "GABRIEL", pontuacaoManus: 14121 },
-  { sellerName: "MURILO", pontuacaoManus: 6845 },
-  { sellerName: "FLAVIO", pontuacaoManus: 6493 },
-  { sellerName: "VINICIUS", pontuacaoManus: 3975 },
+  { sellerName: "GABRIEL", pontuacaoManus: 17820 },
+  { sellerName: "MURILO", pontuacaoManus: 8184 },
+  { sellerName: "FLAVIO", pontuacaoManus: 8727 },
+  { sellerName: "VINICIUS", pontuacaoManus: 5310 },
   { sellerName: "VANESSA", pontuacaoManus: 390 },
+  { sellerName: "TESTE", pontuacaoManus: 0 },
 ];
 
 const startDate = process.argv[2] || "2026-05-01";

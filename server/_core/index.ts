@@ -12,6 +12,12 @@ import { registerUploadRoutes } from "../uploadHandler";
 import { runPdvMigration, seedPdvData } from "../routers/pdvMigration";
 import { runAutoSync } from "../routers/pdvAutoSync";
 
+// `tsx watch` no Windows costuma não definir NODE_ENV; sem isso o Vite não sobe.
+const entry = process.argv[1] || "";
+if (!process.env.NODE_ENV && /server[/\\]_core[/\\]index\.(ts|mts|cts)$/.test(entry.replace(/\\/g, "/"))) {
+  process.env.NODE_ENV = "development";
+}
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
