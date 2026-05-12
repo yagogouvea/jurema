@@ -42,7 +42,12 @@ export async function verifyPdvToken(req: Request): Promise<{ sellerId: number; 
       const [k, ...v] = part.trim().split("=");
       if (k) cookies[k.trim()] = decodeURIComponent(v.join("="));
     });
-    const token = cookies[PDV_COOKIE];
+    let token = cookies[PDV_COOKIE];
+    // Dev HTTP: cookie SameSite=None sem Secure é rejeitado; o front envia Bearer (localStorage).
+    if (!token) {
+      const auth = req.headers.authorization;
+      if (auth?.startsWith("Bearer ")) token = auth.slice(7).trim();
+    }
     if (!token) return null;
     const secret = new TextEncoder().encode(process.env.JWT_SECRET || "pdv_jwt_secret_fallback");
     const { payload } = await jwtVerify(token, secret);

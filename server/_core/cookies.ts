@@ -24,25 +24,24 @@ function isSecureRequest(req: Request) {
 export function getSessionCookieOptions(
   req: Request
 ): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure"> {
-  // const hostname = req.hostname;
-  // const shouldSetDomain =
-  //   hostname &&
-  //   !LOCAL_HOSTS.has(hostname) &&
-  //   !isIpAddress(hostname) &&
-  //   hostname !== "127.0.0.1" &&
-  //   hostname !== "::1";
+  const host = (req.hostname || "").toLowerCase();
+  const local =
+    LOCAL_HOSTS.has(host) || host === "0.0.0.0" || isIpAddress(host);
 
-  // const domain =
-  //   shouldSetDomain && !hostname.startsWith(".")
-  //     ? `.${hostname}`
-  //     : shouldSetDomain
-  //       ? hostname
-  //       : undefined;
+  // Em HTTP local, SameSite=None exige Secure; sem HTTPS o cookie era descartado e o login “não grava sessão”.
+  if (local && !isSecureRequest(req)) {
+    return {
+      httpOnly: true,
+      path: "/",
+      sameSite: "lax",
+      secure: false,
+    };
+  }
 
   return {
     httpOnly: true,
     path: "/",
     sameSite: "none",
-    secure: isSecureRequest(req),
+    secure: true,
   };
 }
