@@ -29,9 +29,9 @@ export default function PdvDashboard() {
   const { isAdmin } = usePdvAuth();
   const [, navigate] = useLocation();
   const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(1);
-    return localDateYmd(d);
+    // Cobre importações e vendas fora do mês atual (evita dashboard “zerado” só por filtro)
+    const now = new Date();
+    return localDateYmd(new Date(now.getFullYear() - 1, 0, 1));
   });
   const [endDate, setEndDate] = useState(() => localDateYmd());
   const [showCashModal, setShowCashModal] = useState<"SUPRIMENTO" | "SANGRIA" | null>(null);
@@ -100,17 +100,17 @@ export default function PdvDashboard() {
   const byDay = data?.byDay || [];
   const goals = data?.goals || [];
 
-  const faturamento = parseFloat(summary?.faturamento || "0");
-  const totalPedidos = parseInt(summary?.totalPedidos || "0");
-  const ticketMedio = parseFloat(summary?.ticketMedio || "0");
-  const faturamentoAtacado = parseFloat(summary?.faturamentoAtacado || "0");
-  const faturamentoVarejo = parseFloat(summary?.faturamentoVarejo || "0");
-  const faturamentoBalcao = parseFloat(summary?.faturamentoBalcao || "0");
-  const faturamentoWhatsapp = parseFloat(summary?.faturamentoWhatsapp || "0");
+  const faturamento = Number(summary?.faturamento ?? 0);
+  const totalPedidos = Math.round(Number(summary?.totalPedidos ?? 0));
+  const ticketMedio = Number(summary?.ticketMedio ?? 0);
+  const faturamentoAtacado = Number(summary?.faturamentoAtacado ?? 0);
+  const faturamentoVarejo = Number(summary?.faturamentoVarejo ?? 0);
+  const faturamentoBalcao = Number(summary?.faturamentoBalcao ?? 0);
+  const faturamentoWhatsapp = Number(summary?.faturamentoWhatsapp ?? 0);
 
   // Pontuação total da loja = soma de todos os vendedores
   const pontuacaoLoja = (data?.bySeller || []).reduce(
-    (acc: number, s: any) => acc + parseFloat(s.pontuacao || "0"), 0
+    (acc: number, s: any) => acc + Number(s.pontuacao ?? 0), 0
   );
 
   // Formatar pontos: ex. 1500 → "1.500 PT"
@@ -118,10 +118,10 @@ export default function PdvDashboard() {
     `${Math.round(v).toLocaleString("pt-BR")} PT`;
 
   // Goals
-  const bronze = parseFloat(goals.find(g => g.key === "BRONZE")?.value || "14000");
-  const prata = parseFloat(goals.find(g => g.key === "PRATA")?.value || "23000");
-  const ouro = parseFloat(goals.find(g => g.key === "OURO")?.value || "28000");
-  const metaLoja = parseFloat(goals.find(g => g.key === "META_LOJA")?.value || "84000");
+  const bronze = Number(goals.find(g => g.key === "BRONZE")?.value ?? 14000);
+  const prata = Number(goals.find(g => g.key === "PRATA")?.value ?? 23000);
+  const ouro = Number(goals.find(g => g.key === "OURO")?.value ?? 28000);
+  const metaLoja = Number(goals.find(g => g.key === "META_LOJA")?.value ?? 84000);
 
   const getGoalLevel = (value: number) => {
     if (value >= ouro) return { label: "OURO", color: "text-yellow-400", bg: "bg-yellow-400" };
@@ -148,18 +148,18 @@ export default function PdvDashboard() {
 
   const chartDayData = byDay.map(d => ({
     dia: formatDate(d.dia),
-    faturamento: parseFloat(d.faturamento || "0"),
-    pedidos: parseInt(d.pedidos || "0"),
+    faturamento: Number(d.faturamento ?? 0),
+    pedidos: Math.round(Number(d.pedidos ?? 0)),
   }));
 
   const chartSellerData = bySeller.map(s => ({
     name: s.sellerName,
-    faturamento: parseFloat(s.faturamento || "0"),
+    faturamento: Number(s.faturamento ?? 0),
   }));
 
   const chartPaymentData = byPayment.map(p => ({
     name: p.formaPagamento,
-    value: parseFloat(p.total || "0"),
+    value: Number(p.total ?? 0),
   }));
 
   const chartCanalData = [
@@ -212,6 +212,14 @@ export default function PdvDashboard() {
             </button>
           </div>
         </div>
+
+        {!isLoading && data && totalPedidos === 0 && (
+          <div className="rounded-xl border border-amber-800/50 bg-amber-950/25 px-4 py-3 text-amber-100 text-sm">
+            <strong className="font-semibold">Nenhum pedido neste período.</strong>{" "}
+            Ajuste as datas acima (ex.: desde o início do ano da importação) ou confira se os pedidos não estão
+            todos como Sofia só no cadastro — o gráfico usa itens que não são linha Sofia.
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -303,7 +311,7 @@ export default function PdvDashboard() {
                 {/* Metas por vendedor — em PONTOS */}
                 <div className="mt-4 space-y-2">
                   {bySeller.map(s => {
-                    const pt = parseFloat(s.pontuacao || "0");
+                    const pt = Number(s.pontuacao ?? 0);
                     const goal = getGoalLevel(pt);
                     const pct = ouro > 0 ? Math.min(100, (pt / ouro) * 100) : 0;
                     return (

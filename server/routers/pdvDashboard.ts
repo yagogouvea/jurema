@@ -37,6 +37,15 @@ function pontosOffsetMesParam(startDate?: string, endDate?: string): string | nu
   return startDate.slice(0, 7);
 }
 
+/** Converte valor vindo do MySQL (string, Decimal, BigInt) para número estável no JSON/tRPC. */
+function rowNumber(v: unknown): number {
+  if (v === null || v === undefined) return 0;
+  if (typeof v === "bigint") return Number(v);
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const n = parseFloat(String(v).trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
 /** Itens que entram em faturamento/PT de metas (import legado: NULL em isSofia = tratar como peça normal). */
 const SQL_OI_NAO_SOFIA = "(COALESCE(oi.isSofia, 0) = 0)";
 /** Mesmo critério na subquery sem alias de tabela. */
@@ -194,13 +203,51 @@ export const pdvDashboardRouter = router({
         const [goalRows] = await db.execute("SELECT * FROM pdv_goals ORDER BY value ASC");
         
         await db.end();
-        
+
+        const rawSummary = (totalRows as any[])[0] || {};
+        const summary = {
+          totalPedidos: rowNumber(rawSummary.totalPedidos),
+          faturamento: rowNumber(rawSummary.faturamento),
+          ticketMedio: rowNumber(rawSummary.ticketMedio),
+          faturamentoAtacado: rowNumber(rawSummary.faturamentoAtacado),
+          faturamentoVarejo: rowNumber(rawSummary.faturamentoVarejo),
+          faturamentoBalcao: rowNumber(rawSummary.faturamentoBalcao),
+          faturamentoWhatsapp: rowNumber(rawSummary.faturamentoWhatsapp),
+        };
+
+        const bySeller = (sellerRows as any[]).map((r) => ({
+          sellerName: String(r.sellerName ?? ""),
+          pedidos: rowNumber(r.pedidos),
+          faturamento: rowNumber(r.faturamento),
+          ticketMedio: rowNumber(r.ticketMedio),
+          pontuacao: rowNumber(r.pontuacao),
+        }));
+
+        const byPayment = (paymentRows as any[]).map((r) => ({
+          formaPagamento: r.formaPagamento,
+          pedidos: rowNumber(r.pedidos),
+          total: rowNumber(r.total),
+          totalTaxas: rowNumber(r.totalTaxas),
+          totalLiquido: rowNumber(r.totalLiquido),
+        }));
+
+        const byDay = (dailyRows as any[]).map((r) => ({
+          dia: r.dia,
+          pedidos: rowNumber(r.pedidos),
+          faturamento: rowNumber(r.faturamento),
+        }));
+
+        const goals = (goalRows as any[]).map((g: any) => ({
+          ...g,
+          value: rowNumber(g.value),
+        }));
+
         return {
-          summary: (totalRows as any[])[0],
-          bySeller: sellerRows as any[],
-          byPayment: paymentRows as any[],
-          byDay: dailyRows as any[],
-          goals: goalRows as any[],
+          summary,
+          bySeller,
+          byPayment,
+          byDay,
+          goals,
         };
       } catch (err) {
         if (err instanceof TRPCError) throw err;
