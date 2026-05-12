@@ -96,26 +96,34 @@ export const pdvDashboardRouter = router({
         
         // Por vendedor — com ajuste Manus (pontosOffset) se a migração 0017 existir; senão query legada só por pedidos
         const offsetYm = pontosOffsetMesParam(input.startDate, input.endDate);
+        // Agregação por pedido dentro do subselect evita JOIN “explodido” vendedor×pedido×item
         const sqlBySellerComOffset = `SELECT s.name as sellerName,
-            COUNT(DISTINCT o.id) as pedidos,
-            COALESCE(SUM(oi.totalItem), 0) as faturamento,
-            COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio,
-            COALESCE(SUM(
-              CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
-                   ELSE oi.ptVarejo * oi.quantidade END
-            ), 0)
+            COALESCE(a.pedidos, 0) as pedidos,
+            COALESCE(a.faturamento, 0) as faturamento,
+            COALESCE(a.ticketMedio, 0) as ticketMedio,
+            COALESCE(a.pontuacao, 0)
             + (CASE WHEN ? IS NOT NULL AND s.pontosOffsetMes = ? THEN COALESCE(s.pontosOffset, 0) ELSE 0 END) as pontuacao
            FROM pdv_sellers s
-           LEFT JOIN pdv_orders o ON o.sellerId = s.id
-             AND o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
-           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0 AND o.id IS NOT NULL
            LEFT JOIN (
-             SELECT pedidoId, SUM(totalItem) as totalNaoSofia
-             FROM pdv_order_items WHERE isSofia = 0
-             GROUP BY pedidoId
-           ) oi_totals ON oi_totals.pedidoId = o.pedidoId
+             SELECT o.sellerId,
+               COUNT(DISTINCT o.id) as pedidos,
+               COALESCE(SUM(oi.totalItem), 0) as faturamento,
+               COALESCE(AVG(oi_totals.totalNaoSofia), 0) as ticketMedio,
+               COALESCE(SUM(
+                 CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
+                      ELSE oi.ptVarejo * oi.quantidade END
+               ), 0) as pontuacao
+             FROM pdv_orders o
+             JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
+             LEFT JOIN (
+               SELECT pedidoId, SUM(totalItem) as totalNaoSofia
+               FROM pdv_order_items WHERE isSofia = 0
+               GROUP BY pedidoId
+             ) oi_totals ON oi_totals.pedidoId = o.pedidoId
+             WHERE o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}
+             GROUP BY o.sellerId
+           ) a ON a.sellerId = s.id
            WHERE s.isActive = 1
-           GROUP BY s.id, s.name, s.pontosOffset, s.pontosOffsetMes
            ORDER BY pontuacao DESC`;
         const sqlBySellerLegacy = `SELECT o.sellerName,
             COUNT(DISTINCT o.id) as pedidos,

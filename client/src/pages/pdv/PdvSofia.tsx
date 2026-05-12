@@ -11,6 +11,7 @@ import {
   Camera, Trash2, ExternalLink, Loader2
 } from "lucide-react";
 import { toast } from "sonner";
+import { localDateYmd } from "@/lib/localDateYmd";
 
 const SELLER_COLORS = ["#16a34a", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7"];
 
@@ -36,9 +37,9 @@ export default function PdvSofia() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "pedidos">("dashboard");
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(); d.setDate(1);
-    return d.toISOString().split("T")[0];
+    return localDateYmd(d);
   });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(() => localDateYmd());
   const [showConfig, setShowConfig] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);

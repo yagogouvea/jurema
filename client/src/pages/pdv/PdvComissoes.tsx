@@ -6,6 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from "recharts";
 import { Award, TrendingUp, DollarSign, ShoppingBag, Calendar, Download, Package, Info, User } from "lucide-react";
+import { localDateYmd } from "@/lib/localDateYmd";
 
 const META_COLORS: Record<string, string> = {
   OURO: "text-yellow-400",
@@ -31,9 +32,9 @@ function formatCurrency(value: number): string {
 function AdminComissoes() {
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(); d.setDate(1);
-    return d.toISOString().split("T")[0];
+    return localDateYmd(d);
   });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(() => localDateYmd());
   // "all" = todos os vendedores; qualquer outro valor = sellerId filtrado
   const [selectedSeller, setSelectedSeller] = useState<string>("all");
 
@@ -328,9 +329,9 @@ function SellerComissoes() {
   const { seller } = usePdvAuth();
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(); d.setDate(1);
-    return d.toISOString().split("T")[0];
+    return localDateYmd(d);
   });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(() => localDateYmd());
 
   const { data, isLoading } = trpc.pdvComissoes.minhasComissoes.useQuery(
     { startDate, endDate },

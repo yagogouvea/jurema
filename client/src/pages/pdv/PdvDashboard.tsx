@@ -12,6 +12,7 @@ import {
   Target, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Box, ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
+import { localDateYmd } from "@/lib/localDateYmd";
 
 const COLORS = ["#16a34a", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 
@@ -30,9 +31,9 @@ export default function PdvDashboard() {
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setDate(1);
-    return d.toISOString().split("T")[0];
+    return localDateYmd(d);
   });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(() => localDateYmd());
   const [showCashModal, setShowCashModal] = useState<"SUPRIMENTO" | "SANGRIA" | null>(null);
   const [cashDesc, setCashDesc] = useState("");
   const [cashValor, setCashValor] = useState("");

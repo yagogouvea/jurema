@@ -4,6 +4,7 @@ import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import PdvLayout from "./PdvLayout";
 import { Wallet, Calendar, CheckCircle2, Plus, Trash2, DollarSign, User, AlertTriangle, History, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+import { localDateYmd } from "@/lib/localDateYmd";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -18,9 +19,9 @@ export default function PdvDescontoFolha() {
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     d.setDate(diff);
-    return d.toISOString().split("T")[0];
+    return localDateYmd(d);
   });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(() => localDateYmd());
   const [showAdd, setShowAdd] = useState(false);
   const [filterQuitado, setFilterQuitado] = useState<boolean | undefined>(false);
 

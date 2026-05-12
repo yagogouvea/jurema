@@ -6,6 +6,7 @@ import {
   ChevronDown, ChevronUp, Loader2
 } from "lucide-react";
 import PdvLayout from "./PdvLayout";
+import { localDateYmd } from "@/lib/localDateYmd";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -24,8 +25,8 @@ function getDefaultDates() {
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return {
-    startDate: start.toISOString().split("T")[0],
-    endDate: end.toISOString().split("T")[0],
+    startDate: localDateYmd(start),
+    endDate: localDateYmd(end),
   };
 }
 

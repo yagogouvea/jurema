@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import PdvLayout from "./PdvLayout";
 import { toast } from "sonner";
+import { localDateYmd } from "@/lib/localDateYmd";
 import {
   Search, ChevronDown, ChevronUp, X, Eye, Calendar,
   ShoppingBag, DollarSign, User, Package, CreditCard, Wrench
@@ -41,9 +42,9 @@ export default function PdvHistorico() {
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setDate(1);
-    return d.toISOString().split("T")[0];
+    return localDateYmd(d);
   });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(() => localDateYmd());
   const [page, setPage] = useState(1);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
