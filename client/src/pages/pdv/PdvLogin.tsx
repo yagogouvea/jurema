@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import { Loader2, ShoppingBag, Eye, EyeOff } from "lucide-react";
 
 export default function PdvLogin() {
   const [, navigate] = useLocation();
-  const { refetch } = usePdvAuth();
+  const utils = trpc.useUtils();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -20,8 +19,13 @@ export default function PdvLogin() {
       if (data.token) {
         localStorage.setItem("pdv_token", data.token);
       }
-      // Atualiza pdvAuth.me antes de navegar (evita layout redirecionar com cache null)
-      await refetch();
+      const role = data.seller.role === "admin" ? "admin" : "seller";
+      utils.pdvAuth.me.setData(undefined, {
+        sellerId: data.seller.id,
+        name: data.seller.name,
+        username: data.seller.username,
+        role,
+      });
       navigate("/pdv");
     },
     onError: (err) => {
