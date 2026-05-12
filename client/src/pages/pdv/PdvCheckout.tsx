@@ -187,6 +187,8 @@ export default function PdvCheckout({
   );
   const totalGeral = subtotalProdutos + totalServicos;
   const totalPago = useMemo(() => payments.reduce((sum, p) => sum + p.valor, 0), [payments]);
+  /** Positivo = falta pagamento para fechar o total; negativo = pago a mais que o total. */
+  const diffPagamentoVenda = roundMoney(totalGeral - totalPago);
   // Pendente: usa valor manual se checkbox ativo, senão calcula automaticamente
   const totalPendente = isPendente
     ? (parseFloat(valorPendenteManual.replace(',', '.')) || Math.max(0, totalGeral - totalPago))
@@ -293,6 +295,7 @@ export default function PdvCheckout({
     const taxa = (valor * method.taxa) / 100;
     const valorLiquido = valor - taxa;
     const valorMaquininha = valor + taxa; // valor que passa na maquininha
+    // Cada linha em payments é gravada tal qual digitada — sem rateio 50/50 nem redistribuição
     setPayments(prev => [...prev, {
       formaPagamento: newPaymentMethod as any,
       valor,
@@ -361,6 +364,14 @@ export default function PdvCheckout({
         toast.error(`Informe o preço por peça (R$) válido no item Sofia: ${cart[idx].time}`);
         return;
       }
+    }
+    // Sem "Pendente" marcado: não permitir fechar com valor a menos do total (evita Bug 1 / pagamentos mirando total errado)
+    if (!isPendente && totalGeral > 0 && diffPagamentoVenda > 0.02) {
+      toast.error(
+        `Falta R$ ${fmt(diffPagamentoVenda)} para fechar o total (R$ ${fmt(totalGeral)}). ` +
+        `Adicione outra forma de pagamento ou ative Valor Pendente.`
+      );
+      return;
     }
     createOrderMutation.mutate({
       canal,
@@ -904,6 +915,25 @@ export default function PdvCheckout({
                     </div>
                   );
                 })}
+                {totalGeral > 0 && payments.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-700 space-y-1.5">
+                    <div className="flex justify-between text-xs text-gray-400">
+                      <span>Soma das formas (loja recebe)</span>
+                      <span className="text-white tabular-nums">R$ {fmt(totalPago)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-semibold text-gray-200">
+                      <span>Total da venda</span>
+                      <span className="text-white tabular-nums">R$ {fmt(totalGeral)}</span>
+                    </div>
+                    {Math.abs(diffPagamentoVenda) > 0.02 && (
+                      <p className={`text-xs font-medium ${diffPagamentoVenda > 0.02 ? "text-orange-400" : "text-yellow-400"}`}>
+                        {diffPagamentoVenda > 0.02
+                          ? `Falta R$ ${fmt(diffPagamentoVenda)} — inclui itens Sofia e serviços no total acima.`
+                          : `Acima do total em R$ ${fmt(Math.abs(diffPagamentoVenda))} (confira troco / valores).`}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
