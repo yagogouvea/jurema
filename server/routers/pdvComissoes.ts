@@ -80,7 +80,7 @@ export const pdvComissoesRouter = router({
           WHERE o.status != 'CANCELADO'
             AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
             AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
-          GROUP BY s.id, s.name, DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'))
+          GROUP BY s.id, s.name, DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d')
           HAVING pecas > 0
           ORDER BY dia ASC, pecas DESC`,
           [input.startDate, input.endDate]
@@ -197,7 +197,7 @@ export const pdvComissoesRouter = router({
             AND o.status != 'CANCELADO'
             AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
             AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
-          GROUP BY DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'))
+          GROUP BY DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d')
           HAVING pecas > 0
           ORDER BY dia ASC`,
           [seller.sellerId, input.startDate, input.endDate]

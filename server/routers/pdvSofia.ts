@@ -85,7 +85,7 @@ export const pdvSofiaRouter = router({
           FROM pdv_order_items oi
           JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
           WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' ${dateFilter}
-          GROUP BY DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'))
+          GROUP BY DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d')
           ORDER BY dia DESC`,
           params
         );
