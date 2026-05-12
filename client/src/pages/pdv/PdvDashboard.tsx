@@ -311,6 +311,24 @@ export default function PdvDashboard() {
           {/* Por Vendedor */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
             <h3 className="text-white font-semibold mb-4">Por Vendedor</h3>
+            {data?.meta && (
+              <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+                {data.meta.pontosOffsetYm ? (
+                  <>
+                    PT pode incluir <span className="text-gray-400">pontosOffset</span> (Manus): só quando o filtro de
+                    datas é <strong className="text-gray-400">um único mês</strong> ({data.meta.pontosOffsetYm}) e o
+                    vendedor tem <span className="text-gray-400">pontosOffsetMes</span> igual a esse mês. Caso contrário
+                    entra só a soma dos itens.
+                  </>
+                ) : (
+                  <>
+                    Período em <strong className="text-gray-400">vários meses</strong>: o PT desta tela{" "}
+                    <strong className="text-gray-400">não soma pontosOffset</strong> (apenas itens). Para ver o mesmo
+                    total do Manus com calibragem, filtre início e fim dentro do mesmo YYYY-MM.
+                  </>
+                )}
+              </p>
+            )}
             {chartSellerData.length === 0 ? (
               <div className="flex items-center justify-center h-40 text-gray-600 text-sm">Sem dados</div>
             ) : (
@@ -333,13 +351,22 @@ export default function PdvDashboard() {
                     const pt = Number(s.pontuacao ?? 0);
                     const goal = getGoalLevel(pt);
                     const pct = ouro > 0 ? Math.min(100, (pt / ouro) * 100) : 0;
+                    const ym = data?.meta?.pontosOffsetYm;
+                    const adj =
+                      ym && s.pontosOffsetMes === ym ? Number(s.pontosOffset ?? 0) : 0;
                     return (
                       <div key={s.sellerName}>
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-gray-300 font-medium">{s.sellerName}</span>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap justify-end">
                             <span className={`font-semibold ${goal.color}`}>{goal.label}</span>
                             <span className="text-gray-400">{formatPontos(pt)}</span>
+                            {adj !== 0 && (
+                              <span className="text-amber-600/90 text-[10px] max-w-[9rem] text-right" title="pontosOffset aplicado neste filtro">
+                                ({adj > 0 ? "+" : ""}
+                                {Math.round(adj).toLocaleString("pt-BR")} calib.)
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">

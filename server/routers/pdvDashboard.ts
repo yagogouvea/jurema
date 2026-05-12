@@ -30,7 +30,12 @@ async function requirePdvAdmin(ctx: any) {
   return seller;
 }
 
-/** YYYY-MM — offset Manus só entra quando início e fim do filtro estão no mesmo mês. */
+/**
+ * Mês (YYYY-MM) em que o `pontosOffset` do vendedor entra na query do dashboard.
+ * Só devolve valor quando **início e fim do filtro** caem no **mesmo** mês; caso contrário
+ * retorna `null` e o SQL **não soma** `pontosOffset` (evita aplicar calibragem de um mês
+ * a um intervalo multi-mês).
+ */
 function pontosOffsetMesParam(startDate?: string, endDate?: string): string | null {
   if (!startDate || !endDate) return null;
   if (startDate.slice(0, 7) !== endDate.slice(0, 7)) return null;
@@ -135,7 +140,9 @@ export const pdvDashboardRouter = router({
             COALESCE(m.faturamento, 0) as faturamento,
             COALESCE(m.ticketMedio, 0) as ticketMedio,
             COALESCE(pt.pontuacao, 0)
-              + (CASE WHEN ? IS NOT NULL AND s.pontosOffsetMes = ? THEN COALESCE(s.pontosOffset, 0) ELSE 0 END) as pontuacao
+              + (CASE WHEN ? IS NOT NULL AND s.pontosOffsetMes = ? THEN COALESCE(s.pontosOffset, 0) ELSE 0 END) as pontuacao,
+            COALESCE(s.pontosOffset, 0) as pontosOffset,
+            s.pontosOffsetMes as pontosOffsetMes
            FROM pdv_sellers s
            LEFT JOIN (
              SELECT o.sellerId,
@@ -263,6 +270,8 @@ export const pdvDashboardRouter = router({
           faturamento: rowNumber(r.faturamento),
           ticketMedio: rowNumber(r.ticketMedio),
           pontuacao: rowNumber(r.pontuacao),
+          pontosOffset: rowNumber(r.pontosOffset),
+          pontosOffsetMes: r.pontosOffsetMes != null && r.pontosOffsetMes !== "" ? String(r.pontosOffsetMes) : null,
         }));
 
         const byPayment = (paymentRows as any[]).map((r) => ({
@@ -294,6 +303,8 @@ export const pdvDashboardRouter = router({
             orderDayMode: process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "convert_tz",
             startDate: input.startDate ?? null,
             endDate: input.endDate ?? null,
+            /** Quando não é null, o PT soma `pontosOffset` só nos vendedores com `pontosOffsetMes` igual a este YYYY-MM. */
+            pontosOffsetYm: offsetYm,
           },
         };
       } catch (err) {
@@ -407,6 +418,9 @@ export const pdvDashboardRouter = router({
    * Alinha PT ao Manus no mês do período: grava em cada vendedor `pontosOffset` e `pontosOffsetMes`
    * como (pontuacaoManus − soma atual de PT no período). Novas vendas somam em cima desse total.
    * Período deve ser inteiro dentro de um único YYYY-MM.
+   *
+   * O **dashboard** só soma esse offset no PT quando o filtro de datas tem início e fim no **mesmo**
+   * mês e esse mês é igual a `pontosOffsetMes` do vendedor (ver `pontosOffsetMesParam`).
    */
   syncPontosManusOffsets: publicProcedure
     .input(z.object({
