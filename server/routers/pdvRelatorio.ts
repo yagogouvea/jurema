@@ -100,10 +100,45 @@ async function fetchRelatorioData(db: Connection, startDate: string, endDate: st
       [startDate, endDate]
     );
 
+    // Lista detalhada de pedidos Sofia (com fotoUrl) para galeria do relatório.
+    const [pedidoRows] = await db.execute(
+      `SELECT
+         o.pedidoId,
+         o.sellerName,
+         o.status,
+         o.clienteNome,
+         o.fotoUrl,
+         ${orderDayDateExpr("o")} AS dia,
+         COALESCE(SUM(oi.quantidade), 0) AS pecasSofia,
+         COALESCE(SUM(oi.totalItem), 0) AS valorSofia
+       FROM pdv_orders o
+       JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 1
+       WHERE o.status != 'CANCELADO'
+         AND ${orderDayDateExpr("o")} >= ? AND ${orderDayDateExpr("o")} <= ?
+       GROUP BY o.id, o.pedidoId, o.sellerName, o.status, o.clienteNome, o.fotoUrl
+       ORDER BY o.createdAt ASC`,
+      [startDate, endDate]
+    );
+
     const summary = (summaryRows as any[])[0];
     const totalPecas = parseInt(summary.totalPecas) || 0;
     const faturamento = parseFloat(summary.faturamento) || 0;
     const comissaoTotal = parseFloat(summary.comissaoTotal) || 0;
+
+    const pedidos = (pedidoRows as any[]).map((r) => ({
+      pedidoId: String(r.pedidoId),
+      sellerName: String(r.sellerName ?? ""),
+      status: String(r.status ?? ""),
+      clienteNome: r.clienteNome ? String(r.clienteNome) : null,
+      // `dia` vem como Date (driver) ou string YMD (alguns hosts) — normaliza pra YYYY-MM-DD
+      dia: r.dia instanceof Date
+        ? r.dia.toISOString().slice(0, 10)
+        : String(r.dia ?? "").slice(0, 10),
+      pecasSofia: parseInt(r.pecasSofia) || 0,
+      valorSofia: parseFloat(r.valorSofia) || 0,
+      fotoUrl: r.fotoUrl ? String(r.fotoUrl) : null,
+    }));
+    const totalComFoto = pedidos.filter((p) => !!p.fotoUrl).length;
 
     result.sofia = {
       comissaoLoja: comissaoLojaPadrao,
@@ -125,6 +160,9 @@ async function fetchRelatorioData(db: Connection, startDate: string, endDate: st
           reembolso: Math.max(0, fat - comissao),
         };
       }),
+      pedidos,
+      totalComFoto,
+      totalSemFoto: pedidos.length - totalComFoto,
     };
   }
 

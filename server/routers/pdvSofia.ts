@@ -215,11 +215,22 @@ export const pdvSofiaRouter = router({
       return { success: true };
     }),
 
-  // Upload de foto para um pedido (base64 → S3)
+  /**
+   * Upload de foto Sofia (base64 → MySQL LONGBLOB).
+   *
+   * Antes esse endpoint dependia do "forge storage proxy" externo (envs
+   * BUILT_IN_FORGE_API_*) que não existem no Railway, então NENHUMA foto era
+   * persistida. Agora gravamos o blob direto no MySQL em `pdv_order_photos`
+   * e expomos via `GET /api/pdv/sofia/foto/:pedidoId`.
+   *
+   * - aceita `image/jpeg|png|webp`, máx. 5 MiB
+   * - usa INSERT … ON DUPLICATE KEY UPDATE para suportar troca de foto
+   * - grava em `pdv_orders.fotoUrl` o caminho relativo + cache-buster `?v=ts`
+   */
   uploadFoto: publicProcedure
     .input(z.object({
       pedidoId: z.string(),
-      base64: z.string(),   // data:image/jpeg;base64,...
+      base64: z.string(),
       mimeType: z.string().default("image/jpeg"),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -227,40 +238,73 @@ export const pdvSofiaRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       try {
-        const { storagePut } = await import("../storage");
-        // Extrair dados base64 (remover prefixo data:...;base64,)
+        const allowedMime = new Set(["image/jpeg", "image/png", "image/webp"]);
+        const mimeType = allowedMime.has(input.mimeType) ? input.mimeType : "image/jpeg";
         const base64Data = input.base64.replace(/^data:[^;]+;base64,/, "");
         const buffer = Buffer.from(base64Data, "base64");
-        const ext = input.mimeType === "image/png" ? "png" : "jpg";
-        const key = `pdv-fotos/${input.pedidoId}-${Date.now()}.${ext}`;
-        const { url } = await storagePut(key, buffer, input.mimeType);
-        // Salvar URL no pedido
+        const MAX = 5 * 1024 * 1024;
+        if (buffer.length === 0 || buffer.length > MAX) {
+          await db.end();
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Imagem inválida (tamanho ${buffer.length} bytes; máx ${MAX}).`,
+          });
+        }
+        // Garante que o pedido existe para evitar fotos órfãs
+        const [orderRows] = await db.execute(
+          "SELECT pedidoId FROM pdv_orders WHERE pedidoId = ? LIMIT 1",
+          [input.pedidoId]
+        );
+        if ((orderRows as any[]).length === 0) {
+          await db.end();
+          throw new TRPCError({ code: "NOT_FOUND", message: "Pedido não encontrado" });
+        }
+        await db.execute(
+          `INSERT INTO pdv_order_photos (pedidoId, mimeType, data, sizeBytes)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             mimeType = VALUES(mimeType),
+             data = VALUES(data),
+             sizeBytes = VALUES(sizeBytes),
+             updatedAt = CURRENT_TIMESTAMP`,
+          [input.pedidoId, mimeType, buffer, buffer.length]
+        );
+        // Cache-buster para que o browser/PDF sempre puxem a versão atual.
+        const url = `/api/pdv/sofia/foto/${encodeURIComponent(input.pedidoId)}?v=${Date.now()}`;
         await db.execute(
           "UPDATE pdv_orders SET fotoUrl = ? WHERE pedidoId = ?",
           [url, input.pedidoId]
         );
         await db.end();
-        return { success: true, url };
+        return { success: true, url, sizeBytes: buffer.length };
       } catch (err) {
-        await db.end();
-        console.error("[PDV Sofia] Erro ao fazer upload da foto:", err);
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao fazer upload da foto" });
+        try { await db.end(); } catch { /* já fechado */ }
+        if (err instanceof TRPCError) throw err;
+        console.error("[PDV Sofia] Erro ao salvar foto no MySQL:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao salvar foto" });
       }
     }),
 
-  // Remover foto de um pedido
+  // Remove a foto do pedido (apaga o blob e zera fotoUrl).
   removeFoto: publicProcedure
     .input(z.object({ pedidoId: z.string() }))
     .mutation(async ({ input, ctx }) => {
       await requirePdvAdmin(ctx);
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      await db.execute(
-        "UPDATE pdv_orders SET fotoUrl = NULL WHERE pedidoId = ?",
-        [input.pedidoId]
-      );
-      await db.end();
-      return { success: true };
+      try {
+        await db.execute("DELETE FROM pdv_order_photos WHERE pedidoId = ?", [input.pedidoId]);
+        await db.execute(
+          "UPDATE pdv_orders SET fotoUrl = NULL WHERE pedidoId = ?",
+          [input.pedidoId]
+        );
+        await db.end();
+        return { success: true };
+      } catch (err) {
+        try { await db.end(); } catch { /* já fechado */ }
+        console.error("[PDV Sofia] Erro ao remover foto:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao remover foto" });
+      }
     }),
 
   // Alternar status de pagamento (PAGO ↔ PENDENTE) com reflexo na planilha Sofia

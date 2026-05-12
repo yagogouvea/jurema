@@ -3,10 +3,36 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
   FileText, Download, Calendar, Filter, TrendingUp, Package, Wallet,
-  ChevronDown, ChevronUp, Loader2
+  Image as ImageIcon, Loader2
 } from "lucide-react";
 import PdvLayout from "./PdvLayout";
 import { firstOfMonthYmdSaoPaulo, lastOfMonthYmdSaoPaulo } from "@shared/spCalendar";
+
+/**
+ * Garante URL absoluta para que imagens hospedadas no MESMO host (`/api/...`)
+ * funcionem dentro da janela de impressão (que é `about:blank`).
+ */
+function absoluteUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${window.location.origin}${path}`;
+}
+
+/** Espera todas as <img> dentro do nó terminarem o `load` (ou erro). */
+function waitForAllImages(root: HTMLElement, timeoutMs = 8000): Promise<void> {
+  const imgs = Array.from(root.querySelectorAll("img"));
+  if (imgs.length === 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    let pending = imgs.length;
+    const done = () => { if (--pending <= 0) resolve(); };
+    for (const img of imgs) {
+      if (img.complete && img.naturalWidth > 0) { done(); continue; }
+      img.addEventListener("load", done, { once: true });
+      img.addEventListener("error", done, { once: true });
+    }
+    setTimeout(resolve, timeoutMs);
+  });
+}
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -36,7 +62,9 @@ export default function PdvRelatorio() {
     sofia: true,
     descontos: true,
   });
+  const [includeSofiaPhotos, setIncludeSofiaPhotos] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, refetch } = trpc.pdvRelatorio.getData.useQuery(
@@ -57,7 +85,7 @@ export default function PdvRelatorio() {
     refetch();
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!printRef.current) return;
     const printContent = printRef.current.innerHTML;
     const printWindow = window.open("", "_blank");
@@ -65,6 +93,7 @@ export default function PdvRelatorio() {
       toast.error("Popup bloqueado. Permita popups para imprimir.");
       return;
     }
+    setPrinting(true);
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -88,7 +117,16 @@ export default function PdvRelatorio() {
           .summary-value { font-weight: 700; font-size: 12px; }
           .summary-value.highlight { color: #16a34a; font-size: 14px; }
           .footer { text-align: center; margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; color: #999; font-size: 10px; }
-          @media print { body { padding: 12px; } }
+          .sofia-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+          .sofia-card { border: 1px solid #e9d5ff; border-radius: 8px; padding: 8px; background: #faf5ff; page-break-inside: avoid; }
+          .sofia-card img { display: block; width: 100%; height: 140px; object-fit: cover; border-radius: 6px; background: #f3f4f6; border: 1px solid #e5e7eb; }
+          .sofia-card .meta { font-size: 10px; color: #4b5563; margin-top: 6px; line-height: 1.35; }
+          .sofia-card .pid { font-weight: 700; color: #6b21a8; }
+          .sofia-card .row { display: flex; justify-content: space-between; gap: 6px; }
+          @media print {
+            body { padding: 12px; }
+            img { max-width: 100% !important; }
+          }
         </style>
       </head>
       <body>
@@ -100,9 +138,22 @@ export default function PdvRelatorio() {
       </html>
     `);
     printWindow.document.close();
-    setTimeout(() => {
+    try {
+      // Aguarda imagens carregarem na janela do print antes de chamar window.print()
+      // (o navegador embute as imagens no PDF a partir do DOM já renderizado).
+      const win: any = printWindow;
+      if (win.document.readyState !== "complete") {
+        await new Promise<void>((resolve) => {
+          win.addEventListener("load", () => resolve(), { once: true });
+          setTimeout(resolve, 4000);
+        });
+      }
+      await waitForAllImages(printWindow.document.body);
+      printWindow.focus();
       printWindow.print();
-    }, 300);
+    } finally {
+      setPrinting(false);
+    }
   };
 
   return (
@@ -187,6 +238,22 @@ export default function PdvRelatorio() {
             <Wallet className="w-4 h-4 text-amber-500" />
             <span className="text-white text-sm">Descontos em Folha</span>
           </label>
+          <label
+            className={`flex items-center gap-2 cursor-pointer bg-gray-800 rounded-lg px-4 py-2.5 border transition-colors ${
+              sections.sofia ? "border-gray-700 hover:border-purple-600" : "border-gray-800 opacity-50 cursor-not-allowed"
+            }`}
+            title={sections.sofia ? "Inclui as fotos dos pedidos Sofia no preview e no PDF" : "Selecione Sofia para liberar"}
+          >
+            <input
+              type="checkbox"
+              checked={includeSofiaPhotos}
+              disabled={!sections.sofia}
+              onChange={(e) => setIncludeSofiaPhotos(e.target.checked)}
+              className="accent-purple-600 w-4 h-4"
+            />
+            <ImageIcon className="w-4 h-4 text-purple-500" />
+            <span className="text-white text-sm">Fotos Sofia no PDF</span>
+          </label>
         </div>
 
         {/* Botões */}
@@ -202,10 +269,11 @@ export default function PdvRelatorio() {
           {showPreview && data && (
             <button
               onClick={handlePrint}
-              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+              disabled={printing}
+              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-60"
             >
-              <Download className="w-4 h-4" />
-              Imprimir / PDF
+              {printing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {printing ? "Preparando PDF…" : "Imprimir / PDF"}
             </button>
           )}
         </div>
@@ -225,16 +293,22 @@ export default function PdvRelatorio() {
             <h2 className="text-white font-semibold text-sm">Preview do Relatório</h2>
             <button
               onClick={handlePrint}
-              className="flex items-center gap-2 bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
+              disabled={printing}
+              className="flex items-center gap-2 bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60"
             >
-              <Download className="w-3.5 h-3.5" />
-              Imprimir / PDF
+              {printing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              {printing ? "Preparando PDF…" : "Imprimir / PDF"}
             </button>
           </div>
 
           {/* Conteúdo imprimível */}
           <div ref={printRef} className="bg-white rounded-xl p-6 text-gray-900">
-            <ReportContent data={data} startDate={startDate} endDate={endDate} />
+            <ReportContent
+              data={data}
+              startDate={startDate}
+              endDate={endDate}
+              includeSofiaPhotos={includeSofiaPhotos}
+            />
           </div>
         </div>
       )}
@@ -246,10 +320,11 @@ export default function PdvRelatorio() {
 // ============================================================
 // Componente de conteúdo do relatório (usado no preview e na impressão)
 // ============================================================
-function ReportContent({ data, startDate, endDate }: {
+function ReportContent({ data, startDate, endDate, includeSofiaPhotos }: {
   data: any;
   startDate: string;
   endDate: string;
+  includeSofiaPhotos: boolean;
 }) {
   return (
     <div>
@@ -371,6 +446,79 @@ function ReportContent({ data, startDate, endDate }: {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {/* Galeria de comprovantes Sofia (vai junto no PDF impresso) */}
+          {includeSofiaPhotos && Array.isArray(data.sofia.pedidos) && data.sofia.pedidos.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#6b21a8", marginBottom: 8 }}>
+                Comprovantes Sofia ({data.sofia.totalComFoto || 0} com foto · {data.sofia.totalSemFoto || 0} sem foto)
+              </div>
+              <div className="sofia-gallery" style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 10,
+              }}>
+                {data.sofia.pedidos.map((p: any) => {
+                  const url = absoluteUrl(p.fotoUrl);
+                  return (
+                    <div key={p.pedidoId} className="sofia-card" style={{
+                      border: "1px solid #e9d5ff",
+                      borderRadius: 8,
+                      padding: 8,
+                      background: "#faf5ff",
+                      pageBreakInside: "avoid",
+                    }}>
+                      {url ? (
+                        <img
+                          src={url}
+                          alt={`Pedido ${p.pedidoId}`}
+                          crossOrigin="anonymous"
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            height: 140,
+                            objectFit: "cover",
+                            borderRadius: 6,
+                            background: "#f3f4f6",
+                            border: "1px solid #e5e7eb",
+                          }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: "100%",
+                          height: 140,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: 6,
+                          background: "#fef3c7",
+                          color: "#92400e",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          border: "1px dashed #fbbf24",
+                        }}>
+                          Sem foto
+                        </div>
+                      )}
+                      <div className="meta" style={{ fontSize: 10, color: "#4b5563", marginTop: 6, lineHeight: 1.35 }}>
+                        <div className="row" style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                          <span className="pid" style={{ fontWeight: 700, color: "#6b21a8" }}>{p.pedidoId}</span>
+                          <span>{formatDate(p.dia)}</span>
+                        </div>
+                        <div className="row" style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 2 }}>
+                          <span>{p.sellerName}</span>
+                          <span style={{ fontWeight: 700, color: "#111" }}>{formatCurrency(p.valorSofia)} · {p.pecasSofia}pç</span>
+                        </div>
+                        {p.clienteNome && (
+                          <div style={{ marginTop: 2, color: "#6b7280" }}>{p.clienteNome}</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       )}

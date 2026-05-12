@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerUploadRoutes } from "../uploadHandler";
+import { registerPdvSofiaPhotoRoute } from "../pdvSofiaPhotoRoute";
 import { runPdvMigration, seedPdvData } from "../routers/pdvMigration";
 import { runAutoSync } from "../routers/pdvAutoSync";
 
@@ -56,6 +57,8 @@ async function startServer() {
   registerOAuthRoutes(app);
   // File upload routes
   registerUploadRoutes(app);
+  // Foto Sofia armazenada em MySQL LONGBLOB (servida com cache forte e ?v= cache-buster)
+  registerPdvSofiaPhotoRoute(app);
   // tRPC API
   app.use(
     "/api/trpc",
