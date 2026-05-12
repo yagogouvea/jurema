@@ -109,22 +109,26 @@ export const pdvDashboardRouter = router({
           params.push(input.endDate);
         }
 
-        // KPIs e R$ por vendedor/dia: total do pedido (totalAplicado). Não depende de linhas em pdv_order_items.
+        // KPIs e R$ por vendedor/dia: mesmo critério do Manus — soma `totalItem` só de itens não-Sofia
+        // (alinha com PT; `totalAplicado` do pedido inclui Sofia/serviços e infla o gráfico “Por vendedor”).
+        const joinItensNaoSofia = `LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND ${SQL_OI_NAO_SOFIA}`;
         const [totalRows] = await db.execute(
           `SELECT 
-            COUNT(*) as totalPedidos,
-            COALESCE(SUM(o.totalAplicado), 0) as faturamento,
-            COALESCE(AVG(o.totalAplicado), 0) as ticketMedio,
-            COALESCE(SUM(CASE WHEN o.regime = 'ATACADO' THEN o.totalAplicado ELSE 0 END), 0) as faturamentoAtacado,
-            COALESCE(SUM(CASE WHEN o.regime = 'VAREJO' THEN o.totalAplicado ELSE 0 END), 0) as faturamentoVarejo,
-            COALESCE(SUM(CASE WHEN o.canal = 'BALCAO' THEN o.totalAplicado ELSE 0 END), 0) as faturamentoBalcao,
-            COALESCE(SUM(CASE WHEN o.canal = 'WHATSAPP' THEN o.totalAplicado ELSE 0 END), 0) as faturamentoWhatsapp
+            COUNT(DISTINCT o.id) as totalPedidos,
+            COALESCE(SUM(oi.totalItem), 0) as faturamento,
+            CASE WHEN COUNT(DISTINCT o.id) > 0
+              THEN COALESCE(SUM(oi.totalItem), 0) / COUNT(DISTINCT o.id) ELSE 0 END as ticketMedio,
+            COALESCE(SUM(CASE WHEN o.regime = 'ATACADO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoAtacado,
+            COALESCE(SUM(CASE WHEN o.regime = 'VAREJO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoVarejo,
+            COALESCE(SUM(CASE WHEN o.canal = 'BALCAO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoBalcao,
+            COALESCE(SUM(CASE WHEN o.canal = 'WHATSAPP' THEN oi.totalItem ELSE 0 END), 0) as faturamentoWhatsapp
            FROM pdv_orders o
+           ${joinItensNaoSofia}
            WHERE o.status != 'CANCELADO' ${dateFilter}`,
           params
         );
 
-        // Por vendedor: R$ = soma totalAplicado; PT = só itens não-Sofia (+ offset Manus no mês).
+        // Por vendedor: R$ = soma itens não-Sofia (Manus); PT = mesma base de itens (+ offset Manus no mês).
         const offsetYm = pontosOffsetMesParam(input.startDate, input.endDate);
         const sqlBySellerComOffset = `SELECT s.name as sellerName,
             COALESCE(m.pedidos, 0) as pedidos,
@@ -135,10 +139,12 @@ export const pdvDashboardRouter = router({
            FROM pdv_sellers s
            LEFT JOIN (
              SELECT o.sellerId,
-               COUNT(*) as pedidos,
-               COALESCE(SUM(o.totalAplicado), 0) as faturamento,
-               COALESCE(AVG(o.totalAplicado), 0) as ticketMedio
+               COUNT(DISTINCT o.id) as pedidos,
+               COALESCE(SUM(oi.totalItem), 0) as faturamento,
+               CASE WHEN COUNT(DISTINCT o.id) > 0
+                 THEN COALESCE(SUM(oi.totalItem), 0) / COUNT(DISTINCT o.id) ELSE 0 END as ticketMedio
              FROM pdv_orders o
+             ${joinItensNaoSofia}
              WHERE o.status != 'CANCELADO' ${dateFilter}
              GROUP BY o.sellerId
            ) m ON m.sellerId = s.id
@@ -163,10 +169,12 @@ export const pdvDashboardRouter = router({
            FROM pdv_sellers s
            LEFT JOIN (
              SELECT o.sellerId,
-               COUNT(*) as pedidos,
-               COALESCE(SUM(o.totalAplicado), 0) as faturamento,
-               COALESCE(AVG(o.totalAplicado), 0) as ticketMedio
+               COUNT(DISTINCT o.id) as pedidos,
+               COALESCE(SUM(oi.totalItem), 0) as faturamento,
+               CASE WHEN COUNT(DISTINCT o.id) > 0
+                 THEN COALESCE(SUM(oi.totalItem), 0) / COUNT(DISTINCT o.id) ELSE 0 END as ticketMedio
              FROM pdv_orders o
+             ${joinItensNaoSofia}
              WHERE o.status != 'CANCELADO' ${dateFilter}
              GROUP BY o.sellerId
            ) m ON m.sellerId = s.id
@@ -212,12 +220,13 @@ export const pdvDashboardRouter = router({
           params
         );
 
-        // Faturamento por dia — total do pedido (igual KPI).
+        // Faturamento por dia — itens não-Sofia (igual KPI / Manus).
         const [dailyRows] = await db.execute(
           `SELECT ${dayYmd} as dia,
-            COUNT(*) as pedidos,
-            COALESCE(SUM(o.totalAplicado), 0) as faturamento
+            COUNT(DISTINCT o.id) as pedidos,
+            COALESCE(SUM(oi.totalItem), 0) as faturamento
            FROM pdv_orders o
+           ${joinItensNaoSofia}
            WHERE o.status != 'CANCELADO' ${dateFilter}
            GROUP BY ${dayYmd}
            ORDER BY dia ASC`,

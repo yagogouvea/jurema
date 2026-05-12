@@ -217,9 +217,10 @@ export default function PdvDashboard() {
           <div className="rounded-xl border border-amber-800/50 bg-amber-950/25 px-4 py-3 text-amber-100 text-sm space-y-1">
             <p>
               <strong className="font-semibold">Nenhum pedido neste período.</strong>{" "}
-              Ajuste as datas (ex.: desde o início do ano da importação) ou confira no banco se há linhas em{" "}
-              <code className="text-amber-200/90">pdv_orders</code> com <code className="text-amber-200/90">status</code>{" "}
-              diferente de cancelado e <code className="text-amber-200/90">totalAplicado</code> preenchido.
+              Ajuste as datas (ex.: desde o início do ano da importação) ou confira no banco se há{" "}
+              <code className="text-amber-200/90">pdv_orders</code> no intervalo (não cancelados) com itens em{" "}
+              <code className="text-amber-200/90">pdv_order_items</code> (o faturamento do dashboard segue a soma dos{" "}
+              <code className="text-amber-200/90">totalItem</code> fora da linha Sofia, como no Manus).
             </p>
             {data.meta && (
               <p className="text-amber-200/80 text-xs">
