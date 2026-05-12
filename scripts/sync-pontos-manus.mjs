@@ -1,11 +1,20 @@
 /**
  * Sincroniza PT com o Manus: grava pdv_sellers.pontosOffset = (Manus − soma PT no período).
- * Uso (na raiz do repo, com DATABASE_URL):
+ *
+ * IMPORTANTE: a soma de PT aqui é a MESMA regra do dashboard / syncPontosManusOffsets:
+ * - itens com (COALESCE(oi.isSofia, 0) = 0)
+ * - sem filtrar o.isSofia no pedido
+ * - filtro de dia do pedido = mesmo PDV_DASHBOARD_ORDER_DAY_MODE do Railway (vazio = CONVERT_TZ -03)
+ *
+ * Uso (na raiz do repo, com DATABASE_URL e opcionalmente PDV_DASHBOARD_ORDER_DAY_MODE):
  *   node scripts/sync-pontos-manus.mjs [startDate] [endDate]
  *
- * O período DEVE ser o mesmo do relatório Manus e ficar dentro de um único mês (YYYY-MM).
- * Exemplo (maio/2026 até dia 11):
- *   node scripts/sync-pontos-manus.mjs 2026-05-01 2026-05-11
+ * O período deve ser o MESMO do relatório Manus do print (um único YYYY-MM).
+ * Se o print é “até ontem” e hoje já houve venda, use endDate = ontem para o baseline bater;
+ * depois, no dashboard com o mês inteiro, o PT = baseline + vendas novas.
+ *
+ * Exemplo:
+ *   node scripts/sync-pontos-manus.mjs 2026-05-01 2026-05-31
  */
 import mysql from "mysql2/promise";
 
@@ -15,7 +24,16 @@ if (!url) {
   process.exit(1);
 }
 
-/** Valores do painel Manus (captura informada pelo usuário). Ajuste os nomes se no banco forem diferentes. */
+/** Mesma lógica que server/routers/pdvDashboard.ts — orderDayDateExpr */
+function orderDayDateExpr(alias) {
+  const mode = (process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "").trim().toLowerCase();
+  const c = `${alias}.createdAt`;
+  if (mode === "server_date") return `DATE(${c})`;
+  if (mode === "add3h") return `DATE(DATE_ADD(${c}, INTERVAL 3 HOUR))`;
+  return `DATE(CONVERT_TZ(${c}, '+00:00', '-03:00'))`;
+}
+
+/** Valores do painel Manus (print de referência). Ajuste os nomes se no banco forem diferentes. */
 const TARGETS = [
   { sellerName: "GABRIEL", pontuacaoManus: 14121 },
   { sellerName: "MURILO", pontuacaoManus: 6845 },
@@ -33,10 +51,13 @@ if (startDate.slice(0, 7) !== endDate.slice(0, 7)) {
 }
 const ym = startDate.slice(0, 7);
 
-const dateFilter =
-  " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?" +
-  " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?";
+const dayCmp = orderDayDateExpr("o");
+const dateFilter = ` AND ${dayCmp} >= ? AND ${dayCmp} <= ?`;
 const dateParams = [startDate, endDate];
+
+const modeLabel = process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "(vazio=convert_tz -03)";
+console.log(`PDV_DASHBOARD_ORDER_DAY_MODE=${modeLabel}`);
+console.log(`Período: ${startDate} .. ${endDate} (mês ${ym})`);
 
 const db = await mysql.createConnection(url);
 
@@ -57,8 +78,8 @@ for (const t of TARGETS) {
            ELSE oi.ptVarejo * oi.quantidade END
     ), 0) as pontuacao
     FROM pdv_orders o
-    JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 0
-    WHERE o.sellerId = ? AND o.status != 'CANCELADO' AND o.isSofia = 0 ${dateFilter}`,
+    JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND (COALESCE(oi.isSofia, 0) = 0)
+    WHERE o.sellerId = ? AND o.status != 'CANCELADO' ${dateFilter}`,
     [sellerId, ...dateParams]
   );
   const pontosSistema = parseFloat(String(sumRows[0]?.pontuacao ?? "0"));
@@ -74,4 +95,4 @@ for (const t of TARGETS) {
 }
 
 await db.end();
-console.log("Concluído. Rode a migration SQL se ainda não criou pontosOffset / pontosOffsetMes.");
+console.log("Concluído. Colunas pontosOffset / pontosOffsetMes exigem migration 0017 se ainda não aplicada.");
