@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import PdvLayout from "./PdvLayout";
 import { toast } from "sonner";
-import { localDateYmd } from "@/lib/localDateYmd";
+import { firstOfMonthYmdSaoPaulo, todayYmdSaoPaulo } from "@shared/spCalendar";
 import {
   Search, ChevronDown, ChevronUp, X, Eye, Calendar,
   ShoppingBag, DollarSign, User, Package, CreditCard, Wrench
@@ -39,12 +39,8 @@ export default function PdvHistorico() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"PAGO" | "PENDENTE" | "CANCELADO" | "">("")
   const [canalFilter, setCanalFilter] = useState<"BALCAO" | "WHATSAPP" | "">("")
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(1);
-    return localDateYmd(d);
-  });
-  const [endDate, setEndDate] = useState(() => localDateYmd());
+  const [startDate, setStartDate] = useState(() => firstOfMonthYmdSaoPaulo());
+  const [endDate, setEndDate] = useState(() => todayYmdSaoPaulo());
   const [page, setPage] = useState(1);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 

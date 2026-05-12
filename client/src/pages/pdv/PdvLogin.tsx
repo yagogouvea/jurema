@@ -13,12 +13,12 @@ export default function PdvLogin() {
 
   const loginMutation = trpc.pdvAuth.login.useMutation({
     onSuccess: async (data) => {
-      toast.success(`Bem-vindo, ${data.seller.name}!`);
-      // Salvar token no localStorage para enviar via Authorization header nas chamadas tRPC
-      // Isso resolve o problema de cookies SameSite em produção
-      if (data.token) {
-        localStorage.setItem("pdv_token", data.token);
+      if (!data.token?.trim()) {
+        toast.error("Login sem token JWT — verifique o servidor PDV.");
+        return;
       }
+      toast.success(`Bem-vindo, ${data.seller.name}!`);
+      localStorage.setItem("pdv_token", data.token.trim());
       const role = data.seller.role === "admin" ? "admin" : "seller";
       utils.pdvAuth.me.setData(undefined, {
         sellerId: data.seller.id,

@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import mysql from "mysql2/promise";
 import crypto from "crypto";
 import { SignJWT, jwtVerify } from "jose";
 import type { Request, Response } from "express";
 import { getSessionCookieOptions } from "../_core/cookies";
+import { createPdvMysqlConnection } from "../pdvMysql";
 
 const PDV_COOKIE = "pdv_token";
 const PDV_SALT = "pdv_salt_jumera";
@@ -15,10 +15,7 @@ function hashPassword(password: string): string {
 }
 
 async function getDb() {
-  const url = process.env.DATABASE_URL;
-  if (!url) return null;
-  // connectTimeout de 5s para evitar travamento quando o banco está lento
-  return mysql.createConnection({ uri: url, connectTimeout: 5000 });
+  return createPdvMysqlConnection();
 }
 
 async function createPdvToken(seller: { id: number; name: string; username: string; role: string }) {
@@ -35,26 +32,31 @@ async function createPdvToken(seller: { id: number; name: string; username: stri
 }
 
 export async function verifyPdvToken(req: Request): Promise<{ sellerId: number; name: string; username: string; role: string } | null> {
-  try {
-    const cookieHeader = req.headers.cookie || "";
-    const cookies: Record<string, string> = {};
-    cookieHeader.split(";").forEach(part => {
-      const [k, ...v] = part.trim().split("=");
-      if (k) cookies[k.trim()] = decodeURIComponent(v.join("="));
-    });
-    let token = cookies[PDV_COOKIE];
-    // Dev HTTP: cookie SameSite=None sem Secure é rejeitado; o front envia Bearer (localStorage).
-    if (!token) {
-      const auth = req.headers.authorization;
-      if (auth?.startsWith("Bearer ")) token = auth.slice(7).trim();
+  const cookieHeader = req.headers.cookie || "";
+  const cookies: Record<string, string> = {};
+  cookieHeader.split(";").forEach(part => {
+    const [k, ...v] = part.trim().split("=");
+    if (k) cookies[k.trim()] = decodeURIComponent(v.join("="));
+  });
+  const authHeader = req.headers.authorization?.trim() ?? "";
+  const bearer =
+    authHeader.length > 0 && /^bearer\s+/i.test(authHeader)
+      ? authHeader.replace(/^bearer\s+/i, "").trim()
+      : "";
+  // Bearer primeiro: localStorage costuma ser o JWT atual; cookie antigo não deve bloquear.
+  const cookieTok = cookies[PDV_COOKIE];
+  const tryTokens = [...(bearer ? [bearer] : []), ...(cookieTok && cookieTok !== bearer ? [cookieTok] : [])];
+  const secret = new TextEncoder().encode(process.env.JWT_SECRET || "pdv_jwt_secret_fallback");
+  for (const t of tryTokens) {
+    if (!t?.length) continue;
+    try {
+      const { payload } = await jwtVerify(t, secret);
+      return payload as { sellerId: number; name: string; username: string; role: string };
+    } catch {
+      /* tenta próximo */
     }
-    if (!token) return null;
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || "pdv_jwt_secret_fallback");
-    const { payload } = await jwtVerify(token, secret);
-    return payload as { sellerId: number; name: string; username: string; role: string };
-  } catch {
-    return null;
   }
+  return null;
 }
 
 export const pdvAuthRouter = router({

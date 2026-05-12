@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { useLocation, useSearch } from "wouter";
-import { localDateYmd } from "@/lib/localDateYmd";
+import { firstOfMonthYmdSaoPaulo, todayYmdSaoPaulo } from "@shared/spCalendar";
 import PdvLayout from "./PdvLayout";
 import {
   AreaChart, Area, BarChart, Bar,
@@ -46,11 +46,8 @@ export default function PdvSellerPanel() {
   }, [search]);
 
   const [selectedSellerId, setSelectedSellerId] = useState<number | undefined>(initialSellerId);
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date(); d.setDate(1);
-    return localDateYmd(d);
-  });
-  const [endDate, setEndDate] = useState(() => localDateYmd());
+  const [startDate, setStartDate] = useState(() => firstOfMonthYmdSaoPaulo());
+  const [endDate, setEndDate] = useState(() => todayYmdSaoPaulo());
 
   const queryInput = useMemo(() => ({
     sellerId: selectedSellerId,

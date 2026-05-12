@@ -106,6 +106,26 @@
   }
 }
 
+/* Inputs nativos no tema escuro: deixa o calendário/relógio do <input type="date|time|datetime-local"> visível */
+html { color-scheme: dark; }
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="week"] {
+  color-scheme: dark;
+  cursor: pointer;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="week"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+  opacity: 0.85;
+}
+
 /* Scrollbar personalizada — verde */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #0D0D0D; }

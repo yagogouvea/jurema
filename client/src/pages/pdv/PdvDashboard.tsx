@@ -12,7 +12,7 @@ import {
   Target, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Box, ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
-import { localDateYmd } from "@/lib/localDateYmd";
+import { firstOfMonthYmdSaoPaulo, todayYmdSaoPaulo } from "@shared/spCalendar";
 
 const COLORS = ["#16a34a", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 
@@ -28,12 +28,8 @@ function formatDate(dateStr: string): string {
 export default function PdvDashboard() {
   const { isAdmin } = usePdvAuth();
   const [, navigate] = useLocation();
-  const [startDate, setStartDate] = useState(() => {
-    // Cobre importações e vendas fora do mês atual (evita dashboard “zerado” só por filtro)
-    const now = new Date();
-    return localDateYmd(new Date(now.getFullYear() - 1, 0, 1));
-  });
-  const [endDate, setEndDate] = useState(() => localDateYmd());
+  const [startDate, setStartDate] = useState(() => firstOfMonthYmdSaoPaulo());
+  const [endDate, setEndDate] = useState(() => todayYmdSaoPaulo());
   const [showCashModal, setShowCashModal] = useState<"SUPRIMENTO" | "SANGRIA" | null>(null);
   const [cashDesc, setCashDesc] = useState("");
   const [cashValor, setCashValor] = useState("");
@@ -161,6 +157,7 @@ export default function PdvDashboard() {
     name: p.formaPagamento,
     value: Number(p.total ?? 0),
   }));
+  const totalPagamentos = chartPaymentData.reduce((acc, p) => acc + p.value, 0);
 
   const chartCanalData = [
     { name: "Balcao", value: faturamentoBalcao },
@@ -182,34 +179,64 @@ export default function PdvDashboard() {
     <PdvLayout>
       <div className="p-6 space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-white text-2xl font-bold">Dashboard</h1>
-            <p className="text-gray-400 text-sm mt-0.5">Visão geral das vendas</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-xl px-3 py-2">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent text-white text-sm focus:outline-none"
-              />
-              <span className="text-gray-600">-</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent text-white text-sm focus:outline-none"
-              />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="text-white text-2xl font-bold">Dashboard</h1>
+              <p className="text-gray-400 text-sm mt-0.5">Visão geral das vendas</p>
             </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-xl px-3 py-2">
+                <Calendar className="w-4 h-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-transparent text-white text-sm focus:outline-none cursor-pointer min-w-[128px]"
+                />
+                <span className="text-gray-600">-</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-transparent text-white text-sm focus:outline-none cursor-pointer min-w-[128px]"
+                />
+              </div>
+              <button
+                onClick={() => refetch()}
+                className="bg-gray-900 border border-gray-800 rounded-xl p-2 text-gray-400 hover:text-white transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <span className="text-gray-600">Atalhos:</span>
             <button
-              onClick={() => refetch()}
-              className="bg-gray-900 border border-gray-800 rounded-xl p-2 text-gray-400 hover:text-white transition-colors"
+              type="button"
+              className="text-green-500 hover:text-green-400 underline-offset-2 hover:underline"
+              onClick={() => {
+                setStartDate(firstOfMonthYmdSaoPaulo());
+                setEndDate(todayYmdSaoPaulo());
+              }}
             >
-              <RefreshCw className="w-4 h-4" />
+              Mês atual
             </button>
+            <span className="text-gray-700">·</span>
+            <button
+              type="button"
+              className="text-gray-400 hover:text-gray-300 underline-offset-2 hover:underline"
+              onClick={() => {
+                const y = Number(todayYmdSaoPaulo().slice(0, 4));
+                setStartDate(`${y - 1}-01-01`);
+                setEndDate(todayYmdSaoPaulo());
+              }}
+            >
+              Desde 01/01 do ano anterior
+            </button>
+            <span className="text-gray-600 max-md:hidden">
+              (períodos longos não aplicam <code className="text-gray-500">pontosOffset</code> do Manus.)
+            </span>
           </div>
         </div>
 
@@ -315,18 +342,17 @@ export default function PdvDashboard() {
               <p className="text-xs text-gray-500 mb-3 leading-relaxed">
                 {data.meta.pontosOffsetYm ? (
                   <>
-                    PT pode incluir <span className="text-gray-400">pontosOffset</span> (Manus): só quando o filtro de
-                    datas é <strong className="text-gray-400">um único mês</strong> ({data.meta.pontosOffsetYm}) e o
-                    vendedor tem <span className="text-gray-400">pontosOffsetMes</span> igual a esse mês. Caso contrário
-                    entra só a soma dos itens. Calibre o sync com o Manus até ontem; com a{" "}
-                    <strong className="text-gray-400">data fim = hoje</strong>, entram também as vendas do dia no
-                    Railway.
+                    O valor em <strong className="text-gray-400">PT</strong> abaixo já é o total final (soma dos pedidos
+                    + calibragem Manus neste mês, quando aplicável).{" "}
+                    <strong className="text-gray-400">Novos pedidos</strong> entram automaticamente na soma dos itens.{" "}
+                    Recalibre com o Manus (sync) quando quiser realinhar de novo. Filtro: mês{" "}
+                    <strong className="text-gray-400">{data.meta.pontosOffsetYm}</strong>; use{" "}
+                    <strong className="text-gray-400">data fim = hoje</strong> para incluir vendas do dia.
                   </>
                 ) : (
                   <>
-                    Período em <strong className="text-gray-400">vários meses</strong>: o PT desta tela{" "}
-                    <strong className="text-gray-400">não soma pontosOffset</strong> (apenas itens). Para ver o mesmo
-                    total do Manus com calibragem, filtre início e fim dentro do mesmo YYYY-MM.
+                    Período em <strong className="text-gray-400">vários meses</strong>: o PT é só a soma dos itens (sem
+                    calibragem). Para total alinhado ao Manus no mês, filtre início e fim no mesmo YYYY-MM.
                   </>
                 )}
               </p>
@@ -353,22 +379,18 @@ export default function PdvDashboard() {
                     const pt = Number(s.pontuacao ?? 0);
                     const goal = getGoalLevel(pt);
                     const pct = ouro > 0 ? Math.min(100, (pt / ouro) * 100) : 0;
-                    const ym = data?.meta?.pontosOffsetYm;
-                    const adj =
-                      ym && s.pontosOffsetMes === ym ? Number(s.pontosOffset ?? 0) : 0;
                     return (
                       <div key={s.sellerName}>
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-gray-300 font-medium">{s.sellerName}</span>
                           <div className="flex items-center gap-2 flex-wrap justify-end">
                             <span className={`font-semibold ${goal.color}`}>{goal.label}</span>
-                            <span className="text-gray-400">{formatPontos(pt)}</span>
-                            {adj !== 0 && (
-                              <span className="text-amber-600/90 text-[10px] max-w-[9rem] text-right" title="pontosOffset aplicado neste filtro">
-                                ({adj > 0 ? "+" : ""}
-                                {Math.round(adj).toLocaleString("pt-BR")} calib.)
-                              </span>
-                            )}
+                            <span
+                              className="text-gray-400 tabular-nums"
+                              title="PT total do período (itens + calibragem Manus no mês, quando o filtro é um único mês)"
+                            >
+                              {formatPontos(pt)}
+                            </span>
                           </div>
                         </div>
                         <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
@@ -389,7 +411,24 @@ export default function PdvDashboard() {
           <div className="space-y-4">
             {/* Formas de Pagamento */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-              <h3 className="text-white font-semibold mb-3">Formas de Pagamento</h3>
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <h3 className="text-white font-semibold">Formas de Pagamento</h3>
+                <span
+                  className="text-[11px] text-gray-500"
+                  title="Total recebido por meio de pagamento no período (inclui serviços e itens Sofia). Pode ser maior que o faturamento de peças."
+                >
+                  recebido no período
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">
+                Total recebido: <span className="text-gray-300 font-medium">{formatCurrency(totalPagamentos)}</span>
+                {Math.abs(totalPagamentos - faturamento) > 0.5 && (
+                  <span className="text-gray-600">
+                    {" "}· faturamento de peças: <span className="text-gray-400">{formatCurrency(faturamento)}</span>
+                    {" "}(diferença = serviços/Sofia)
+                  </span>
+                )}
+              </p>
               {chartPaymentData.length === 0 ? (
                 <div className="flex items-center justify-center h-24 text-gray-600 text-sm">Sem dados</div>
               ) : (
@@ -404,15 +443,21 @@ export default function PdvDashboard() {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="flex-1 space-y-1.5">
-                    {chartPaymentData.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                          <span className="text-gray-300">{item.name}</span>
+                    {chartPaymentData.map((item, i) => {
+                      const pct = totalPagamentos > 0 ? (item.value / totalPagamentos) * 100 : 0;
+                      return (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                            <span className="text-gray-300">{item.name}</span>
+                          </div>
+                          <span className="text-white font-medium tabular-nums">
+                            {formatCurrency(item.value)}{" "}
+                            <span className="text-gray-500 font-normal">({pct.toFixed(0)}%)</span>
+                          </span>
                         </div>
-                        <span className="text-white font-medium">{formatCurrency(item.value)}</span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

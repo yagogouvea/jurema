@@ -3,6 +3,15 @@ import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import PdvLayout from "./PdvLayout";
 import { Trophy, Star, Medal, TrendingUp, ShoppingBag, Package, ChevronLeft, ChevronRight, Calendar, Box, DollarSign, Layers, Gift } from "lucide-react";
+import {
+  todayYmdSaoPaulo,
+  firstOfMonthYmdSaoPaulo,
+  lastOfMonthYmdSaoPaulo,
+  mondayOfWeekYmdSaoPaulo,
+  addCalendarDaysYmdSaoPaulo,
+  firstDayOfPreviousMonthYmdSaoPaulo,
+  lastDayOfPreviousMonthYmdSaoPaulo,
+} from "@shared/spCalendar";
 
 function formatPT(v: number) {
   return `${Math.round(v).toLocaleString("pt-BR")} PT`;
@@ -23,28 +32,22 @@ const LEVEL_CONFIG = {
 // Atalhos de período
 const PERIOD_SHORTCUTS = [
   { label: "Hoje", getValue: () => {
-    const d = new Date().toISOString().slice(0, 10);
+    const d = todayYmdSaoPaulo();
     return { start: d, end: d };
   }},
   { label: "Esta semana", getValue: () => {
-    const now = new Date();
-    const day = now.getDay();
-    const mon = new Date(now); mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    return { start: mon.toISOString().slice(0, 10), end: sun.toISOString().slice(0, 10) };
+    const mon = mondayOfWeekYmdSaoPaulo();
+    const sun = addCalendarDaysYmdSaoPaulo(mon, 6);
+    return { start: mon, end: sun };
   }},
-  { label: "Este mês", getValue: () => {
-    const now = new Date();
-    const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-    return { start, end };
-  }},
-  { label: "Mês passado", getValue: () => {
-    const now = new Date();
-    const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const last = new Date(now.getFullYear(), now.getMonth(), 0);
-    return { start: first.toISOString().slice(0, 10), end: last.toISOString().slice(0, 10) };
-  }},
+  { label: "Este mês", getValue: () => ({
+    start: firstOfMonthYmdSaoPaulo(),
+    end: lastOfMonthYmdSaoPaulo(),
+  })},
+  { label: "Mês passado", getValue: () => ({
+    start: firstDayOfPreviousMonthYmdSaoPaulo(),
+    end: lastDayOfPreviousMonthYmdSaoPaulo(),
+  })},
 ];
 
 export default function PdvMeuPerfil() {

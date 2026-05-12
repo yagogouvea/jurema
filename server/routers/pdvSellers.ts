@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import mysql from "mysql2/promise";
 import crypto from "crypto";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
+import { createPdvMysqlConnection, orderDayDateExpr } from "../pdvMysql";
 
 const PDV_SALT = "pdv_salt_jumera";
 
@@ -13,9 +13,7 @@ function hashPassword(password: string): string {
 }
 
 async function getDb() {
-  const url = process.env.DATABASE_URL;
-  if (!url) return null;
-  return mysql.createConnection(url);
+  return createPdvMysqlConnection();
 }
 
 async function requirePdvAdmin(ctx: any) {
@@ -164,8 +162,8 @@ export const pdvSellersRouter = router({
       
       let dateFilter = "";
       const params: any[] = [];
-      if (input.startDate) { dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?"; params.push(input.startDate); }
-      if (input.endDate) { dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?"; params.push(input.endDate); }
+      if (input.startDate) { dateFilter += ` AND ${orderDayDateExpr("o")} >= ?`; params.push(input.startDate); }
+      if (input.endDate) { dateFilter += ` AND ${orderDayDateExpr("o")} <= ?`; params.push(input.endDate); }
       
       const [rows] = await db.execute(
         `SELECT 

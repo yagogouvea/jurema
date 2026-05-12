@@ -15,7 +15,7 @@ function orderDayDateExpr(alias) {
   const c = `${alias}.createdAt`;
   if (mode === "server_date") return `DATE(${c})`;
   if (mode === "add3h") return `DATE(DATE_ADD(${c}, INTERVAL 3 HOUR))`;
-  return `DATE(CONVERT_TZ(${c}, '+00:00', '-03:00'))`;
+  return `DATE(COALESCE(CONVERT_TZ(${c}, '+00:00', '-03:00'), DATE_ADD(${c}, INTERVAL 3 HOUR)))`;
 }
 
 const startDate = process.argv[2] || "2026-05-01";
@@ -37,6 +37,7 @@ const MANUS_REF = {
 };
 
 const db = await mysql.createConnection(url);
+await db.query("SET time_zone = '+00:00'");
 
 const [sellers] = await db.execute(
   `SELECT id, name, pontosOffset, pontosOffsetMes FROM pdv_sellers WHERE isActive = 1 ORDER BY name`

@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, Loader2
 } from "lucide-react";
 import PdvLayout from "./PdvLayout";
-import { localDateYmd } from "@/lib/localDateYmd";
+import { firstOfMonthYmdSaoPaulo, lastOfMonthYmdSaoPaulo } from "@shared/spCalendar";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -21,12 +21,9 @@ function formatDateTime(d: string | Date) {
 }
 
 function getDefaultDates() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return {
-    startDate: localDateYmd(start),
-    endDate: localDateYmd(end),
+    startDate: firstOfMonthYmdSaoPaulo(),
+    endDate: lastOfMonthYmdSaoPaulo(),
   };
 }
 

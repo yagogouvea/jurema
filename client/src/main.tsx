@@ -37,13 +37,20 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
-      headers() {
-        // Em /pdv/* usar só pdv_token; admin_token no mesmo origin quebraria o JWT do PDV nas rotas pdv.*.
+      headers(opts) {
         const path = typeof window !== "undefined" ? window.location.pathname : "";
-        const isPdv = path.startsWith("/pdv");
-        const pdvToken = localStorage.getItem("pdv_token");
-        const adminToken = localStorage.getItem("admin_token");
-        if (isPdv) {
+        const pdvToken = localStorage.getItem("pdv_token")?.trim();
+        const adminToken = localStorage.getItem("admin_token")?.trim();
+        const opList = opts.opList ?? [];
+        /** Rotas que exigem JWT assinado com JWT_SECRET do PDV (não o admin do site). */
+        const batchNeedsPdvJwt = opList.some(
+          op => op.path.startsWith("pdv") || op.path.startsWith("wa.")
+        );
+        const onPdvPage = path.startsWith("/pdv");
+
+        // Se o batch chama pdv.* / wa.*, sempre enviar pdv_token (evita admin_token quando há sessão /admin).
+        // Também cobre preview/iframe onde pathname pode não refletir /pdv.
+        if (batchNeedsPdvJwt || onPdvPage) {
           if (pdvToken) return { Authorization: `Bearer ${pdvToken}` };
           return {};
         }

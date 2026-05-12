@@ -109,3 +109,7 @@ temp/
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
 .manus/
+
+# Local DB audit / fix logs (não versionar)
+sofia-audit*.txt
+sofia-fix*.txt

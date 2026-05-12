@@ -4,7 +4,7 @@ import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import PdvLayout from "./PdvLayout";
 import { Wallet, Calendar, CheckCircle2, Plus, Trash2, DollarSign, User, AlertTriangle, History, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { localDateYmd } from "@/lib/localDateYmd";
+import { mondayOfWeekYmdSaoPaulo, todayYmdSaoPaulo } from "@shared/spCalendar";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -13,15 +13,8 @@ function formatCurrency(value: number): string {
 export default function PdvDescontoFolha() {
   const { isAdmin, seller } = usePdvAuth();
 
-  const [startDate, setStartDate] = useState(() => {
-    // Início da semana (segunda-feira)
-    const d = new Date();
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    d.setDate(diff);
-    return localDateYmd(d);
-  });
-  const [endDate, setEndDate] = useState(() => localDateYmd());
+  const [startDate, setStartDate] = useState(() => mondayOfWeekYmdSaoPaulo());
+  const [endDate, setEndDate] = useState(() => todayYmdSaoPaulo());
   const [showAdd, setShowAdd] = useState(false);
   const [filterQuitado, setFilterQuitado] = useState<boolean | undefined>(false);
 

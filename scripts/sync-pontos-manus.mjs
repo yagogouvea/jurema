@@ -76,30 +76,37 @@ const defaultEnd = process.env.SYNC_MANUS_END_DATE || yesterdayYmdSaoPaulo();
 const defaultStart = defaultEnd.slice(0, 7) + "-01";
 
 const startDate = process.argv[2] || defaultStart;
-const endDate = process.argv[3] || defaultEnd;
+let endDate = process.argv[3] || defaultEnd;
+
+const todaySp = todayYmdSaoPaulo();
+if (endDate >= todaySp) {
+  const y = yesterdayYmdSaoPaulo();
+  console.warn(
+    `Ajustando endDate de ${endDate} para ${y}: a soma para o offset não inclui o dia atual em SP ` +
+      `(igual ao Manus). O dashboard com data fim = hoje soma o PT de hoje em cima desse total.`
+  );
+  endDate = y;
+}
+
+if (endDate < startDate) {
+  console.error(`Intervalo inválido após ajuste: ${startDate} .. ${endDate} (hoje SP=${todaySp}).`);
+  process.exit(1);
+}
 
 if (startDate.slice(0, 7) !== endDate.slice(0, 7)) {
-  console.error("startDate e endDate precisam estar no mesmo mês (YYYY-MM).");
+  console.error(`startDate e endDate precisam estar no mesmo mês (YYYY-MM). Obtido: ${startDate} .. ${endDate}.`);
   process.exit(1);
 }
 const ym = startDate.slice(0, 7);
 
-const todaySp = todayYmdSaoPaulo();
-if (endDate >= todaySp) {
-  console.warn(
-    `Aviso: endDate (${endDate}) é hoje ou futuro em America/Sao_Paulo (${todaySp}). ` +
-      `O Manus costuma fechar até ontem; o ideal é endDate = ontem para depois somar o dia de hoje só pelo banco (Railway).`
-  );
-}
+const modeLabel = process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "(vazio=convert_tz -03)";
+console.log(`PDV_DASHBOARD_ORDER_DAY_MODE=${modeLabel}`);
+console.log(`Hoje (SP)=${todaySp} | Período sync (soma PT): ${startDate} .. ${endDate} (mês ${ym})`);
+console.log(`Dica dashboard: mesmo mês com data fim = hoje (${todaySp}) para incluir vendas do Railway.`);
 
 const dayCmp = orderDayDateExpr("o");
 const dateFilter = ` AND ${dayCmp} >= ? AND ${dayCmp} <= ?`;
 const dateParams = [startDate, endDate];
-
-const modeLabel = process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "(vazio=convert_tz -03)";
-console.log(`PDV_DASHBOARD_ORDER_DAY_MODE=${modeLabel}`);
-console.log(`Hoje (SP)=${todaySp} | Período sync: ${startDate} .. ${endDate} (mês ${ym})`);
-console.log(`Dica dashboard: mesmo mês com data fim = hoje (${todaySp}) para incluir vendas do Railway.`);
 
 const db = await mysql.createConnection(url);
 

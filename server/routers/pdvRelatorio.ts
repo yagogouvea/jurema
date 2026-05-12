@@ -1,14 +1,13 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import mysql from "mysql2/promise";
+import type { Connection } from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
+import { createPdvMysqlConnection, orderDayDateExpr } from "../pdvMysql";
 
 async function getDb() {
-  const url = process.env.DATABASE_URL;
-  if (!url) return null;
-  return mysql.createConnection(url);
+  return createPdvMysqlConnection();
 }
 
 async function requirePdvAdmin(ctx: any) {
@@ -20,7 +19,7 @@ async function requirePdvAdmin(ctx: any) {
 }
 
 // Gera dados consolidados para o relatório — agora usa isSofia por ITEM
-async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDate: string, sections: { comissoes: boolean; sofia: boolean; descontos: boolean }) {  // taxaComissao é sempre buscada das configurações
+async function fetchRelatorioData(db: Connection, startDate: string, endDate: string, sections: { comissoes: boolean; sofia: boolean; descontos: boolean }) {  // taxaComissao é sempre buscada das configurações
   // Buscar taxa de comissão das configurações do sistema
   const [cfgRows] = await db.execute("SELECT value FROM pdv_config WHERE `key` = 'comissao_peca' LIMIT 1");
   const taxaComissao = parseFloat((cfgRows as any[])[0]?.value || '0.50');
@@ -37,7 +36,7 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
         COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 AND o.regime = 'ATACADO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoAtacado,
         COALESCE(SUM(CASE WHEN o.status != 'CANCELADO' AND oi.isSofia = 0 AND o.regime = 'VAREJO' THEN oi.totalItem ELSE 0 END), 0) as faturamentoVarejo
       FROM pdv_sellers s
-      LEFT JOIN pdv_orders o ON o.sellerId = s.id AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ? AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
+      LEFT JOIN pdv_orders o ON o.sellerId = s.id AND ${orderDayDateExpr("o")} >= ? AND ${orderDayDateExpr("o")} <= ?
       LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND o.status != 'CANCELADO'
       WHERE s.isActive = 1
       GROUP BY s.id, s.name
@@ -82,7 +81,7 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
         COALESCE(SUM(COALESCE(oi.comissaoLojaSofia, 0) * oi.quantidade), 0) as comissaoTotal
       FROM pdv_order_items oi
       JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
-      WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ? AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
+      WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND ${orderDayDateExpr("o")} >= ? AND ${orderDayDateExpr("o")} <= ?`,
       [startDate, endDate]
     );
 
@@ -95,7 +94,7 @@ async function fetchRelatorioData(db: mysql.Connection, startDate: string, endDa
         COALESCE(SUM(COALESCE(oi.comissaoLojaSofia, 0) * oi.quantidade), 0) as comissao
       FROM pdv_order_items oi
       JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
-      WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ? AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
+      WHERE oi.isSofia = 1 AND o.status != 'CANCELADO' AND ${orderDayDateExpr("o")} >= ? AND ${orderDayDateExpr("o")} <= ?
       GROUP BY o.sellerId, o.sellerName
       ORDER BY faturamento DESC`,
       [startDate, endDate]

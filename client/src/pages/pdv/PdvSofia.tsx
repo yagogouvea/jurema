@@ -11,7 +11,7 @@ import {
   Camera, Trash2, ExternalLink, Loader2
 } from "lucide-react";
 import { toast } from "sonner";
-import { localDateYmd } from "@/lib/localDateYmd";
+import { firstOfMonthYmdSaoPaulo, todayYmdSaoPaulo } from "@shared/spCalendar";
 
 const SELLER_COLORS = ["#16a34a", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7"];
 
@@ -35,11 +35,8 @@ const STATUS_COLORS: Record<string, string> = {
 export default function PdvSofia() {
   const { isAdmin } = usePdvAuth();
   const [activeTab, setActiveTab] = useState<"dashboard" | "pedidos">("dashboard");
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date(); d.setDate(1);
-    return localDateYmd(d);
-  });
-  const [endDate, setEndDate] = useState(() => localDateYmd());
+  const [startDate, setStartDate] = useState(() => firstOfMonthYmdSaoPaulo());
+  const [endDate, setEndDate] = useState(() => todayYmdSaoPaulo());
   const [showConfig, setShowConfig] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);

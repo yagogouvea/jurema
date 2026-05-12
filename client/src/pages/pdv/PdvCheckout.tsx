@@ -78,6 +78,7 @@ export default function PdvCheckout({
   cart, regime,
   totalVarejo, totalAtacado, onBack, onSuccess
 }: PdvCheckoutProps) {
+  const utils = trpc.useUtils();
   const { seller } = usePdvAuth();
   // Canal é selecionado aqui na configuração do pedido
   const [canal, setCanal] = useState<"BALCAO" | "WHATSAPP">("BALCAO");
@@ -205,6 +206,12 @@ export default function PdvCheckout({
 
   const createOrderMutation = trpc.pdvOrders.create.useMutation({
     onSuccess: (data) => {
+      void utils.pdvDashboard.summary.invalidate();
+      void utils.pdvDashboard.getMyProgress.invalidate();
+      void utils.pdvDashboard.getMyHistory.invalidate();
+      void utils.pdvDashboard.sellerPanel.invalidate();
+      void utils.pdvComissoes.ranking.invalidate();
+      void utils.pdvOrders.list.invalidate();
       // Se há imagem Sofia, fazer upload após criar o pedido
       if (hasSofiaItems && sofiaImageBase64 && data?.pedidoId) {
         setUploadingSofiaImage(true);

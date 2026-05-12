@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import {
   appendCashFlowToSheet,
@@ -10,11 +9,20 @@ import {
   readCashFlowFromSheet,
 } from "./pdvSheetsWriter";
 import type { Request } from "express";
+import {
+  firstOfMonthYmdSaoPaulo,
+  todayYmdSaoPaulo,
+  yesterdayYmdSaoPaulo,
+} from "@shared/spCalendar";
+import {
+  createPdvMysqlConnection,
+  orderDayDateExpr,
+  orderDayYmdExpr,
+  spLocalDateTimeExpr,
+} from "../pdvMysql";
 
 async function getDb() {
-  const url = process.env.DATABASE_URL;
-  if (!url) return null;
-  return mysql.createConnection(url);
+  return createPdvMysqlConnection();
 }
 
 async function requirePdvAuth(ctx: any) {
@@ -42,6 +50,19 @@ function pontosOffsetMesParam(startDate?: string, endDate?: string): string | nu
   return startDate.slice(0, 7);
 }
 
+/**
+ * Data fim usada na **soma** `pontosSistema` para gravar `pontosOffset`.
+ * O print Manus não inclui o dia corrente em SP; se `requestedEnd` for hoje (ou futuro),
+ * usa **ontem** para que o dashboard com data fim = hoje mostre Manus(…ontem) + PT(hoje).
+ */
+function manusCalibrationSumEndDate(requestedEnd: string): { sumEndDate: string; wasClamped: boolean } {
+  const todaySp = todayYmdSaoPaulo();
+  if (requestedEnd < todaySp) {
+    return { sumEndDate: requestedEnd, wasClamped: false };
+  }
+  return { sumEndDate: yesterdayYmdSaoPaulo(), wasClamped: true };
+}
+
 /** Converte valor vindo do MySQL (string, Decimal, BigInt) para número estável no JSON/tRPC. */
 function rowNumber(v: unknown): number {
   if (v === null || v === undefined) return 0;
@@ -49,29 +70,6 @@ function rowNumber(v: unknown): number {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   const n = parseFloat(String(v).trim());
   return Number.isFinite(n) ? n : 0;
-}
-
-/**
- * Expressão SQL: “qual dia de calendário” do pedido para filtro/agrupamento.
- * PDV_DASHBOARD_ORDER_DAY_MODE (Railway):
- * - (vazio) = America/Sao_Paulo a partir de UTC
- * - server_date = DATE(createdAt) na sessão MySQL (se createdAt já for “dia local”)
- * - add3h = DATE(createdAt + 3h) (fallback bruto)
- */
-function orderDayDateExpr(alias: string): string {
-  const mode = (process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "").trim().toLowerCase();
-  const c = `${alias}.createdAt`;
-  if (mode === "server_date") return `DATE(${c})`;
-  if (mode === "add3h") return `DATE(DATE_ADD(${c}, INTERVAL 3 HOUR))`;
-  return `DATE(CONVERT_TZ(${c}, '+00:00', '-03:00'))`;
-}
-
-function orderDayYmdExpr(alias: string): string {
-  const mode = (process.env.PDV_DASHBOARD_ORDER_DAY_MODE || "").trim().toLowerCase();
-  const c = `${alias}.createdAt`;
-  if (mode === "server_date") return `DATE_FORMAT(${c}, '%Y-%m-%d')`;
-  if (mode === "add3h") return `DATE_FORMAT(DATE_ADD(${c}, INTERVAL 3 HOUR), '%Y-%m-%d')`;
-  return `DATE_FORMAT(CONVERT_TZ(${c}, '+00:00', '-03:00'), '%Y-%m-%d')`;
 }
 
 /** Itens que entram em faturamento/PT de metas (import legado: NULL em isSofia = tratar como peça normal). */
@@ -330,8 +328,8 @@ export const pdvDashboardRouter = router({
         let query = "SELECT * FROM pdv_cash_flow WHERE 1=1";
         const params: any[] = [];
         
-        if (input.startDate) { query += " AND DATE(CONVERT_TZ(createdAt, '+00:00', '-03:00')) >= ?"; params.push(input.startDate); }
-        if (input.endDate) { query += " AND DATE(CONVERT_TZ(createdAt, '+00:00', '-03:00')) <= ?"; params.push(input.endDate); }
+        if (input.startDate) { query += ` AND DATE(${spLocalDateTimeExpr("createdAt")}) >= ?`; params.push(input.startDate); }
+        if (input.endDate) { query += ` AND DATE(${spLocalDateTimeExpr("createdAt")}) <= ?`; params.push(input.endDate); }
         
         const countQuery = query.replace("SELECT *", "SELECT COUNT(*) as total");
         const [countRows] = await db.execute(countQuery, params);
@@ -419,6 +417,10 @@ export const pdvDashboardRouter = router({
    * como (pontuacaoManus − soma atual de PT no período). Novas vendas somam em cima desse total.
    * Período deve ser inteiro dentro de um único YYYY-MM.
    *
+   * A soma de PT usada no offset **nunca inclui o dia atual em America/Sao_Paulo** (igual ao Manus):
+   * se `endDate` for hoje ou futuro, o servidor usa **ontem** como fim da soma. Assim, com filtro
+   * do dashboard até **hoje**, o PT exibido fica Manus(até ontem) + vendas de hoje no Railway.
+   *
    * O **dashboard** só soma esse offset no PT quando o filtro de datas tem início e fim no **mesmo**
    * mês e esse mês é igual a `pontosOffsetMes` do vendedor (ver `pontosOffsetMesParam`).
    */
@@ -440,6 +442,23 @@ export const pdvDashboardRouter = router({
         });
       }
       const ym = input.startDate.slice(0, 7);
+      const { sumEndDate, wasClamped } = manusCalibrationSumEndDate(input.endDate);
+      if (sumEndDate < input.startDate) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            `Calibragem inválida: com fim efetivo ${sumEndDate} antes do início ${input.startDate} ` +
+            `(hoje SP=${todayYmdSaoPaulo()}). No 1º dia do mês use explicitamente o último dia útil do Manus no mês passado ou aguarde.`,
+        });
+      }
+      if (sumEndDate.slice(0, 7) !== input.startDate.slice(0, 7)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            `Após ajuste para não incluir hoje em SP, o fim (${sumEndDate}) não fica no mês ${ym}. ` +
+            `Ajuste start/end ou rode após o dia 1.`,
+        });
+      }
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
@@ -449,7 +468,7 @@ export const pdvDashboardRouter = router({
       dateFilter += ` AND ${dayCmp} >= ?`;
       params.push(input.startDate);
       dateFilter += ` AND ${dayCmp} <= ?`;
-      params.push(input.endDate);
+      params.push(sumEndDate);
 
       const results: { sellerName: string; pontosSistema: number; pontuacaoManus: number; offset: number }[] = [];
 
@@ -500,7 +519,14 @@ export const pdvDashboardRouter = router({
             offset,
           });
         }
-        return { ok: true as const, mes: ym, results };
+        return {
+          ok: true as const,
+          mes: ym,
+          sumEndDate,
+          endDateRequested: input.endDate,
+          calibrationClampedToYesterday: wasClamped,
+          results,
+        };
       } finally {
         await db.end();
       }
@@ -627,10 +653,9 @@ export const pdvDashboardRouter = router({
     const seller = await requirePdvAuth(ctx);
     const db = await getDb();
     if (!db) return null;
-    // Pontuação do período (padrão: mês atual)
-    const now = new Date();
-    const startDate = input?.startDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const endDate = input?.endDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+    // Pontuação do período (padrão: 1º do mês em SP → hoje em SP — Railway UTC não deve “voltar” o dia)
+    const startDate = input?.startDate ?? firstOfMonthYmdSaoPaulo();
+    const endDate = input?.endDate ?? todayYmdSaoPaulo();
     const offsetYm = pontosOffsetMesParam(startDate, endDate);
 
     try {
@@ -687,8 +712,8 @@ export const pdvDashboardRouter = router({
          JOIN pdv_orders o ON o.pedidoId = s.pedidoId
          WHERE s.tipo = 'CAIXINHA'
            AND o.sellerId = ?
-           AND DATE(CONVERT_TZ(s.createdAt, '+00:00', '-03:00')) >= ?
-           AND DATE(CONVERT_TZ(s.createdAt, '+00:00', '-03:00')) <= ?`,
+           AND DATE(${spLocalDateTimeExpr("s.createdAt")}) >= ?
+           AND DATE(${spLocalDateTimeExpr("s.createdAt")}) <= ?`,
         [seller.sellerId, startDate, endDate]
       );
 

@@ -1,14 +1,12 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
+import { createPdvMysqlConnection, orderDayDateExpr, orderDayYmdExpr } from "../pdvMysql";
 
 async function getDb() {
-  const url = process.env.DATABASE_URL;
-  if (!url) return null;
-  return mysql.createConnection(url);
+  return createPdvMysqlConnection();
 }
 
 async function requirePdvAuth(ctx: any) {
@@ -56,7 +54,7 @@ export const pdvComissoesRouter = router({
             COUNT(CASE WHEN o.status = 'CANCELADO' THEN 1 END) as pedidosCancelados,
             COALESCE(AVG(CASE WHEN o.status != 'CANCELADO' THEN o.totalAplicado END), 0) as ticketMedio
           FROM pdv_sellers s
-          LEFT JOIN pdv_orders o ON o.sellerId = s.id AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ? AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
+          LEFT JOIN pdv_orders o ON o.sellerId = s.id AND ${orderDayDateExpr("o")} >= ? AND ${orderDayDateExpr("o")} <= ?
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND o.status != 'CANCELADO'
           WHERE s.isActive = 1
           GROUP BY s.id, s.name, s.username
@@ -69,7 +67,7 @@ export const pdvComissoesRouter = router({
           `SELECT 
             s.id as sellerId,
             s.name as sellerName,
-            DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d') as dia,
+            ${orderDayYmdExpr("o")} as dia,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as pecas,
             COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
@@ -78,9 +76,9 @@ export const pdvComissoesRouter = router({
           JOIN pdv_sellers s ON s.id = o.sellerId
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.status != 'CANCELADO'
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
-          GROUP BY s.id, s.name, DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d')
+            AND ${orderDayDateExpr("o")} >= ?
+            AND ${orderDayDateExpr("o")} <= ?
+          GROUP BY s.id, s.name, ${orderDayYmdExpr("o")}
           HAVING pecas > 0
           ORDER BY dia ASC, pecas DESC`,
           [input.startDate, input.endDate]
@@ -178,15 +176,15 @@ export const pdvComissoesRouter = router({
           FROM pdv_orders o
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND o.status != 'CANCELADO'
           WHERE o.sellerId = ?
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?`,
+            AND ${orderDayDateExpr("o")} >= ?
+            AND ${orderDayDateExpr("o")} <= ?`,
           [seller.sellerId, input.startDate, input.endDate]
         );
 
         // Detalhamento diário
         const [dailyRows] = await db.execute(
           `SELECT 
-            DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d') as dia,
+            ${orderDayYmdExpr("o")} as dia,
             COUNT(DISTINCT o.id) as pedidos,
             COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.quantidade ELSE 0 END), 0) as pecas,
             COALESCE(SUM(CASE WHEN oi.isSofia = 0 THEN oi.totalItem ELSE 0 END), 0) as faturamento,
@@ -195,9 +193,9 @@ export const pdvComissoesRouter = router({
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.sellerId = ?
             AND o.status != 'CANCELADO'
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?
-            AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?
-          GROUP BY DATE_FORMAT(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'), '%Y-%m-%d')
+            AND ${orderDayDateExpr("o")} >= ?
+            AND ${orderDayDateExpr("o")} <= ?
+          GROUP BY ${orderDayYmdExpr("o")}
           HAVING pecas > 0
           ORDER BY dia ASC`,
           [seller.sellerId, input.startDate, input.endDate]
@@ -256,8 +254,8 @@ export const pdvComissoesRouter = router({
 
       let dateFilter = "";
       const params: any[] = [];
-      if (input.startDate) { dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) >= ?"; params.push(input.startDate); }
-      if (input.endDate) { dateFilter += " AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00')) <= ?"; params.push(input.endDate); }
+      if (input.startDate) { dateFilter += ` AND ${orderDayDateExpr("o")} >= ?`; params.push(input.startDate); }
+      if (input.endDate) { dateFilter += ` AND ${orderDayDateExpr("o")} <= ?`; params.push(input.endDate); }
 
       const [rows] = await db.execute(
         `SELECT 
