@@ -71,6 +71,85 @@ export type TranscribeBufferOptions = {
   prompt?: string;
 };
 
+type AudioKind = "ogg" | "mp3" | "wav" | "m4a" | "webm" | "flac";
+
+/**
+ * Detecta o formato real do áudio pelos primeiros bytes (magic numbers).
+ * Mais confiável que o mime do wa-bridge, que vem como `audio/ogg; codecs=opus`
+ * e quebra a lookup de extensão.
+ */
+function detectAudioKindFromBuffer(buf: Buffer): AudioKind | null {
+  if (buf.length < 12) return null;
+  // OGG: "OggS"
+  if (buf[0] === 0x4f && buf[1] === 0x67 && buf[2] === 0x67 && buf[3] === 0x53) return "ogg";
+  // RIFF .... WAVE
+  if (
+    buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46
+    && buf[8] === 0x57 && buf[9] === 0x41 && buf[10] === 0x56 && buf[11] === 0x45
+  ) return "wav";
+  // ID3 tag (MP3)
+  if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) return "mp3";
+  // MP3 frame sync
+  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) return "mp3";
+  // ISO Base Media (mp4/m4a): bytes 4..7 = "ftyp"
+  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return "m4a";
+  // EBML (webm): 0x1A 0x45 0xDF 0xA3
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return "webm";
+  // FLAC: "fLaC"
+  if (buf[0] === 0x66 && buf[1] === 0x4c && buf[2] === 0x61 && buf[3] === 0x43) return "flac";
+  return null;
+}
+
+function normalizeAudioMime(mime: string | undefined | null): string {
+  if (!mime) return "audio/ogg";
+  return String(mime).split(";")[0].trim().toLowerCase() || "audio/ogg";
+}
+
+function audioKindFromMime(mime: string): AudioKind | null {
+  const m = normalizeAudioMime(mime);
+  if (m === "audio/ogg" || m === "audio/oga" || m === "audio/opus") return "ogg";
+  if (m === "audio/mpeg" || m === "audio/mp3" || m === "audio/mpga") return "mp3";
+  if (m === "audio/wav" || m === "audio/wave" || m === "audio/x-wav") return "wav";
+  if (m === "audio/mp4" || m === "audio/m4a" || m === "audio/x-m4a") return "m4a";
+  if (m === "audio/webm") return "webm";
+  if (m === "audio/flac" || m === "audio/x-flac") return "flac";
+  return null;
+}
+
+function whisperFilenameFromKind(kind: AudioKind): string {
+  switch (kind) {
+    case "ogg":
+      return "audio.ogg";
+    case "mp3":
+      return "audio.mp3";
+    case "wav":
+      return "audio.wav";
+    case "m4a":
+      return "audio.m4a";
+    case "webm":
+      return "audio.webm";
+    case "flac":
+      return "audio.flac";
+  }
+}
+
+function whisperMimeFromKind(kind: AudioKind): string {
+  switch (kind) {
+    case "ogg":
+      return "audio/ogg";
+    case "mp3":
+      return "audio/mpeg";
+    case "wav":
+      return "audio/wav";
+    case "m4a":
+      return "audio/mp4";
+    case "webm":
+      return "audio/webm";
+    case "flac":
+      return "audio/flac";
+  }
+}
+
 /**
  * Transcribe a raw audio Buffer (no URL needed — usado quando os bytes já estão no servidor).
  */
@@ -103,12 +182,21 @@ export async function transcribeAudioBuffer(
       };
     }
 
-    const mime = options.mimeType || "audio/ogg";
+    // Prioridade: detecção pelos bytes > mime informado > fallback "ogg" (WhatsApp).
+    const detected = detectAudioKindFromBuffer(buf);
+    const fromMime = audioKindFromMime(options.mimeType ?? "");
+    const kind: AudioKind = detected ?? fromMime ?? "ogg";
+    const filename = whisperFilenameFromKind(kind);
+    const blobMime = whisperMimeFromKind(kind);
+    console.log(
+      `[whisper] enviando bytes=${buf.length} mimeInput=${options.mimeType ?? "(none)"} detected=${detected ?? "?"} fromMime=${fromMime ?? "?"} -> ${filename}`
+    );
+
     const formData = new FormData();
-    const filename = `audio.${getFileExtension(mime)}`;
-    formData.append("file", new Blob([new Uint8Array(buf)], { type: mime }), filename);
+    formData.append("file", new Blob([new Uint8Array(buf)], { type: blobMime }), filename);
     formData.append("model", "whisper-1");
     formData.append("response_format", "verbose_json");
+    if (options.language) formData.append("language", options.language);
     const prompt = options.prompt
       || (options.language
         ? `Transcribe the user's voice to text, the user's working language is ${getLanguageName(options.language)}`
@@ -128,6 +216,9 @@ export async function transcribeAudioBuffer(
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
+      console.error(
+        `[whisper] ${response.status} ${response.statusText} filename=${filename} bytes=${buf.length}: ${errorText.slice(0, 300)}`
+      );
       return {
         error: "Transcription service request failed",
         code: "TRANSCRIPTION_FAILED",

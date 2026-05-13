@@ -212,19 +212,33 @@ export async function generateAiResponse(
 
     // 5b. Garante transcrição dos áudios do cliente antes de chamar a IA.
     //     Whisper a partir do LONGBLOB salvo em wa_messages.mediaBlob.
+    const isPlaceholderAudioContent = (raw: string | null | undefined): boolean => {
+      const t = (raw ?? "").trim().toLowerCase();
+      if (!t) return true;
+      if (t === "[audio]" || t === "[áudio]" || t === "[audio sem transcrição]" || t === "[áudio sem transcrição]") return true;
+      if (t === "[voice]" || t === "[ptt]" || t === "[audiomessage]" || t === "[audio message]") return true;
+      return false;
+    };
+
     try {
       const { transcribeAudioBuffer } = await import("../_core/voiceTranscription");
-      for (const m of msgs) {
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const m = msgs[i];
         if (m.fromMe) continue;
         if (m.type !== "audio") continue;
-        const text = (m.content ?? "").trim();
-        if (text && text !== "[audio]" && text !== "[áudio sem transcrição]") continue;
+        if (!isPlaceholderAudioContent(m.content)) continue;
         const [audioRows] = (await db.execute(
-          "SELECT id, mediaBlob, mediaMimeType FROM wa_messages WHERE conversationId = ? AND type='audio' AND fromMe = 0 AND (content IS NULL OR content = '' OR content = '[audio]') ORDER BY timestamp DESC LIMIT 1",
+          `SELECT id, mediaBlob, mediaMimeType FROM wa_messages
+           WHERE conversationId = ? AND type='audio' AND fromMe = 0
+             AND mediaBlob IS NOT NULL AND OCTET_LENGTH(mediaBlob) > 0
+           ORDER BY timestamp DESC LIMIT 1`,
           [conversationId]
         )) as any;
         const row = (audioRows as any[])[0];
-        if (!row || !row.mediaBlob) continue;
+        if (!row || !row.mediaBlob) {
+          console.warn(`[ai] áudio cliente sem blob no banco; pulando transcrição inline (convId=${conversationId})`);
+          break;
+        }
         const buf = Buffer.isBuffer(row.mediaBlob) ? row.mediaBlob : Buffer.from(row.mediaBlob);
         const mime = String(row.mediaMimeType ?? "audio/ogg");
         const result = await transcribeAudioBuffer({ audioBuffer: buf, mimeType: mime, language: "pt" });
@@ -233,6 +247,8 @@ export async function generateAiResponse(
           await db.execute("UPDATE wa_messages SET content = ? WHERE id = ?", [newContent, row.id]);
           m.content = newContent;
           console.log(`[ai] transcrição inline mid=${row.id} chars=${result.text.length}`);
+        } else if (result && "error" in result) {
+          console.error(`[ai] Whisper falhou inline mid=${row.id}:`, result);
         }
         break;
       }

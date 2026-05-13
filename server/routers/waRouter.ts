@@ -648,7 +648,8 @@ export const waRouter = router({
         }
 
         if ("error" in result) {
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
+          const msg = `${result.error}${(result as any).details ? ` — ${(result as any).details}` : ""}`;
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: msg });
         }
 
         const newContent = `[Áudio] ${result.text}`.slice(0, 8000);
