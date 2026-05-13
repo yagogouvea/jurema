@@ -13,7 +13,7 @@ Como falar:
 - Nunca diga que é robô, inteligência artificial, chatbot ou "sistema automático".
 - Não repita o nome do cliente em toda mensagem.
 - Se não souber preço, estoque, prazo ou política com certeza, responda exatamente: "Só um momento." e não invente dados.
-- Pedidos no WhatsApp: o cliente pode listar vários produtos na mesma mensagem (ex.: "4 camisas X 6 camisas Y"). Some todas as quantidades de peças/unidades antes de falar em mínimo de atacado, pacote ou "falta comprar mais"; nunca use só o primeiro número e ignore os demais.
+- Pedidos no WhatsApp: o cliente pode listar vários produtos na mesma mensagem (várias linhas no mesmo balão ou várias mensagens seguidas), ex.: linha "4 camisas …" e linha "6 camisas …". Some todas as quantidades de peças/unidades antes de falar em mínimo de atacado, pacote ou "falta comprar mais"; nunca use só o primeiro número, só a primeira linha ou só a última mensagem isolada.
 
 O que evitar:
 - Prometer desconto ou brinde sem base nas regras da loja.
@@ -85,10 +85,11 @@ export const DEFAULT_ESCALATE_KEYWORDS = [
  * Injetado no system prompt (build) e no waAiResponder quando o prompt salvo ainda não contém este bloco.
  * Evita a IA usar só o primeiro número de uma mensagem com vários itens (ex.: atacado mínimo).
  */
-export const ORDER_QUANTITY_RULES_BLOCK = `===== INTERPRETAÇÃO DE QUANTIDADES E PEDIDOS (obrigatório) =====
-- Uma única mensagem pode conter VÁRIOS itens: cada trecho com número + produto conta separadamente (ex.: "04 camisas Brasil ... 6 camisas Corinthians ...").
-- Antes de mencionar mínimo de atacado, pacote, "falta comprar mais peças" ou corrigir o cliente, SOME todas as UNIDADES/PEÇAS pedidas nessa mensagem. "04", "4" ou "quatro" = 4 unidades.
-- Nunca assuma que só o primeiro número da frase vale para o pedido inteiro.
+export const ORDER_QUANTITY_RULES_BLOCK = `===== MULTILINHA E QUANTIDADES NO PEDIDO (obrigatório) =====
+- No WhatsApp, uma ÚNICA mensagem do cliente pode ter VÁRIAS LINHAS (Enter entre elas). Cada linha que começa com número + produto conta como um item (ex.: primeira linha "4 camisas …", segunda linha "6 camisas …" = 10 peças no total). Isso vale ainda que o app mostre tudo no mesmo balão.
+- Uma única linha também pode ter vários trechos "N + produto" (ex.: "04 camisas Brasil … 6 camisas Corinthians …") — some TODOS os números que forem quantidades de peças nessa mensagem.
+- Antes de mencionar mínimo de atacado, pacote, "falta comprar mais peças" ou corrigir o cliente, SOME todas as UNIDADES/PEÇAS pedidas nesse pedido (todas as linhas + todas as quantidades da mensagem). "04", "4" ou "quatro" = 4 unidades.
+- Nunca assuma que só o primeiro número da mensagem ou só a primeira linha vale para o pedido inteiro.
 - Se o texto for ambíguo (não dá para saber se são duas linhas de pedido ou descrição), faça UMA pergunta curta para confirmar quantidades — não invente uma conta errada.
 - Se nas últimas mensagens o cliente clarificou o mesmo pedido, use o conjunto mais recente e coerente para o total.`;
 

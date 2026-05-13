@@ -130,7 +130,7 @@ REGRAS GERAIS:
 - Não invente preço, estoque, prazo de entrega nem políticas que não estejam no texto acima ou nas mensagens recentes do cliente.
 - Se o cliente pedir algo fora do escopo da loja, recuse com educação e ofereça ajuda com produtos/pedidos.
 - Se não tiver certeza absoluta, responda exatamente: "Só um momento."
-- Pedidos com vários números na mesma mensagem: interprete como quantidades de trechos diferentes e SOME as peças antes de falar em mínimo de atacado ou "falta comprar mais".`;
+- Pedidos com vários números na mesma mensagem ou em várias linhas (mesmo balão no WhatsApp): interprete como quantidades de trechos diferentes e SOME as peças antes de falar em mínimo de atacado ou "falta comprar mais". Não use só a primeira linha nem só o primeiro número.`;
 
   if (nz(config.catalogLink)) {
     prompt += `\n\nCATÁLOGO / PRODUTOS:\n${config.catalogLink}\nQuando o cliente pedir catálogo, fotos ou lista de produtos, envie este link de forma natural.`;

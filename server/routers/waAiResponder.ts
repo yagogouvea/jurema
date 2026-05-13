@@ -19,11 +19,16 @@
 
 import mysql from "mysql2/promise";
 import { ORDER_QUANTITY_RULES_BLOCK, PRINTS_ORDER_CONTEXT_BLOCK } from "@shared/waAiDefaultStrings";
+import {
+  buildOrderQuantitySystemHint,
+  collectTrailingCustomerTextParts,
+  joinTrailingCustomerTextMessages,
+} from "@shared/waOrderQuantityHint";
 import { invokeLLM } from "../_core/llm";
 import { isStoreOpenNowSaoPaulo } from "./waHours";
 import { parseExtraLinks } from "./waAiTrainingDefaults";
 
-const QTY_RULES_MARKER = "INTERPRETAÇÃO DE QUANTIDADES E PEDIDOS";
+const QTY_RULES_MARKER = "MULTILINHA E QUANTIDADES NO PEDIDO";
 const PRINTS_CONTEXT_MARKER = "PRINTS, IMAGENS E CONTEXTO DO PEDIDO";
 
 const SO_UM_MOMENTO_PREFIX = ["só um momento", "so um momento"];
@@ -250,6 +255,13 @@ export async function generateAiResponse(
       const customerImageCount = msgs.filter((m) => !m.fromMe && m.type === "image").length;
       if (customerImageCount > 0) {
         systemPrompt += `\n\n===== RESUMO AUTOMÁTICO DO TRECHO =====\nMensagens só de imagem/print enviadas pelo cliente neste contexto: ${customerImageCount}.`;
+      }
+
+      const tailTextParts = collectTrailingCustomerTextParts(msgs);
+      const tailTextBlob = joinTrailingCustomerTextMessages(tailTextParts);
+      const qtyAutoHint = buildOrderQuantitySystemHint(tailTextBlob);
+      if (qtyAutoHint) {
+        systemPrompt += `\n\n${qtyAutoHint}`;
       }
 
       const history = msgs.map((m) => {
