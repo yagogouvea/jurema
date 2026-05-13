@@ -286,15 +286,21 @@ function resolveWaMediaUrl(mediaUrl: string | null | undefined): string | null {
   return u;
 }
 
+/** Mídia binária: mesmo host + cookie PDV (`<img>` não envia Authorization Bearer). */
+function waPanelMediaSrc(msg: any): string | null {
+  const type = String(msg?.type ?? "text");
+  const binaryTypes = new Set(["image", "video", "audio", "document", "sticker"]);
+  if (binaryTypes.has(type)) {
+    const id = waMessageNumericId(msg);
+    if (Number.isFinite(id) && id > 0) return `/api/pdv/wa-media/${id}`;
+  }
+  return resolveWaMediaUrl(msg?.mediaUrl ?? msg?.media_url ?? msg?.MEDIAURL ?? null);
+}
+
 function MessageContent({ msg }: { msg: any }) {
   const type = msg.type ?? "text";
   const content = msg.content ?? "";
-  const rawMedia =
-    msg.mediaUrl
-    ?? msg.media_url
-    ?? msg.MEDIAURL
-    ?? null;
-  const mediaUrl = resolveWaMediaUrl(rawMedia);
+  const mediaUrl = waPanelMediaSrc(msg);
   const caption = msg.mediaCaption ?? null;
 
   if (type === "audio") {
@@ -468,16 +474,22 @@ export default function PdvWhatsApp() {
   /** Todas as mensagens de mídia com URL ou chave no storage — resolve no servidor para URL presignada (evita falha de <img> com /manus-storage ou redirect). */
   const mediaPanelResolveIds = useMemo(() => {
     const types = new Set(["image", "video", "audio", "document", "sticker"]);
-    return messages
+    const ids = messages
       .filter((m) => {
         if (!types.has(m.type)) return false;
-        const u = (m.mediaUrl != null && String(m.mediaUrl).trim()) || "";
-        const k = (m.mediaStorageKey != null && String(m.mediaStorageKey).trim()) || "";
+        const u =
+          (m.mediaUrl != null && String(m.mediaUrl).trim())
+          || (m.media_url != null && String(m.media_url).trim())
+          || "";
+        const k =
+          (m.mediaStorageKey != null && String(m.mediaStorageKey).trim())
+          || (m.media_storage_key != null && String(m.media_storage_key).trim())
+          || "";
         return !!(u || k);
       })
-      .map((m) => Number(m.id))
-      .filter((id) => Number.isFinite(id) && id > 0)
-      .slice(0, 100);
+      .map((m) => waMessageNumericId(m))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    return Array.from(new Set(ids)).sort((a, b) => a - b).slice(0, 100);
   }, [messages]);
 
   const mediaUrlResolveQuery = trpc.wa.resolveMediaViewUrls.useQuery(

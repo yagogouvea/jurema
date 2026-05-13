@@ -12,6 +12,7 @@ import type { Request } from "express";
 import { verifyPdvToken } from "./pdvAuth";
 import { buildSystemPrompt, mergeDbRowWithDefaults } from "./waAiTrainingDefaults";
 import { refineAiTrainingFromNaturalLanguage, refineTrainingInputSchema } from "./waAiTrainingRefine";
+import { manusStoragePublicPath, resolveStoredMediaToViewUrl } from "../waMediaResolve";
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -65,55 +66,40 @@ function normalizeWaMessageRow(row: Record<string, unknown>) {
   };
 }
 
-/** URL pública no mesmo host do PDV — redireciona para presign do storage (cookie de sessão não exigido). */
-function manusStoragePublicPath(relKey: string): string {
-  const norm = relKey.replace(/^\/+/, "");
-  return "/manus-storage/" + norm.split("/").map(encodeURIComponent).join("/");
-}
-
 const WEBHOOK_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 
-/**
- * Devolve URL HTTP atualizada para exibir mídia no painel (presign do storage).
- * @param mediaStorageKey — chave persistida (ex.: `wa-media/1/abc.jpg`); preferida quando presente.
- * @param mediaUrl — proxy `/manus-storage/...`, URL https legada, etc.
- */
-async function resolveStoredMediaToViewUrl(
-  mediaUrl: string | null | undefined,
-  mediaStorageKey?: string | null | undefined
-): Promise<string | null> {
-  const keyDirect = mediaStorageKey && String(mediaStorageKey).trim();
-  if (keyDirect) {
-    try {
-      const { storageGet } = await import("../storage");
-      const { url } = await storageGet(keyDirect);
-      return url;
-    } catch (e) {
-      console.warn(`[resolveStoredMedia] storageGet("${keyDirect}") falhou:`, e);
-    }
-  }
+const WA_DB_MSG_TYPES = new Set([
+  "text",
+  "image",
+  "audio",
+  "video",
+  "document",
+  "sticker",
+  "location",
+  "contact",
+  "reaction",
+]);
 
-  const s = mediaUrl && String(mediaUrl).trim();
-  if (!s) return null;
-  if (s.startsWith("/manus-storage/")) {
-    const enc = s.slice("/manus-storage/".length);
-    const key = enc.split("/").map((p) => decodeURIComponent(p)).join("/");
-    const { storageGet } = await import("../storage");
-    const { url } = await storageGet(key);
-    return url;
+/** Alinha `type` do webhook (ex.: imageMessage) com o ENUM `wa_messages.type`. */
+function normalizeIncomingWaMessageType(t: string): string {
+  if (WA_DB_MSG_TYPES.has(t)) return t;
+  const s = String(t || "");
+  if (s.includes("image")) return "image";
+  if (s.includes("video")) return "video";
+  if (s.includes("audio")) return "audio";
+  if (s.includes("document")) return "document";
+  if (s.includes("sticker")) return "sticker";
+  if (s.includes("location")) return "location";
+  if (s.includes("contact")) return "contact";
+  if (s.includes("reaction")) return "reaction";
+  return "text";
+}
+
+function firstWebhookString(...vals: unknown[]): string | undefined {
+  for (const v of vals) {
+    if (typeof v === "string" && v.trim()) return v.trim();
   }
-  const m = s.match(/(wa-media\/\d+\/[^?\s#'"]+)/i);
-  if (m) {
-    try {
-      const { storageGet } = await import("../storage");
-      const { url } = await storageGet(m[1]);
-      return url;
-    } catch {
-      /* segue para passthrough */
-    }
-  }
-  if (/^https?:\/\//i.test(s)) return s;
-  return s;
+  return undefined;
 }
 
 /**
@@ -594,20 +580,43 @@ export const waRouter = router({
       timestamp: z.number(),
       contactName: z.string().optional(),
       contactPhone: z.string().optional(),
-    }))
-    .mutation(async ({ input }) => {
+    }).passthrough())
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
+      const raw = input as typeof input & Record<string, unknown>;
       try {
         // Normalizar remoteJid: remover sufixo de device multi-device (ex: 5511999:1@s.whatsapp.net → 5511999@s.whatsapp.net)
         const normalizedJid = input.remoteJid.replace(/:(\d+)@/, "@");
 
-        // Ignorar mensagens sem conteúdo real (segurança extra no servidor)
-        const hasContent = input.content && input.content.trim().length > 0;
-        const MEDIA_TYPES = ["image", "video", "audio", "document", "sticker", "location", "contact"];
-        const isMediaType = MEDIA_TYPES.includes(input.type);
+        const msgType = normalizeIncomingWaMessageType(input.type);
+        const hasContent = !!(input.content && input.content.trim().length > 0);
+        const MEDIA_TYPES = ["image", "video", "audio", "document", "sticker", "location", "contact", "reaction"];
+        const isMediaType = MEDIA_TYPES.includes(msgType);
         if (!hasContent && !isMediaType) {
           return { ok: true, skipped: true, reason: "empty_content" };
         }
+
+        const mediaBase64Payload = firstWebhookString(
+          input.mediaBase64,
+          raw.media_base64,
+          raw.base64,
+          raw.data,
+          raw.imageBase64
+        );
+        const mediaMimePayload = firstWebhookString(
+          input.mediaMimeType,
+          raw.media_mime_type,
+          raw.mimeType,
+          raw.mimetype,
+          raw.contentType
+        );
+        const mediaUrlPayload = firstWebhookString(
+          input.mediaUrl,
+          raw.media_url,
+          raw.url,
+          raw.imageUrl,
+          raw.link
+        );
 
         // Ignorar mensagens duplicadas (mesmo messageId já existe)
         if (input.messageId) {
@@ -657,25 +666,9 @@ export const waRouter = router({
           );
         }
 
-        // Normalizar o type para os valores aceitos pelo ENUM do banco
-        const VALID_MSG_TYPES = ["text", "image", "audio", "video", "document", "sticker", "location", "contact", "reaction"];
-        const normalizeType = (t: string): string => {
-          if (VALID_MSG_TYPES.includes(t)) return t;
-          if (t.includes("image")) return "image";
-          if (t.includes("video")) return "video";
-          if (t.includes("audio")) return "audio";
-          if (t.includes("document")) return "document";
-          if (t.includes("sticker")) return "sticker";
-          if (t.includes("location")) return "location";
-          if (t.includes("contact")) return "contact";
-          if (t.includes("reaction")) return "reaction";
-          return "text"; // fallback: conversation, extendedTextMessage, etc.
-        };
-        const msgType = normalizeType(input.type);
-
         // Mídia: gravar URL servida por /manus-storage/... para o painel carregar a imagem/áudio no mesmo host.
         // Preserva URL assinada do forge em audioTranscribeUrl para o Whisper (fetch server-side).
-        let finalMediaUrl: string | null = (input.mediaUrl && input.mediaUrl.trim()) ? input.mediaUrl.trim() : null;
+        let finalMediaUrl: string | null = mediaUrlPayload ?? null;
         let audioTranscribeUrl: string | null = null;
         let mediaStorageKey: string | null = null;
 
@@ -685,48 +678,70 @@ export const waRouter = router({
           return { forgeUrl: url, proxyPath: manusStoragePublicPath(key) };
         };
 
-        if (input.mediaBase64 && input.mediaMimeType) {
+        if (mediaBase64Payload && mediaMimePayload) {
           try {
-            const buf = Buffer.from(input.mediaBase64, "base64");
+            const buf = Buffer.from(mediaBase64Payload, "base64");
             if (buf.length > WEBHOOK_MEDIA_MAX_BYTES) {
               throw new Error(`media exceeds ${WEBHOOK_MEDIA_MAX_BYTES} bytes`);
             }
-            const ext = input.mediaMimeType.split("/")[1]?.split(";")[0] ?? "bin";
+            const ext = mediaMimePayload.split("/")[1]?.split(";")[0] ?? "bin";
             const key = `wa-media/${input.instanceId}/${input.messageId ?? Date.now()}.${ext}`;
-            const { forgeUrl, proxyPath } = await putAndProxy(key, buf, input.mediaMimeType);
+            const { forgeUrl, proxyPath } = await putAndProxy(key, buf, mediaMimePayload);
             mediaStorageKey = key;
             audioTranscribeUrl = forgeUrl;
             finalMediaUrl = proxyPath;
           } catch (e) {
             console.error("[webhook] Erro ao fazer upload de mídia para storage:", e);
           }
-        } else if (
-          finalMediaUrl
-          && /^https?:\/\//i.test(finalMediaUrl)
-          && ["image", "video", "audio", "document", "sticker"].includes(msgType)
-        ) {
-          try {
-            const ctrl = new AbortController();
-            const tid = setTimeout(() => ctrl.abort(), 30000);
-            const r = await fetch(finalMediaUrl, { signal: ctrl.signal, redirect: "follow" });
-            clearTimeout(tid);
-            if (r.ok) {
-              const buf = Buffer.from(await r.arrayBuffer());
-              if (buf.length <= WEBHOOK_MEDIA_MAX_BYTES) {
-                const ct =
-                  r.headers.get("content-type")?.split(";")[0]?.trim()
-                  || input.mediaMimeType
-                  || "application/octet-stream";
-                const extGuess = ct.split("/")[1]?.split("+")[0] ?? "bin";
-                const key = `wa-media/${input.instanceId}/${input.messageId ?? Date.now()}.${extGuess}`;
-                const { forgeUrl, proxyPath } = await putAndProxy(key, buf, ct);
-                mediaStorageKey = key;
-                audioTranscribeUrl = forgeUrl;
-                finalMediaUrl = proxyPath;
+        } else if (finalMediaUrl && ["image", "video", "audio", "document", "sticker"].includes(msgType)) {
+          const bridgeBase = process.env.WA_BRIDGE_URL?.replace(/\/+$/, "") ?? "";
+          const proto =
+            String((ctx.req.headers["x-forwarded-proto"] as string) || "")
+              .split(",")[0]
+              .trim() || "https";
+          const host =
+            String((ctx.req.headers["x-forwarded-host"] as string) || ctx.req.headers.host || "")
+              .split(",")[0]
+              .trim();
+          const appOrigin = host ? `${proto}://${host}` : "";
+
+          const resolveMirrorFetchUrl = (u: string): string | null => {
+            const s = u.trim();
+            if (/^https?:\/\//i.test(s)) return s;
+            if (!s.startsWith("/")) return null;
+            if (s.startsWith("/manus-storage") && appOrigin) return `${appOrigin.replace(/\/+$/, "")}${s}`;
+            if (bridgeBase) return `${bridgeBase}${s}`;
+            if (appOrigin) return `${appOrigin.replace(/\/+$/, "")}${s}`;
+            return null;
+          };
+
+          const fetchUrl = resolveMirrorFetchUrl(finalMediaUrl);
+          if (fetchUrl) {
+            try {
+              const ctrl = new AbortController();
+              const tid = setTimeout(() => ctrl.abort(), 30000);
+              const headers: Record<string, string> = {};
+              if (process.env.WA_BRIDGE_API_KEY) headers["x-wa-bridge-key"] = process.env.WA_BRIDGE_API_KEY;
+              const r = await fetch(fetchUrl, { signal: ctrl.signal, redirect: "follow", headers });
+              clearTimeout(tid);
+              if (r.ok) {
+                const buf = Buffer.from(await r.arrayBuffer());
+                if (buf.length <= WEBHOOK_MEDIA_MAX_BYTES) {
+                  const ct =
+                    r.headers.get("content-type")?.split(";")[0]?.trim()
+                    || mediaMimePayload
+                    || "application/octet-stream";
+                  const extGuess = ct.split("/")[1]?.split("+")[0] ?? "bin";
+                  const key = `wa-media/${input.instanceId}/${input.messageId ?? Date.now()}.${extGuess}`;
+                  const { forgeUrl, proxyPath } = await putAndProxy(key, buf, ct);
+                  mediaStorageKey = key;
+                  audioTranscribeUrl = forgeUrl;
+                  finalMediaUrl = proxyPath;
+                }
               }
+            } catch (e) {
+              console.warn("[webhook] Espelho de mediaUrl falhou; mantendo URL original:", e);
             }
-          } catch (e) {
-            console.warn("[webhook] Espelho de mediaUrl falhou; mantendo URL original:", e);
           }
         }
 

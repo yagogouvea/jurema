@@ -97,6 +97,7 @@ type MsgRow = {
   type: string;
   content: string | null;
   mediaUrl: string | null;
+  mediaStorageKey?: string | null;
   timestamp: Date | string;
 };
 
@@ -199,7 +200,7 @@ export async function generateAiResponse(
     // 5. Buscar últimas N mensagens (maxContextMessages, default 10) em ordem cronológica
     const N = Math.max(1, Math.min(50, cfg.maxContextMessages ?? 10));
     const [msgRowsDesc] = await db.execute<any[]>(
-      `SELECT fromMe, senderType, type, content, mediaUrl, timestamp
+      `SELECT fromMe, senderType, type, content, mediaUrl, mediaStorageKey, timestamp
        FROM wa_messages
        WHERE conversationId = ?
        ORDER BY timestamp DESC
@@ -270,7 +271,9 @@ export async function generateAiResponse(
       }
 
       const history = msgs.map((m) => {
-        const hasMedia = !!(m.mediaUrl && String(m.mediaUrl).trim());
+        const hasMedia =
+          !!(m.mediaUrl && String(m.mediaUrl).trim())
+          || !!(m.mediaStorageKey && String(m.mediaStorageKey).trim());
         const text = m.content && m.content.trim().length > 0 ? m.content.trim() : "";
         const mediaHint =
           m.type === "audio"
