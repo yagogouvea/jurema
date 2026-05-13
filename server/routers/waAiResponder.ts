@@ -5,8 +5,8 @@
  * Fluxo (chamado pelo webhook wa.receiveWebhook após o classificador de status):
  * 1) IA habilitada na instância?            → wa_ai_config.enabled = 1
  * 2) IA habilitada nesta conversa?          → wa_conversations.aiEnabled = 1
- * 3) Status da conversa permite resposta?   → != 'finalizado' && != 'spam'
- * 4) Dentro do horário comercial?           → respeita awayEnabled/awayStart/awayEnd
+ * 3) Status da conversa permite resposta?   → != 'finalizado' && != 'spam' && != 'intervencao'
+ * 4) Dentro do horário comercial?           → awayEnabled + awayStart/awayEnd + awaySchedule (America/Sao_Paulo)
  *    (fora do horário, quem responde é checkAwayMessage com awayMessage)
  * 5) Última mensagem da conversa é do cliente (não geramos resposta se fromMe=1)
  * 6) Há palavra-chave de escalação? → IA responde "Só um momento." e desliga aiEnabled
@@ -19,7 +19,7 @@
 
 import mysql from "mysql2/promise";
 import { invokeLLM } from "../_core/llm";
-import { isWithinBusinessHours } from "./waStatusClassifier";
+import { isStoreOpenNowSaoPaulo } from "./waHours";
 
 const SO_UM_MOMENTO_PREFIX = ["só um momento", "so um momento"];
 
@@ -71,6 +71,7 @@ type AiCfgRow = {
   awayEnabled: number | boolean;
   awayStart: string | null;
   awayEnd: string | null;
+  awaySchedule: unknown;
   maxContextMessages: number | null;
   responseDelayMin: number | null;
   responseDelayMax: number | null;
@@ -139,7 +140,7 @@ export async function generateAiResponse(
     const [cfgRows] = await db.execute<any[]>(
       `SELECT enabled, aiName, systemPrompt, personality, businessContext,
               catalogLink, groupLink, instagramLink,
-              awayEnabled, awayStart, awayEnd,
+              awayEnabled, awayStart, awayEnd, awaySchedule,
               maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords
        FROM wa_ai_config WHERE instanceId = ? LIMIT 1`,
       [instanceId]
@@ -155,15 +156,20 @@ export async function generateAiResponse(
     if (!convRows.length) return { ok: false, skipped: "ai_disabled_conversation" };
     const conv = convRows[0] as ConvRow;
     if (!conv.aiEnabled) return { ok: false, skipped: "ai_disabled_conversation" };
-    if (conv.status === "finalizado" || conv.status === "spam") {
+    if (conv.status === "finalizado" || conv.status === "spam" || conv.status === "intervencao") {
       return { ok: false, skipped: "status_blocked" };
     }
 
-    // 4. Horário comercial — se awayEnabled e fora do horário, deixa o awayMessage agir
-    if (cfg.awayEnabled && cfg.awayStart && cfg.awayEnd) {
-      if (!isWithinBusinessHours(cfg.awayStart, cfg.awayEnd)) {
-        return { ok: false, skipped: "outside_business_hours" };
-      }
+    // 4. Horário comercial (SP + grade semanal opcional) — fora do horário, awayMessage no webhook
+    if (
+      !isStoreOpenNowSaoPaulo({
+        awayEnabled: Boolean(cfg.awayEnabled),
+        awayStart: cfg.awayStart,
+        awayEnd: cfg.awayEnd,
+        awaySchedule: cfg.awaySchedule,
+      })
+    ) {
+      return { ok: false, skipped: "outside_business_hours" };
     }
 
     // 5. Buscar últimas N mensagens (maxContextMessages, default 10) em ordem cronológica

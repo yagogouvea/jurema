@@ -62,10 +62,74 @@ export const waRouter = router({
     await requireWaAccess(ctx);
     const db = await getDb();
     try {
-      const [rows] = await db.execute("SELECT * FROM wa_instances ORDER BY id");
+      const [rows] = await db.execute(
+        `SELECT i.*, IFNULL(ac.\`enabled\`, 0) AS aiEnabledGlobal
+         FROM wa_instances i
+         LEFT JOIN wa_ai_config ac ON ac.instanceId = i.id
+         ORDER BY i.id`
+      );
       return rows as any[];
     } finally { await db.end(); }
   }),
+
+  /** Liga/desliga a IA automática só para esta instância (wa_ai_config.enabled). */
+  setInstanceAiEnabled: publicProcedure
+    .input(z.object({ instanceId: z.number(), enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAdmin(ctx);
+      const db = await getDb();
+      try {
+        const [rows] = await db.execute("SELECT id FROM wa_ai_config WHERE instanceId=?", [input.instanceId]) as any;
+        if (rows[0]) {
+          await db.execute("UPDATE wa_ai_config SET `enabled`=? WHERE instanceId=?", [input.enabled, input.instanceId]);
+        } else {
+          await db.execute(
+            "INSERT INTO wa_ai_config (instanceId, enabled, aiName) VALUES (?,?,?)",
+            [input.instanceId, input.enabled, "Ju"]
+          );
+        }
+        return { success: true };
+      } finally { await db.end(); }
+    }),
+
+  /** Aplica mensagem de ausência + grade de horários a uma ou mais instâncias de uma vez. */
+  saveAwayBatch: publicProcedure
+    .input(z.object({
+      instanceIds: z.array(z.number()).min(1),
+      awayEnabled: z.boolean(),
+      awayMessage: z.string().min(1),
+      awayStart: z.string().optional(),
+      awayEnd: z.string().optional(),
+      awaySchedule: z.record(z.string(), z.unknown()).nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAdmin(ctx);
+      const db = await getDb();
+      try {
+        const schedJson =
+          input.awaySchedule === null || input.awaySchedule === undefined
+            ? null
+            : JSON.stringify(input.awaySchedule);
+        const aStart = input.awayStart ?? "15:00";
+        const aEnd = input.awayEnd ?? "06:00";
+        for (const iid of input.instanceIds) {
+          const [ex] = await db.execute("SELECT id FROM wa_ai_config WHERE instanceId=?", [iid]) as any;
+          if (ex[0]) {
+            await db.execute(
+              `UPDATE wa_ai_config SET awayEnabled=?, awayMessage=?, awayStart=?, awayEnd=?, awaySchedule=?, updatedAt=NOW() WHERE instanceId=?`,
+              [input.awayEnabled, input.awayMessage, aStart, aEnd, schedJson, iid]
+            );
+          } else {
+            await db.execute(
+              `INSERT INTO wa_ai_config (instanceId, enabled, aiName, awayEnabled, awayMessage, awayStart, awayEnd, awaySchedule)
+               VALUES (?, 0, 'Ju', ?, ?, ?, ?, ?)`,
+              [iid, input.awayEnabled, input.awayMessage, aStart, aEnd, schedJson]
+            );
+          }
+        }
+        return { success: true };
+      } finally { await db.end(); }
+    }),
 
   upsertInstance: publicProcedure
     .input(z.object({
@@ -115,7 +179,7 @@ export const waRouter = router({
   listConversations: publicProcedure
     .input(z.object({
       instanceId: z.number().optional(), // 0 ou undefined = todos os números
-      status: z.enum(["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam"]).optional(),
+      status: z.enum(["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam", "intervencao"]).optional(),
       aiEnabled: z.boolean().optional(),
       unreadOnly: z.boolean().optional(),
       search: z.string().optional(),
@@ -228,7 +292,7 @@ export const waRouter = router({
   updateConversation: publicProcedure
     .input(z.object({
       id: z.number(),
-      status: z.enum(["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam"]).optional(),
+      status: z.enum(["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam", "intervencao"]).optional(),
       notes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -547,6 +611,7 @@ export const waRouter = router({
       awayEnabled: z.boolean().optional(),
       awayStart: z.string().optional(),
       awayEnd: z.string().optional(),
+      awaySchedule: z.record(z.string(), z.unknown()).optional().nullable(),
       catalogLink: z.string().optional(),
       groupLink: z.string().optional(),
       instagramLink: z.string().optional(),
@@ -554,30 +619,71 @@ export const waRouter = router({
       responseDelayMin: z.number().min(0).max(10000).optional(),
       responseDelayMax: z.number().min(0).max(30000).optional(),
       escalateKeywords: z.array(z.string()).optional(),
+      /** Se preenchido, grava no banco como está (instruções avançadas). Se vazio, gera a partir dos demais campos. */
+      systemPrompt: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await requireWaAdmin(ctx);
       const db = await getDb();
       try {
-        const { instanceId, escalateKeywords, ...data } = input;
-        const systemPrompt = buildSystemPrompt(input);
+        const {
+          instanceId,
+          escalateKeywords,
+          systemPrompt: systemPromptInput,
+          awaySchedule: awayScheduleInput,
+          ...dataRaw
+        } = input;
+
+        const systemPromptFinal =
+          systemPromptInput !== undefined && String(systemPromptInput).trim().length > 0
+            ? String(systemPromptInput).trim()
+            : buildSystemPrompt(input);
+
         const keywordsJson = escalateKeywords ? JSON.stringify(escalateKeywords) : null;
+
+        const data: Record<string, unknown> = { ...dataRaw };
+        if (awayScheduleInput !== undefined) {
+          data.awaySchedule =
+            awayScheduleInput === null ? null : JSON.stringify(awayScheduleInput);
+        }
 
         const [existing] = await db.execute("SELECT id FROM wa_ai_config WHERE instanceId=?", [instanceId]) as any;
         if (existing[0]) {
-          const sets = Object.entries(data).filter(([, v]) => v !== undefined).map(([k]) => `\`${k}\`=?`);
-          const vals = Object.entries(data).filter(([, v]) => v !== undefined).map(([, v]) => v);
+          const entries = Object.entries(data).filter(([, v]) => v !== undefined);
+          const sets = entries.map(([k]) => `\`${k}\`=?`);
+          const vals = entries.map(([, v]) => v);
           if (keywordsJson !== null) { sets.push("`escalateKeywords`=?"); vals.push(keywordsJson); }
-          sets.push("`systemPrompt`=?"); vals.push(systemPrompt);
+          sets.push("`systemPrompt`=?"); vals.push(systemPromptFinal);
           vals.push(instanceId);
           await db.execute(`UPDATE wa_ai_config SET ${sets.join(",")} WHERE instanceId=?`, vals);
         } else {
+          const d = data as any;
           await db.execute(
-            "INSERT INTO wa_ai_config (instanceId, enabled, aiName, personality, businessContext, greetingMessage, awayMessage, awayEnabled, awayStart, awayEnd, catalogLink, groupLink, instagramLink, maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords, systemPrompt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            [instanceId, data.enabled ?? false, data.aiName ?? "Ju", data.personality ?? null, data.businessContext ?? null, data.greetingMessage ?? null, data.awayMessage ?? null, data.awayEnabled ?? false, data.awayStart ?? null, data.awayEnd ?? null, data.catalogLink ?? null, data.groupLink ?? null, data.instagramLink ?? null, data.maxContextMessages ?? 10, data.responseDelayMin ?? 1000, data.responseDelayMax ?? 3000, keywordsJson, systemPrompt]
+            "INSERT INTO wa_ai_config (instanceId, enabled, aiName, personality, businessContext, greetingMessage, awayMessage, awayEnabled, awayStart, awayEnd, awaySchedule, catalogLink, groupLink, instagramLink, maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords, systemPrompt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [
+              instanceId,
+              d.enabled ?? false,
+              d.aiName ?? "Ju",
+              d.personality ?? null,
+              d.businessContext ?? null,
+              d.greetingMessage ?? null,
+              d.awayMessage ?? null,
+              d.awayEnabled ?? false,
+              d.awayStart ?? null,
+              d.awayEnd ?? null,
+              d.awaySchedule ?? null,
+              d.catalogLink ?? null,
+              d.groupLink ?? null,
+              d.instagramLink ?? null,
+              d.maxContextMessages ?? 10,
+              d.responseDelayMin ?? 1000,
+              d.responseDelayMax ?? 3000,
+              keywordsJson,
+              systemPromptFinal,
+            ]
           );
         }
-        return { success: true, systemPrompt };
+        return { success: true, systemPrompt: systemPromptFinal };
       } finally { await db.end(); }
     }),
 

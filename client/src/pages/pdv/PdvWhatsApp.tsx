@@ -22,7 +22,7 @@ import { Link } from "wouter";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type ConvStatus = "novo" | "em_atendimento" | "aguardando" | "proposta_enviada" | "finalizado" | "spam";
+type ConvStatus = "novo" | "em_atendimento" | "aguardando" | "proposta_enviada" | "finalizado" | "spam" | "intervencao";
 
 // ─── Configuração de status ───────────────────────────────────────────────────
 
@@ -39,6 +39,7 @@ const STATUS_CONFIG: Record<ConvStatus, {
   proposta_enviada: { label: "Proposta enviada", color: "#a78bfa", bg: "rgba(167,139,250,.15)", border: "rgba(167,139,250,.3)", Icon: Tag },
   finalizado:       { label: "Finalizado",       color: "#6b7280", bg: "rgba(107,114,128,.15)", border: "rgba(107,114,128,.3)", Icon: CheckCircle2 },
   spam:             { label: "Spam",             color: "#f87171", bg: "rgba(248,113,113,.15)", border: "rgba(248,113,113,.3)", Icon: Ban },
+  intervencao:      { label: "Intervenção",      color: "#fb923c", bg: "rgba(251,146,60,.18)", border: "rgba(251,146,60,.45)", Icon: AlertCircle },
 };
 
 // ─── Cores de avatar por contato ─────────────────────────────────────────────

@@ -11,8 +11,9 @@
 
 import { invokeLLM } from "../_core/llm";
 import mysql from "mysql2/promise";
+import { isWithinBusinessHoursSp, isStoreOpenNowSaoPaulo, parseAwaySchedule } from "./waHours";
 
-// Status disponíveis com descrições para o classificador
+// Status disponíveis com descrições para o classificador (IA analisa o contexto)
 const STATUS_DESCRIPTIONS = {
   novo: "Primeira mensagem ou cliente que nunca comprou antes",
   em_atendimento: "Conversa ativa, cliente fazendo perguntas sobre produtos, preços ou tamanhos",
@@ -20,9 +21,13 @@ const STATUS_DESCRIPTIONS = {
   proposta_enviada: "Catálogo foi enviado, cliente está analisando ou pedido está sendo montado",
   finalizado: "Compra confirmada, pagamento realizado ou cliente agradeceu e encerrou",
   spam: "Mensagens irrelevantes, propaganda ou contato indesejado",
+  intervencao:
+    "URGENTE: precisa de atendente humano AGORA — cliente irritado, reclamação grave, pedido de gerente, " +
+    "problema com pagamento/entrega que exija decisão humana, situação fora do script, ou quando o cliente " +
+    "explicitamente pede para falar com uma pessoa. NÃO use para dúvidas simples de preço ou catálogo.",
 };
 
-type ConvStatus = keyof typeof STATUS_DESCRIPTIONS;
+export type ConvStatus = keyof typeof STATUS_DESCRIPTIONS;
 
 interface Message {
   fromMe: boolean;
@@ -102,10 +107,12 @@ export async function classifyConversationStatus(
       messages: [
         {
           role: "system",
-          content: `Você é um classificador de status de conversas de atendimento ao cliente de uma loja de roupas esportivas (Jumera Sport). Analise o histórico da conversa e classifique o status atual.
+          content: `Você é um classificador de status de conversas de atendimento ao cliente da Jurema Sport (loja de camisas de times). Analise TODO o histórico abaixo (mensagens do cliente e do atendente/IA) e classifique o status ATUAL da conversa com base no contexto real — não use regras fixas por palavras soltas; interprete o sentido.
 
 Status disponíveis:
 ${statusOptions}
+
+Use "intervencao" somente quando for claro que uma pessoa física precisa assumir já (reclamação séria, pedido de gerente, erro grave, cliente muito insatisfeito, disputa, ou pedido explícito para falar com humano). Dúvidas comuns de produto, preço ou catálogo NÃO são intervenção.
 
 Responda APENAS com JSON no formato: {"status": "nome_do_status", "confidence": 0.0}
 onde confidence é um número entre 0 e 1 indicando sua certeza.`,
@@ -177,32 +184,28 @@ export async function applyAiStatus(
      WHERE id = ?`,
     [result.status, conversationId]
   );
+
+  if (result.status === "intervencao") {
+    await db.execute(
+      `UPDATE wa_conversations
+       SET aiEnabled = false, aiDisabledBy = 'status_intervencao', aiDisabledAt = NOW()
+       WHERE id = ?`,
+      [conversationId]
+    );
+    await db.execute(
+      `INSERT INTO wa_ai_logs (conversationId, action, performedBy, details) VALUES (?,?,?,?)`,
+      [conversationId, "escalated_to_human", "system", "Status classificado como intervenção — IA desativada nesta conversa."]
+    ).catch(() => undefined);
+  }
 }
 
 /**
- * Verifica se o horário atual está dentro do período de atendimento.
+ * Verifica se o horário atual está dentro do período de atendimento (relógio de São Paulo).
  * awayStart = horário em que a loja FECHA (ex: "15:00")
  * awayEnd   = horário em que a loja ABRE  (ex: "06:00")
- *
- * Exemplo: awayStart=15:00, awayEnd=06:00
- *   - Loja aberta: 06:00 – 15:00
- *   - Loja fechada: 15:00 – 06:00 (período noturno que cruza meia-noite)
  */
 export function isWithinBusinessHours(awayStart: string, awayEnd: string): boolean {
-  const now = new Date();
-  const [startH, startM] = awayStart.split(":").map(Number);
-  const [endH, endM] = awayEnd.split(":").map(Number);
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const closeMinutes = startH * 60 + startM; // loja fecha
-  const openMinutes  = endH * 60 + endM;     // loja abre
-
-  if (openMinutes < closeMinutes) {
-    // Caso normal: abre 06:00, fecha 15:00 → aberto se currentMinutes está entre os dois
-    return currentMinutes >= openMinutes && currentMinutes < closeMinutes;
-  } else {
-    // Caso noturno: abre 22:00, fecha 06:00 → aberto se está após abertura OU antes do fechamento
-    return currentMinutes >= openMinutes || currentMinutes < closeMinutes;
-  }
+  return isWithinBusinessHoursSp(awayStart, awayEnd);
 }
 
 /**
@@ -221,15 +224,26 @@ export async function checkAwayMessage(
 ): Promise<string | null> {
   // Buscar config da IA para esta instância
   const [configRows] = await db.execute<any[]>(
-    `SELECT awayEnabled, awayStart, awayEnd, awayMessage FROM wa_ai_config WHERE instanceId = ?`,
+    `SELECT awayEnabled, awayStart, awayEnd, awayMessage, awaySchedule FROM wa_ai_config WHERE instanceId = ?`,
     [instanceId]
   );
   if (!configRows.length) return null;
   const config = configRows[0];
-  if (!config.awayEnabled || !config.awayStart || !config.awayEnd || !config.awayMessage) return null;
+  if (!config.awayEnabled || !config.awayMessage) return null;
 
-  // Verificar se está fora do horário
-  const isOpen = isWithinBusinessHours(config.awayStart, config.awayEnd);
+  const sched = parseAwaySchedule(config.awaySchedule);
+  const hasCustomSchedule =
+    sched &&
+    Object.keys(sched).length > 0 &&
+    Object.values(sched).some((r: any) => r && typeof r === "object" && "mode" in r);
+  if (!hasCustomSchedule && (!config.awayStart || !config.awayEnd)) return null;
+
+  const isOpen = isStoreOpenNowSaoPaulo({
+    awayEnabled: true,
+    awayStart: config.awayStart,
+    awayEnd: config.awayEnd,
+    awaySchedule: config.awaySchedule,
+  });
   if (isOpen) return null; // Dentro do horário — IA responde normalmente
 
   // Verificar se a última mensagem enviada já foi a de ausência (evita spam)

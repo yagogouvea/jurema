@@ -421,7 +421,7 @@ export const waConversations = mysqlTable("wa_conversations", {
   aiEnabled: boolean("aiEnabled").default(true).notNull(), // IA ativa nesta conversa?
   aiDisabledBy: varchar("aiDisabledBy", { length: 100 }), // quem desativou a IA
   aiDisabledAt: timestamp("aiDisabledAt"), // quando foi desativada
-  status: mysqlEnum("status", ["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam"]).default("novo").notNull(),
+  status: mysqlEnum("status", ["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam", "intervencao"]).default("novo").notNull(),
   tags: json("tags"), // tags para organização: ["atacado", "cliente_vip", etc]
   notes: text("notes"), // anotações internas sobre o contato
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -464,6 +464,7 @@ export const waAiConfig = mysqlTable("wa_ai_config", {
   awayEnabled: boolean("awayEnabled").default(false).notNull(),
   awayStart: varchar("awayStart", { length: 5 }), // horário início ausência: "18:00"
   awayEnd: varchar("awayEnd", { length: 5 }), // horário fim ausência: "08:00"
+  awaySchedule: json("awaySchedule"), // grade por dia da semana (0=dom … 6=sáb); null = só legado awayStart/awayEnd
   catalogLink: text("catalogLink"), // link do catálogo de produtos
   groupLink: text("groupLink"), // link do grupo WhatsApp
   instagramLink: text("instagramLink"), // link do Instagram

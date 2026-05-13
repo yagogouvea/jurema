@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import PdvLayout from "./PdvLayout";
 import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
@@ -15,10 +15,66 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { Link } from "wouter";
+
+const AWAY_DAY_KEYS = ["0", "1", "2", "3", "4", "5", "6"] as const;
+const AWAY_DAY_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+type AwayMode = "legacy" | "closed" | "open";
+
+function parseScheduleToState(raw: unknown): {
+  modes: Record<string, AwayMode>;
+  opens: Record<string, { start: string; end: string }>;
+} {
+  const modes: Record<string, AwayMode> = {};
+  const opens: Record<string, { start: string; end: string }> = {};
+  for (const k of AWAY_DAY_KEYS) {
+    modes[k] = "legacy";
+    opens[k] = { start: "09:00", end: "18:00" };
+  }
+  let parsed: Record<string, { mode?: string; start?: string; end?: string }> | null = null;
+  if (typeof raw === "string" && raw.trim() && raw !== "null") {
+    try {
+      parsed = JSON.parse(raw) as Record<string, { mode?: string; start?: string; end?: string }>;
+    } catch {
+      parsed = null;
+    }
+  } else if (raw && typeof raw === "object") {
+    parsed = raw as Record<string, { mode?: string; start?: string; end?: string }>;
+  }
+  if (parsed && typeof parsed === "object") {
+    for (const k of AWAY_DAY_KEYS) {
+      const r = parsed[k];
+      if (!r || typeof r !== "object") continue;
+      if (r.mode === "closed") modes[k] = "closed";
+      else if (r.mode === "open" && r.start && r.end) {
+        modes[k] = "open";
+        opens[k] = { start: String(r.start), end: String(r.end) };
+      } else if (r.mode === "legacy") modes[k] = "legacy";
+    }
+  }
+  return { modes, opens };
+}
+
+function buildAwaySchedulePayload(
+  modes: Record<string, AwayMode>,
+  opens: Record<string, { start: string; end: string }>
+): Record<string, { mode: string; start?: string; end?: string }> {
+  const out: Record<string, { mode: string; start?: string; end?: string }> = {};
+  for (const k of AWAY_DAY_KEYS) {
+    const m = modes[k] ?? "legacy";
+    if (m === "closed") out[k] = { mode: "closed" };
+    else if (m === "open") {
+      const o = opens[k] ?? { start: "09:00", end: "18:00" };
+      out[k] = { mode: "open", start: o.start, end: o.end };
+    } else out[k] = { mode: "legacy" };
+  }
+  return out;
+}
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
@@ -30,6 +86,93 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "respostas", label: "Respostas Rápidas", icon: <Zap className="w-4 h-4" /> },
   { id: "horarios", label: "Horários", icon: <Clock className="w-4 h-4" /> },
 ];
+
+/** QR por instância wa-bridge — monta só quando status=qr, sem precisar clicar em “Ver QR”. */
+function BridgeWaQrPanel({ bridgeInstanceId }: { bridgeInstanceId: number }) {
+  const { data: qrImageData, refetch: refetchQrImage, isFetching: qrFetching } = trpc.wa.bridgeQrImage.useQuery(
+    { bridgeInstanceId },
+    { enabled: true, refetchInterval: 2_000, refetchOnWindowFocus: true }
+  );
+  const [qrAge, setQrAge] = useState(0);
+  const [qrLastUpdated, setQrLastUpdated] = useState<Date | null>(null);
+  const prevQrRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (qrImageData?.ok && qrImageData.qr && qrImageData.qr !== prevQrRef.current) {
+      prevQrRef.current = qrImageData.qr;
+      setQrLastUpdated(new Date());
+      setQrAge(0);
+    }
+  }, [qrImageData?.qr]);
+  useEffect(() => {
+    if (!qrLastUpdated) return;
+    const t = setInterval(() => setQrAge(Math.floor((Date.now() - qrLastUpdated.getTime()) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [qrLastUpdated]);
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      {qrImageData?.ok && qrImageData.qr ? (
+        <>
+          <div className="relative">
+            <div className="bg-white p-2 rounded-xl">
+              <img src={qrImageData.qr} alt="QR Code" className="w-48 h-48" />
+            </div>
+            <div
+              className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold"
+              style={{
+                background: qrAge > 15 ? "#ef444420" : "#25D36620",
+                color: qrAge > 15 ? "#ef4444" : "#25D366",
+                border: `1px solid ${qrAge > 15 ? "#ef444440" : "#25D36640"}`,
+              }}
+            >
+              {qrFetching ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : null}
+              {qrAge}s
+            </div>
+          </div>
+          <p className="text-[10px] text-center" style={{ color: "#fbbf24" }}>
+            Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
+          </p>
+          {qrAge > 15 && (
+            <p className="text-[9px] text-center" style={{ color: "#ef4444" }}>
+              QR antigo — aguarde atualizar antes de escanear
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => refetchQrImage()}
+            className="text-[10px] flex items-center gap-1 px-2 py-1 rounded"
+            style={{ color: "#888", background: "#1a1a1a" }}
+          >
+            <RefreshCw className="w-3 h-3" /> Atualizar QR
+          </button>
+        </>
+      ) : (qrImageData as { status?: string; dashboardUrl?: string } | undefined)?.status === "use_dashboard" &&
+        (qrImageData as { dashboardUrl?: string }).dashboardUrl ? (
+        <>
+          <p className="text-[10px] text-center" style={{ color: "#fbbf24" }}>
+            QR disponível no Railway. Clique para escanear:
+          </p>
+          <a
+            href={(qrImageData as { dashboardUrl: string }).dashboardUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold"
+            style={{ background: "#fbbf2420", color: "#fbbf24", border: "1px solid #fbbf2440" }}
+          >
+            <ExternalLink className="w-4 h-4" /> Abrir QR Code
+          </a>
+          <p className="text-[10px] text-center" style={{ color: "#666" }}>
+            Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
+          </p>
+        </>
+      ) : (
+        <div className="flex items-center gap-2 text-xs" style={{ color: "#888" }}>
+          <RefreshCw className="w-4 h-4 animate-spin" /> Carregando QR...
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
@@ -50,6 +193,7 @@ export default function PdvWhatsAppConfig() {
     personality: "",
     businessContext: "",
     greetingMessage: "",
+    systemPrompt: "",
     catalogLink: "",
     groupLink: "",
     instagramLink: "",
@@ -59,7 +203,6 @@ export default function PdvWhatsAppConfig() {
     escalateKeywords: [] as string[],
     newKeyword: "",
   });
-  const [systemPromptPreview, setSystemPromptPreview] = useState("");
 
   // ── Respostas Rápidas ───────────────────────────────────────────────────────
   const [qrForm, setQrForm] = useState({ id: 0, title: "", shortcut: "", content: "", category: "" });
@@ -72,6 +215,9 @@ export default function PdvWhatsAppConfig() {
     awayEnd: "08:00",
     awayMessage: "",
   });
+  const [awayDayMode, setAwayDayMode] = useState<Record<string, AwayMode>>({});
+  const [awayDayOpen, setAwayDayOpen] = useState<Record<string, { start: string; end: string }>>({});
+  const [awayTargetInstanceIds, setAwayTargetInstanceIds] = useState<number[]>([]);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
 
@@ -96,17 +242,37 @@ export default function PdvWhatsAppConfig() {
   useEffect(() => {
     if (aiConfig !== undefined) {
       if (aiConfig === null) {
-        // Instância sem config ainda — resetar para defaults
-        setAiForm({ enabled: false, aiName: "Ju", personality: "", businessContext: "", greetingMessage: "", catalogLink: "", groupLink: "", instagramLink: "", maxContextMessages: 10, responseDelayMin: 1000, responseDelayMax: 3000, escalateKeywords: [], newKeyword: "" });
+        setAiForm({
+          enabled: false,
+          aiName: "Ju",
+          personality: "",
+          businessContext: "",
+          greetingMessage: "",
+          systemPrompt: "",
+          catalogLink: "",
+          groupLink: "",
+          instagramLink: "",
+          maxContextMessages: 10,
+          responseDelayMin: 1000,
+          responseDelayMax: 3000,
+          escalateKeywords: [],
+          newKeyword: "",
+        });
         setAwayForm({ awayEnabled: false, awayStart: "18:00", awayEnd: "08:00", awayMessage: "" });
-        setSystemPromptPreview("");
+        const empty = parseScheduleToState(null);
+        setAwayDayMode(empty.modes);
+        setAwayDayOpen(empty.opens);
       } else {
+        const { modes, opens } = parseScheduleToState(aiConfig.awaySchedule);
+        setAwayDayMode(modes);
+        setAwayDayOpen(opens);
         setAiForm({
           enabled: Boolean(aiConfig.enabled),
           aiName: aiConfig.aiName ?? "Ju",
           personality: aiConfig.personality ?? "",
           businessContext: aiConfig.businessContext ?? "",
           greetingMessage: aiConfig.greetingMessage ?? "",
+          systemPrompt: aiConfig.systemPrompt ?? "",
           catalogLink: aiConfig.catalogLink ?? "",
           groupLink: aiConfig.groupLink ?? "",
           instagramLink: aiConfig.instagramLink ?? "",
@@ -124,10 +290,14 @@ export default function PdvWhatsAppConfig() {
           awayEnd: aiConfig.awayEnd ?? "08:00",
           awayMessage: aiConfig.awayMessage ?? "",
         });
-        setSystemPromptPreview(aiConfig.systemPrompt ?? "");
       }
     }
   }, [aiConfig]);
+
+  useEffect(() => {
+    if (activeTab !== "horarios" || !instances.length) return;
+    setAwayTargetInstanceIds((prev) => (prev.length > 0 ? prev : (instances as { id: number }[]).map((i) => i.id)));
+  }, [activeTab, instances]);
 
   useEffect(() => {
     if (instances.length > 0 && !selectedInstanceId) {
@@ -147,45 +317,64 @@ export default function PdvWhatsAppConfig() {
     onError: (e) => toast.error(e.message),
   });
 
+  const autoBridgeStartOnce = useRef<Set<number>>(new Set());
+
   const bridgeReset = trpc.wa.bridgeReset.useMutation({
-    onSuccess: () => { toast.success("Sessão resetada — aguarde o QR Code aparecer."); setTimeout(() => refetchBridge(), 5000); },
+    onSuccess: (_data, vars) => {
+      autoBridgeStartOnce.current.delete(vars.bridgeInstanceId);
+      toast.success("Sessão resetada — aguarde o QR Code aparecer.");
+      setTimeout(() => refetchBridge(), 5000);
+    },
     onError: (e) => toast.error(e.message),
   });
 
   const bridgeStart = trpc.wa.bridgeStart.useMutation({
-    onSuccess: () => { toast.success("Iniciando conexão — aguarde o QR Code aparecer."); setTimeout(() => refetchBridge(), 5000); },
-    onError: (e) => toast.error(e.message),
+    onSuccess: () => {
+      toast.success("Iniciando conexão — aguarde o QR Code aparecer.");
+      setTimeout(() => refetchBridge(), 5000);
+    },
+    onError: (e, vars) => {
+      autoBridgeStartOnce.current.delete(vars.bridgeInstanceId);
+      toast.error(e.message);
+    },
   });
 
-  // QR Code inline — instância selecionada para exibir QR no painel
-  const [selectedQrInstance, setSelectedQrInstance] = useState<number | null>(null);
-  const [qrLastUpdated, setQrLastUpdated] = useState<Date | null>(null);
-  const [qrAge, setQrAge] = useState(0);
-  const { data: qrImageData, refetch: refetchQrImage, isFetching: qrFetching } = trpc.wa.bridgeQrImage.useQuery(
-    { bridgeInstanceId: selectedQrInstance! },
-    { enabled: !!selectedQrInstance, refetchInterval: 2_000, refetchOnWindowFocus: true }
-  );
-  // Atualiza timestamp quando o QR muda
-  const prevQrRef = useState<string | null>(null);
+  // Ao abrir a aba Instâncias: se wa-bridge estiver parado (desconectado), inicia sozinho uma vez por sessão
+  // para gerar QR sem precisar apertar “Iniciar”. Após “Resetar sessão”, volta a poder auto-iniciar.
   useEffect(() => {
-    if (qrImageData?.ok && qrImageData.qr && qrImageData.qr !== prevQrRef[0]) {
-      prevQrRef[1](qrImageData.qr);
-      setQrLastUpdated(new Date());
-      setQrAge(0);
+    if (activeTab !== "instancias" || !bridgeData?.available || !bridgeData.sessions?.length) return;
+    for (const sess of bridgeData.sessions) {
+      if (sess.status !== "disconnected") continue;
+      if (autoBridgeStartOnce.current.has(sess.instanceId)) continue;
+      autoBridgeStartOnce.current.add(sess.instanceId);
+      bridgeStart.mutate({ bridgeInstanceId: sess.instanceId });
     }
-  }, [qrImageData?.qr]);
-  // Contador de idade do QR
-  useEffect(() => {
-    if (!qrLastUpdated) return;
-    const t = setInterval(() => setQrAge(Math.floor((Date.now() - qrLastUpdated.getTime()) / 1000)), 1000);
-    return () => clearInterval(t);
-  }, [qrLastUpdated]);
+  }, [activeTab, bridgeData?.available, bridgeData?.sessions]);
 
   const saveAiConfig = trpc.wa.saveAiConfig.useMutation({
     onSuccess: (data) => {
       toast.success("Configuração da IA salva!");
-      setSystemPromptPreview(data.systemPrompt ?? "");
+      if (data.systemPrompt != null) {
+        setAiForm((f) => ({ ...f, systemPrompt: data.systemPrompt as string }));
+      }
       refetchAiConfig();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const saveAwayBatch = trpc.wa.saveAwayBatch.useMutation({
+    onSuccess: () => {
+      toast.success("Horários e ausência aplicados nas instâncias selecionadas.");
+      refetchAiConfig();
+      refetchInst();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const setInstanceAi = trpc.wa.setInstanceAiEnabled.useMutation({
+    onSuccess: () => {
+      toast.success("Preferência da instância salva.");
+      refetchInst();
     },
     onError: (e) => toast.error(e.message),
   });
@@ -213,6 +402,41 @@ export default function PdvWhatsAppConfig() {
       ...aiForm,
       ...awayForm,
       escalateKeywords: aiForm.escalateKeywords,
+      systemPrompt: aiForm.systemPrompt,
+    });
+  }
+
+  function toggleAwayTarget(id: number) {
+    setAwayTargetInstanceIds((prev) => {
+      if (prev.includes(id)) {
+        const next = prev.filter((x) => x !== id);
+        if (next.length === 0) {
+          toast.error("Mantenha ao menos uma instância selecionada.");
+          return prev;
+        }
+        return next;
+      }
+      return [...prev, id];
+    });
+  }
+
+  function handleSaveAwayBatch() {
+    const ids =
+      awayTargetInstanceIds.length > 0
+        ? awayTargetInstanceIds
+        : selectedInstanceId
+          ? [selectedInstanceId]
+          : [];
+    if (!ids.length) return toast.error("Selecione ao menos uma instância.");
+    const msg = awayForm.awayMessage.trim();
+    if (!msg) return toast.error("Preencha a mensagem de ausência.");
+    saveAwayBatch.mutate({
+      instanceIds: ids,
+      awayEnabled: awayForm.awayEnabled,
+      awayMessage: msg,
+      awayStart: awayForm.awayStart,
+      awayEnd: awayForm.awayEnd,
+      awaySchedule: buildAwaySchedulePayload(awayDayMode, awayDayOpen),
     });
   }
 
@@ -324,7 +548,7 @@ export default function PdvWhatsAppConfig() {
                       Atualizar
                     </button>
                     <a
-                      href="https://wa-bridge-production-c9a2.up.railway.app/dashboard"
+                      href={(import.meta.env.VITE_WA_BRIDGE_DASHBOARD_URL as string | undefined) || "https://wa-bridge-production-c9a2.up.railway.app/dashboard"}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors"
@@ -334,6 +558,16 @@ export default function PdvWhatsAppConfig() {
                       Painel QR
                     </a>
                   </div>
+                </div>
+
+                <div className="mb-3 rounded-xl border border-gray-800 bg-gray-900/60 p-3 text-[11px] text-gray-400 leading-relaxed">
+                  <p className="text-gray-300 font-medium mb-1">Comportamento da conexão</p>
+                  <p>
+                    Com o servidor estável, a sessão permanece autenticada no wa-bridge (disco no Railway). O QR aparece
+                    automaticamente quando a instância está aguardando pareamento; não é necessário resetar. Use{" "}
+                    <span className="text-orange-300/90">Resetar sessão</span> só para trocar de WhatsApp ou refazer o
+                    pareamento — isso desconecta de propósito.
+                  </p>
                 </div>
 
                 {bridgeData && !bridgeData.available && (
@@ -372,67 +606,11 @@ export default function PdvWhatsAppConfig() {
                           {/* Ícone central */}
                           <div className="flex justify-center py-1">
                             {isConnected && <CheckCircle2 className="w-8 h-8" style={{ color: "#25D366" }} />}
-                            {isQr && selectedQrInstance !== sess.instanceId && <QrCode className="w-8 h-8" style={{ color: "#fbbf24" }} />}
+                            {isQr && <QrCode className="w-8 h-8" style={{ color: "#fbbf24" }} />}
                             {!isConnected && !isQr && <WifiOff className="w-8 h-8" style={{ color: "#444" }} />}
                           </div>
 
-                          {/* QR Code inline */}
-                          {isQr && selectedQrInstance === sess.instanceId && (
-                            <div className="flex flex-col items-center gap-2">
-                              {qrImageData?.ok && qrImageData.qr ? (
-                                <>
-                                  <div className="relative">
-                                    <div className="bg-white p-2 rounded-xl">
-                                      <img src={qrImageData.qr} alt="QR Code" className="w-48 h-48" />
-                                    </div>
-                                    {/* Indicador de frescor do QR */}
-                                    <div className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold"
-                                      style={{ background: qrAge > 15 ? "#ef444420" : "#25D36620", color: qrAge > 15 ? "#ef4444" : "#25D366", border: `1px solid ${qrAge > 15 ? "#ef444440" : "#25D36640"}` }}>
-                                      {qrFetching ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : null}
-                                      {qrAge}s
-                                    </div>
-                                  </div>
-                                  <p className="text-[10px] text-center" style={{ color: "#fbbf24" }}>
-                                    Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
-                                  </p>
-                                  {qrAge > 15 && (
-                                    <p className="text-[9px] text-center" style={{ color: "#ef4444" }}>
-                                      QR antigo — aguarde atualizar antes de escanear
-                                    </p>
-                                  )}
-                                  <button onClick={() => refetchQrImage()}
-                                    className="text-[10px] flex items-center gap-1 px-2 py-1 rounded"
-                                    style={{ color: "#888", background: "#1a1a1a" }}>
-                                    <RefreshCw className="w-3 h-3" /> Atualizar QR
-                                  </button>
-                                </>
-                              ) : (qrImageData as any)?.status === "use_dashboard" && (qrImageData as any)?.dashboardUrl ? (
-                                <>
-                                  <p className="text-[10px] text-center" style={{ color: "#fbbf24" }}>
-                                    QR disponível no Railway. Clique para escanear:
-                                  </p>
-                                  <a
-                                    href={(qrImageData as any).dashboardUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold"
-                                    style={{ background: "#fbbf2420", color: "#fbbf24", border: "1px solid #fbbf2440" }}
-                                  >
-                                    <ExternalLink className="w-4 h-4" /> Abrir QR Code
-                                  </a>
-                                  <p className="text-[10px] text-center" style={{ color: "#666" }}>
-                                    Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
-                                  </p>
-                                </>
-                              ) : (
-                                <div className="flex items-center gap-2 text-xs" style={{ color: "#888" }}>
-                                  <RefreshCw className="w-4 h-4 animate-spin" /> Carregando QR...
-                                </div>
-                              )}
-                              <button onClick={() => setSelectedQrInstance(null)}
-                                className="text-[10px]" style={{ color: "#555" }}>Fechar</button>
-                            </div>
-                          )}
+                          {isQr && <BridgeWaQrPanel bridgeInstanceId={sess.instanceId} />}
 
                           {linkedInst ? (
                             <div className="text-[10px] text-center" style={{ color: "#555" }}>
@@ -444,31 +622,29 @@ export default function PdvWhatsAppConfig() {
                           )}
 
                           <div className="flex flex-col gap-1.5">
-                            {/* Desconectado: botão Iniciar */}
                             {!isConnected && !isQr && (
-                              <button onClick={() => { bridgeStart.mutate({ bridgeInstanceId: sess.instanceId }); }}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  autoBridgeStartOnce.current.delete(sess.instanceId);
+                                  bridgeStart.mutate({ bridgeInstanceId: sess.instanceId });
+                                }}
                                 disabled={bridgeStart.isPending}
                                 className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold border"
-                                style={{ color: "#25D366", borderColor: "#25D36633", background: "#25D36610" }}>
+                                style={{ color: "#25D366", borderColor: "#25D36633", background: "#25D36610" }}
+                              >
                                 {bridgeStart.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-                                Iniciar Conexão
+                                Iniciar conexão
                               </button>
                             )}
-                            {/* QR disponível: botão Escanear */}
-                            {isQr && (
-                              <button onClick={() => { setSelectedQrInstance(selectedQrInstance === sess.instanceId ? null : sess.instanceId); refetchQrImage(); }}
-                                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold border"
-                                style={{ color: "#fbbf24", borderColor: "#fbbf2433", background: "#fbbf2410" }}>
-                                <QrCode className="w-3.5 h-3.5" />
-                                {selectedQrInstance === sess.instanceId ? "Fechar QR" : "Ver QR Code"}
-                              </button>
-                            )}
-                            {/* Botão Reconectar (sempre visível) */}
-                            <button onClick={() => { setSelectedQrInstance(null); bridgeReset.mutate({ bridgeInstanceId: sess.instanceId }); }}
+                            <button
+                              type="button"
+                              onClick={() => bridgeReset.mutate({ bridgeInstanceId: sess.instanceId })}
                               disabled={bridgeReset.isPending}
                               className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold border"
-                              style={{ color: "#f87171", borderColor: "#f8717122", background: "#f8717108" }}>
-                              <RotateCcw className="w-3.5 h-3.5" /> Resetar Sessão
+                              style={{ color: "#f87171", borderColor: "#f8717122", background: "#f8717108" }}
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" /> Resetar sessão (novo QR)
                             </button>
                           </div>
                         </div>
@@ -503,21 +679,31 @@ export default function PdvWhatsAppConfig() {
                   {instances.map((inst: any) => (
                     <div key={inst.id} className="bg-gray-900 rounded-xl border border-gray-800 p-4">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm"
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm shrink-0"
                             style={{ background: "#1a1a1a", color: "#25D366" }}>
                             {inst.instanceId || "?"}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <div className="text-white font-semibold text-sm">{inst.name}</div>
                             <div className="text-gray-400 text-xs font-mono">{inst.phone}</div>
                           </div>
                         </div>
-                        <Button variant="ghost" size="sm"
-                          onClick={() => { setInstForm({ id: inst.id, name: inst.name, phone: inst.phone, instanceId: inst.instanceId ?? "", apiKey: inst.apiKey ?? "", webhookUrl: inst.webhookUrl ?? "", active: inst.active }); setEditingInst(true); }}
-                          className="text-gray-400 hover:text-white text-xs h-7">
-                          Editar
-                        </Button>
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500 text-[10px] uppercase tracking-wide">IA</span>
+                            <Switch
+                              checked={Boolean(inst.aiEnabledGlobal)}
+                              disabled={setInstanceAi.isPending}
+                              onCheckedChange={(v) => setInstanceAi.mutate({ instanceId: inst.id, enabled: v })}
+                            />
+                          </div>
+                          <Button variant="ghost" size="sm"
+                            onClick={() => { setInstForm({ id: inst.id, name: inst.name, phone: inst.phone, instanceId: inst.instanceId ?? "", apiKey: inst.apiKey ?? "", webhookUrl: inst.webhookUrl ?? "", active: inst.active }); setEditingInst(true); }}
+                            className="text-gray-400 hover:text-white text-xs h-7">
+                            Editar
+                          </Button>
+                        </div>
                       </div>
                       {!inst.instanceId && (
                         <div className="mt-3 flex items-center gap-2 text-xs text-orange-400 bg-orange-950/20 rounded-lg px-3 py-2">
@@ -826,18 +1012,20 @@ export default function PdvWhatsAppConfig() {
                 </div>
               </div>
 
-              {/* Preview do system prompt */}
-              {systemPromptPreview && (
-                <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-3">
-                  <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-green-400" /> Instrucoes Enviadas para a IA (somente leitura)
-                  </h3>
-                  <p className="text-gray-500 text-xs">Este e o texto completo que a IA recebe antes de cada conversa. E gerado automaticamente com base nas configuracoes acima. Nao e necessario editar manualmente.</p>
-                  <pre className="text-gray-400 text-xs whitespace-pre-wrap font-mono bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto leading-relaxed">
-                    {systemPromptPreview}
-                  </pre>
-                </div>
-              )}
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-3">
+                <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-green-400" /> Instruções avançadas (system prompt)
+                </h3>
+                <p className="text-gray-500 text-xs">
+                  Texto principal enviado ao modelo antes do histórico. Edite diretamente para produção; deixe em branco ao salvar para regenerar a partir dos campos acima (identidade, base, links).
+                </p>
+                <Textarea
+                  value={aiForm.systemPrompt}
+                  onChange={(e) => setAiForm((f) => ({ ...f, systemPrompt: e.target.value }))}
+                  placeholder="Cole ou edite o prompt completo da atendente..."
+                  className="bg-gray-800 border-gray-700 text-white text-xs font-mono min-h-[200px] leading-relaxed"
+                />
+              </div>
 
               <Button
                 onClick={handleSaveAi}
@@ -1021,7 +1209,6 @@ export default function PdvWhatsAppConfig() {
               )}
 
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-5">
-                {/* Toggle principal */}
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-white text-sm font-medium">Ativar mensagem de ausência automática</div>
@@ -1031,56 +1218,128 @@ export default function PdvWhatsAppConfig() {
                   </div>
                   <Switch
                     checked={awayForm.awayEnabled}
-                    onCheckedChange={v => setAwayForm(f => ({ ...f, awayEnabled: v }))}
+                    onCheckedChange={(v) => setAwayForm((f) => ({ ...f, awayEnabled: v }))}
                   />
                 </div>
 
+                <div className="space-y-2 pt-2 border-t border-gray-800">
+                  <Label className="text-gray-300 text-xs">Aplicar esta configuração às instâncias</Label>
+                  <p className="text-gray-500 text-[11px]">Marque uma ou mais linhas (números). O mesmo horário e a mesma mensagem serão gravados em todas.</p>
+                  <div className="flex flex-wrap gap-3">
+                    {(instances as { id: number; name: string }[]).map((inst) => (
+                      <label
+                        key={inst.id}
+                        className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={awayTargetInstanceIds.includes(inst.id)}
+                          onCheckedChange={() => toggleAwayTarget(inst.id)}
+                        />
+                        <span>{inst.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 <div className={`space-y-4 transition-opacity duration-200 ${awayForm.awayEnabled ? "opacity-100" : "opacity-40 pointer-events-none"}`}>
-                  {/* Horários */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-gray-300 text-xs">Início da ausência (loja fecha)</Label>
                       <Input
                         type="time"
                         value={awayForm.awayStart}
-                        onChange={e => setAwayForm(f => ({ ...f, awayStart: e.target.value }))}
+                        onChange={(e) => setAwayForm((f) => ({ ...f, awayStart: e.target.value }))}
                         className="bg-gray-800 border-gray-700 text-white text-sm"
                       />
-                      <p className="text-gray-500 text-xs">Horário em que a loja encerra o atendimento</p>
+                      <p className="text-gray-500 text-xs">Usado nos dias em modo &quot;horário global&quot;</p>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-gray-300 text-xs">Fim da ausência (loja abre)</Label>
                       <Input
                         type="time"
                         value={awayForm.awayEnd}
-                        onChange={e => setAwayForm(f => ({ ...f, awayEnd: e.target.value }))}
+                        onChange={(e) => setAwayForm((f) => ({ ...f, awayEnd: e.target.value }))}
                         className="bg-gray-800 border-gray-700 text-white text-sm"
                       />
-                      <p className="text-gray-500 text-xs">Horário em que o atendimento é retomado</p>
+                      <p className="text-gray-500 text-xs">Aberto entre este horário e o início da ausência</p>
                     </div>
                   </div>
 
-                  {/* Mensagem de ausência */}
+                  <div className="space-y-2">
+                    <Label className="text-gray-300 text-xs">Por dia da semana (fuso São Paulo)</Label>
+                    <p className="text-gray-500 text-[11px]">
+                      Domingo = 0 … Sábado = 6. &quot;Horário global&quot; repete o intervalo acima. &quot;Fechado o dia todo&quot; envia ausência o dia inteiro.
+                    </p>
+                    <div className="rounded-lg border border-gray-800 divide-y divide-gray-800 overflow-hidden">
+                      {AWAY_DAY_KEYS.map((key, idx) => (
+                        <div key={key} className="bg-gray-900/80 p-3 flex flex-col lg:flex-row lg:items-center gap-3">
+                          <div className="text-gray-200 text-xs font-medium w-28 shrink-0">{AWAY_DAY_LABELS[idx]}</div>
+                          <Select
+                            value={awayDayMode[key] ?? "legacy"}
+                            onValueChange={(v) =>
+                              setAwayDayMode((m) => ({ ...m, [key]: v as AwayMode }))
+                            }
+                          >
+                            <SelectTrigger className="bg-gray-800 border-gray-700 text-white text-xs w-full lg:w-72 h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                              <SelectItem value="legacy" className="text-xs">Horário global (acima)</SelectItem>
+                              <SelectItem value="closed" className="text-xs">Fechado o dia todo</SelectItem>
+                              <SelectItem value="open" className="text-xs">Aberto só entre…</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {awayDayMode[key] === "open" && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Input
+                                type="time"
+                                value={awayDayOpen[key]?.start ?? "09:00"}
+                                onChange={(e) =>
+                                  setAwayDayOpen((o) => ({
+                                    ...o,
+                                    [key]: { ...(o[key] ?? { start: "09:00", end: "18:00" }), start: e.target.value },
+                                  }))
+                                }
+                                className="bg-gray-800 border-gray-700 text-white text-xs w-28 h-9"
+                              />
+                              <span className="text-gray-500 text-xs">até</span>
+                              <Input
+                                type="time"
+                                value={awayDayOpen[key]?.end ?? "18:00"}
+                                onChange={(e) =>
+                                  setAwayDayOpen((o) => ({
+                                    ...o,
+                                    [key]: { ...(o[key] ?? { start: "09:00", end: "18:00" }), end: e.target.value },
+                                  }))
+                                }
+                                className="bg-gray-800 border-gray-700 text-white text-xs w-28 h-9"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="space-y-1.5">
                     <Label className="text-gray-300 text-xs">Mensagem de ausência</Label>
                     <Textarea
                       value={awayForm.awayMessage}
-                      onChange={e => setAwayForm(f => ({ ...f, awayMessage: e.target.value }))}
+                      onChange={(e) => setAwayForm((f) => ({ ...f, awayMessage: e.target.value }))}
                       placeholder="Ex: No momento estamos fora do horário de atendimento. Retornaremos em breve. Nosso horário é de segunda a sábado, das 6h às 15h."
                       className="bg-gray-800 border-gray-700 text-white text-sm min-h-[100px]"
                     />
                     <p className="text-gray-500 text-xs">Sem emojis. Resposta direta informando o horário de retorno.</p>
                   </div>
 
-                  {/* Preview do horário atual */}
                   {awayForm.awayStart && awayForm.awayEnd && (
                     <div className="bg-gray-800/50 rounded-lg p-3">
                       <p className="text-gray-400 text-xs">
-                        <span className="text-gray-300 font-medium">Resumo: </span>
-                        A loja estará <span className="text-green-400">aberta</span> das{" "}
+                        <span className="text-gray-300 font-medium">Resumo (dias em modo global): </span>
+                        Loja <span className="text-green-400">aberta</span> das{" "}
                         <span className="text-white font-mono">{awayForm.awayEnd}</span> às{" "}
                         <span className="text-white font-mono">{awayForm.awayStart}</span>.
-                        Fora desse período, a mensagem de ausência será enviada automaticamente.
+                        Fora desse período (nesses dias), a ausência será enviada.
                       </p>
                     </div>
                   )}
@@ -1088,12 +1347,12 @@ export default function PdvWhatsAppConfig() {
               </div>
 
               <Button
-                onClick={handleSaveAi}
-                disabled={saveAiConfig.isPending || !selectedInstanceId}
+                onClick={handleSaveAwayBatch}
+                disabled={saveAwayBatch.isPending || !selectedInstanceId}
                 className="bg-green-700 hover:bg-green-600 gap-2"
               >
-                {saveAiConfig.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Salvar Horários
+                {saveAwayBatch.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Salvar horários (instâncias marcadas)
               </Button>
               </>)} {/* fecha !aiConfigLoading && selectedInstanceId */}
             </div>
