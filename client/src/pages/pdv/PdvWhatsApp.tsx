@@ -15,7 +15,7 @@ import {
   MessageCircle, Circle, CheckCircle2, Clock, Tag, Ban,
   ChevronDown, AlertCircle, Settings, Unlock, Info, ArrowLeft,
   Phone, User, Mic, Image, Video, FileText, MapPin, Smile,
-  Play, Pause, Volume2, Loader2, RefreshCw,
+  Play, Pause, Volume2, Loader2, RefreshCw, X, Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "wouter";
@@ -317,6 +317,76 @@ function waPanelMediaSrc(msg: any, mediaJwt?: string | null): string | null {
   return resolveWaMediaUrl(msg?.mediaUrl ?? msg?.media_url ?? msg?.MEDIAURL ?? null);
 }
 
+function ImageLightbox({
+  src,
+  alt,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.92)" }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        aria-label="Fechar"
+        className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+        style={{ background: "#1a1a1a", color: "#fff", border: "1px solid #333" }}
+      >
+        <X size={20} />
+      </button>
+      <a
+        href={src}
+        target="_blank"
+        rel="noopener noreferrer"
+        download
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Abrir em nova aba"
+        className="absolute top-4 right-16 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+        style={{ background: "#1a1a1a", color: "#fff", border: "1px solid #333" }}
+      >
+        <Download size={18} />
+      </a>
+      <img
+        src={src}
+        alt={alt}
+        onClick={(e) => e.stopPropagation()}
+        className="rounded-lg"
+        style={{
+          maxWidth: "92vw",
+          maxHeight: "92vh",
+          objectFit: "contain",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
+        }}
+      />
+    </div>
+  );
+}
+
 function WaMediaDebugButton({ messageId }: { messageId: number }) {
   const [open, setOpen] = useState(false);
   const debugQuery = trpc.wa.debugMessageMedia.useQuery(
@@ -357,6 +427,7 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
   const numericId = waMessageNumericId(msg);
   const hasNumericId = Number.isFinite(numericId) && numericId > 0;
   const [imgFailed, setImgFailed] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   if (type === "audio") {
     return (
@@ -374,7 +445,12 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
     return (
       <div>
         {!showPlaceholder ? (
-          <a href={mediaUrl!} target="_blank" rel="noopener noreferrer">
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            className="block p-0 m-0 border-0 bg-transparent cursor-zoom-in"
+            aria-label="Ampliar imagem"
+          >
             <img
               src={mediaUrl!}
               alt="Imagem"
@@ -382,7 +458,7 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
               style={{ maxHeight: 220, objectFit: "cover" }}
               onError={() => setImgFailed(true)}
             />
-          </a>
+          </button>
         ) : (
           <div className="flex items-center gap-2 px-2 py-2 rounded-lg" style={{ background: "#ffffff10" }}>
             <Image size={16} style={{ color: "#888" }} />
@@ -392,6 +468,9 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
         {showPlaceholder && hasNumericId && <WaMediaDebugButton messageId={numericId} />}
         {(caption || (content && content !== "[image]")) && (
           <p className="text-[11px] mt-1" style={{ wordBreak: "break-word" }}>{caption || content}</p>
+        )}
+        {lightboxOpen && mediaUrl && (
+          <ImageLightbox src={mediaUrl} alt="Imagem" onClose={() => setLightboxOpen(false)} />
         )}
       </div>
     );
@@ -419,12 +498,22 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
     return (
       <div>
         {mediaUrl ? (
-          <img src={mediaUrl} alt="Figurinha" className="rounded-lg" style={{ maxWidth: 120, maxHeight: 120 }} />
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            className="block p-0 m-0 border-0 bg-transparent cursor-zoom-in"
+            aria-label="Ampliar figurinha"
+          >
+            <img src={mediaUrl} alt="Figurinha" className="rounded-lg" style={{ maxWidth: 120, maxHeight: 120 }} />
+          </button>
         ) : (
           <div className="flex items-center gap-2 px-2 py-2 rounded-lg" style={{ background: "#ffffff10" }}>
             <Smile size={16} style={{ color: "#888" }} />
             <span className="text-[11px]" style={{ color: "#888" }}>Figurinha</span>
           </div>
+        )}
+        {lightboxOpen && mediaUrl && (
+          <ImageLightbox src={mediaUrl} alt="Figurinha" onClose={() => setLightboxOpen(false)} />
         )}
       </div>
     );
