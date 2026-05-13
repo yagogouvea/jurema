@@ -10,10 +10,12 @@
  *    (fora do horário, quem responde é checkAwayMessage com awayMessage)
  * 5) Última mensagem da conversa é do cliente (não geramos resposta se fromMe=1)
  * 6) Há palavra-chave de escalação? → IA responde "Só um momento." e desliga aiEnabled
+ * 6b) Webhook: debounce por conversa (silêncio após última msg do cliente; WA_AI_CUSTOMER_SEQUENCE_WAIT_MS, padrão 6s)
  * 7) Monta system prompt + últimas N mensagens (maxContextMessages) → invokeLLM (gpt-4o-mini)
- * 8) Aguarda delay aleatório [responseDelayMin, responseDelayMax] (humanização)
+ * 8) Aguarda delay aleatório [responseDelayMin, responseDelayMax] antes de enviar (humanização)
  * 9) Reverifica aiEnabled (humano pode ter assumido durante o delay)
- * 10) Insere mensagem em wa_messages (senderType='ai'), atualiza conversa,
+ * 10) Reverifica se a última mensagem ainda é do cliente
+ * 11) Insere mensagem em wa_messages (senderType='ai'), atualiza conversa,
  *     envia via wa-bridge e registra wa_ai_logs.
  */
 
@@ -263,6 +265,9 @@ export async function generateAiResponse(
       if (qtyAutoHint) {
         systemPrompt += `\n\n${qtyAutoHint}`;
       }
+      if (tailTextParts.length >= 2) {
+        systemPrompt += `\n\n===== MENSAGENS EM SEQUÊNCIA DO CLIENTE =====\nO cliente enviou ${tailTextParts.length} mensagens de texto seguidas antes desta resposta (sem mensagem nossa entre elas). Trate como um fluxo único: leia todas na ordem e só então conclua quantidades, mínimo de atacado ou confirmação.`;
+      }
 
       const history = msgs.map((m) => {
         const hasMedia = !!(m.mediaUrl && String(m.mediaUrl).trim());
@@ -311,7 +316,7 @@ export async function generateAiResponse(
     }
 
     // 8. Delay humanizado
-    const delayMs = pickResponseDelayMs(cfg.responseDelayMin ?? 1500, cfg.responseDelayMax ?? 4000);
+    const delayMs = pickResponseDelayMs(cfg.responseDelayMin ?? 3500, cfg.responseDelayMax ?? 9000);
     if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
 
     // 9. Reverificar aiEnabled (humano pode ter assumido durante o delay)

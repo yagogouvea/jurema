@@ -236,8 +236,8 @@ export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | und
     instagramLink,
     extraLinks,
     maxContextMessages: Math.max(1, Math.min(50, Number(rowVal(row, "maxContextMessages")) || 10)),
-    responseDelayMin: Number(rowVal(row, "responseDelayMin")) >= 0 ? Number(rowVal(row, "responseDelayMin")) : 1000,
-    responseDelayMax: Number(rowVal(row, "responseDelayMax")) >= 0 ? Number(rowVal(row, "responseDelayMax")) : 3000,
+    responseDelayMin: Number(rowVal(row, "responseDelayMin")) >= 0 ? Number(rowVal(row, "responseDelayMin")) : 3500,
+    responseDelayMax: Number(rowVal(row, "responseDelayMax")) >= 0 ? Number(rowVal(row, "responseDelayMax")) : 9000,
     escalateKeywords,
     systemPrompt,
   };

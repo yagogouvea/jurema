@@ -83,8 +83,8 @@ export const refineTrainingInputSchema = z.object({
     extraLinks: z.array(extraLinkSchema).max(20),
     escalateKeywords: z.array(z.string()),
     maxContextMessages: z.number().min(1).max(50),
-    responseDelayMin: z.number().min(0).max(10000),
-    responseDelayMax: z.number().min(0).max(30000),
+    responseDelayMin: z.number().min(0).max(60000),
+    responseDelayMax: z.number().min(0).max(120000),
   }),
 });
 
@@ -207,8 +207,8 @@ function patchesToUpdates(parsed: Record<string, string>): RefineTrainingUpdates
     extraLinks,
     escalateKeywords,
     maxContextMessages: parseIntPatch(parsed.patch_maxContextMessages, 1, 50),
-    responseDelayMin: parseIntPatch(parsed.patch_responseDelayMin, 0, 10000),
-    responseDelayMax: parseIntPatch(parsed.patch_responseDelayMax, 0, 30000),
+    responseDelayMin: parseIntPatch(parsed.patch_responseDelayMin, 0, 60000),
+    responseDelayMax: parseIntPatch(parsed.patch_responseDelayMax, 0, 120000),
   };
 }
 

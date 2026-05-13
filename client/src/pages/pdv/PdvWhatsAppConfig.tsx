@@ -264,8 +264,8 @@ export default function PdvWhatsAppConfig() {
     instagramLink: "",
     extraLinks: [] as AiExtraLink[],
     maxContextMessages: 10,
-    responseDelayMin: 1000,
-    responseDelayMax: 3000,
+    responseDelayMin: 3500,
+    responseDelayMax: 9000,
     escalateKeywords: [] as string[],
     newKeyword: "",
   });
@@ -363,8 +363,8 @@ export default function PdvWhatsAppConfig() {
         instagramLink: "",
         extraLinks: [],
         maxContextMessages: 10,
-        responseDelayMin: 1000,
-        responseDelayMax: 3000,
+        responseDelayMin: 3500,
+        responseDelayMax: 9000,
         escalateKeywords: [...DEFAULT_ESCALATE_KEYWORDS],
         newKeyword: "",
       });
@@ -1555,10 +1555,10 @@ export default function PdvWhatsAppConfig() {
                       type="number"
                       value={aiForm.responseDelayMin}
                       onChange={e => setAiForm(f => ({ ...f, responseDelayMin: Number(e.target.value) }))}
-                      min={0} max={10000}
+                      min={0} max={60000}
                       className="bg-gray-800 border-gray-700 text-white text-sm"
                     />
-                    <p className="text-gray-500 text-xs">Tempo minimo antes de responder. Simula digitacao humana. Recomendado: 1000ms.</p>
+                    <p className="text-gray-500 text-xs">Espera após a IA gerar o texto e antes de enviar no WhatsApp. Recomendado: 3500–5000 ms.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-gray-300 text-xs">Delay maximo de resposta (ms)</Label>
@@ -1566,15 +1566,21 @@ export default function PdvWhatsAppConfig() {
                       type="number"
                       value={aiForm.responseDelayMax}
                       onChange={e => setAiForm(f => ({ ...f, responseDelayMax: Number(e.target.value) }))}
-                      min={0} max={30000}
+                      min={0} max={120000}
                       className="bg-gray-800 border-gray-700 text-white text-sm"
                     />
-                    <p className="text-gray-500 text-xs">Tempo maximo antes de responder. Recomendado: 3000ms.</p>
+                    <p className="text-gray-500 text-xs">Teto aleatorio junto com o minimo. Recomendado: 8000–12000 ms.</p>
                   </div>
                 </div>
-                <div className="bg-blue-950/20 border border-blue-900/30 rounded-lg p-3">
-                  <p className="text-blue-300 text-xs font-medium mb-1">Como funciona o delay</p>
-                  <p className="text-blue-400/70 text-xs">A IA aguarda um tempo aleatorio entre o delay minimo e maximo antes de enviar cada resposta. Isso simula o tempo de digitacao de uma pessoa real e torna o atendimento imperceptivel como automatizado.</p>
+                <div className="bg-blue-950/20 border border-blue-900/30 rounded-lg p-3 space-y-2">
+                  <p className="text-blue-300 text-xs font-medium">Como funciona o delay</p>
+                  <p className="text-blue-400/70 text-xs">
+                    Depois que a IA monta a resposta, o sistema espera um tempo aleatorio entre o minimo e o maximo antes de enviar no WhatsApp (simula digitacao).
+                  </p>
+                  <p className="text-blue-400/70 text-xs">
+                    Antes disso, o servidor aguarda um silencio apos a ultima mensagem do cliente (padrao 6 segundos) para nao responder no meio de varias mensagens seguidas.
+                    Ajuste pela variavel de ambiente <span className="font-mono text-blue-200">WA_AI_CUSTOMER_SEQUENCE_WAIT_MS</span> (500 a 120000 ms) no deploy.
+                  </p>
                 </div>
               </div>
 

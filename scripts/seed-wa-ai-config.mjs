@@ -143,8 +143,8 @@ for (const inst of instances) {
         groupLink = '',
         instagramLink = 'https://instagram.com/jumerasport',
         maxContextMessages = 10,
-        responseDelayMin = 1500,
-        responseDelayMax = 4000,
+        responseDelayMin = 3500,
+        responseDelayMax = 9000,
         escalateKeywords = ?,
         systemPrompt = ?,
         updatedAt = NOW()
@@ -160,7 +160,7 @@ for (const inst of instances) {
         responseDelayMin, responseDelayMax, escalateKeywords, systemPrompt, updatedAt
       ) VALUES (?, false, 'Ju', ?, ?, ?, ?, false, '15:00', '06:00',
         'https://drive.google.com/drive/mobile/folders/1jFP5im7LtNC08WRKlew9imkAPDixOJob',
-        '', 'https://instagram.com/jumerasport', 10, 1500, 4000, ?, ?, NOW())
+        '', 'https://instagram.com/jumerasport', 10, 3500, 9000, ?, ?, NOW())
     `, [inst.id, personality, businessContext, greetingMessage, awayMessage, escalateKeywords, systemPrompt]);
     console.log(`✅ Criado config da instância ${inst.name} (id=${inst.id})`);
   }

@@ -70,6 +70,51 @@ async function resolveStoredMediaToViewUrl(
   return s;
 }
 
+/**
+ * Espera o cliente terminar de enviar mensagens em sequência antes de chamar a IA.
+ * Cada nova mensagem do cliente reinicia o temporizador (debounce por conversa).
+ * Variável de ambiente: WA_AI_CUSTOMER_SEQUENCE_WAIT_MS (500–120000, padrão 6000).
+ */
+const iaSequenceTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+function getCustomerSequenceQuietMs(): number {
+  const raw = process.env.WA_AI_CUSTOMER_SEQUENCE_WAIT_MS?.trim();
+  const n = raw ? Number.parseInt(raw, 10) : NaN;
+  if (Number.isFinite(n) && n >= 500 && n <= 120_000) return n;
+  return 6_000;
+}
+
+function scheduleIaReplyAfterCustomerSequence(params: { conversationId: number; instanceId: number }): void {
+  const { conversationId, instanceId } = params;
+  const prev = iaSequenceTimers.get(conversationId);
+  if (prev !== undefined) clearTimeout(prev);
+  const quietMs = getCustomerSequenceQuietMs();
+  const tid = setTimeout(() => {
+    iaSequenceTimers.delete(conversationId);
+    void (async () => {
+      const asyncDb = await getDb();
+      try {
+        const { generateAiResponse } = await import("./waAiResponder");
+        const result = await generateAiResponse(asyncDb as any, conversationId, instanceId, (iid, jid, content) =>
+          callWaBridge(iid, jid, content)
+        );
+        if (result.ok) {
+          console.log(
+            `[webhook] IA respondeu conversa ${conversationId}${result.escalated ? " (escalada)" : ""}: ${result.content.substring(0, 80)}`
+          );
+        } else if (result.skipped !== "last_message_was_us" && result.skipped !== "ai_disabled_after_delay") {
+          console.log(`[webhook] IA pulou conversa ${conversationId}: ${result.skipped}`);
+        }
+      } catch (e) {
+        console.error("[webhook] Erro ao gerar resposta IA (após espera de sequência):", e);
+      } finally {
+        await asyncDb.end();
+      }
+    })();
+  }, quietMs);
+  iaSequenceTimers.set(conversationId, tid);
+}
+
 // ─── Helpers de permissão ─────────────────────────────────────────────────────
 
 /** Aceita usuários Manus OAuth (admin) ou vendedores PDV autenticados */
@@ -708,22 +753,10 @@ export const waRouter = router({
             // - Só dispara se não tivermos enviado a awayMessage (fora do horário)
             // - generateAiResponse já verifica enabled/aiEnabled/horário/escalação/anti-loop
             if (!awaySent) {
-              try {
-                const { generateAiResponse } = await import("./waAiResponder");
-                const result = await generateAiResponse(
-                  asyncDb as any,
-                  capturedConvId,
-                  capturedInstanceId,
-                  (iid, jid, content) => callWaBridge(iid, jid, content)
-                );
-                if (result.ok) {
-                  console.log(`[webhook] IA respondeu conversa ${capturedConvId}${result.escalated ? " (escalada)" : ""}: ${result.content.substring(0, 80)}`);
-                } else if (result.skipped !== "last_message_was_us" && result.skipped !== "ai_disabled_after_delay") {
-                  console.log(`[webhook] IA pulou conversa ${capturedConvId}: ${result.skipped}`);
-                }
-              } catch (e) {
-                console.error("[webhook] Erro ao gerar resposta IA:", e);
-              }
+              scheduleIaReplyAfterCustomerSequence({
+                conversationId: capturedConvId,
+                instanceId: capturedInstanceId,
+              });
             }
           } finally { await asyncDb.end(); }
         });
@@ -788,8 +821,8 @@ export const waRouter = router({
         .max(20)
         .optional(),
       maxContextMessages: z.number().min(1).max(50).optional(),
-      responseDelayMin: z.number().min(0).max(10000).optional(),
-      responseDelayMax: z.number().min(0).max(30000).optional(),
+      responseDelayMin: z.number().min(0).max(60000).optional(),
+      responseDelayMax: z.number().min(0).max(120000).optional(),
       escalateKeywords: z.array(z.string()).optional(),
       /** Se preenchido, grava no banco como está (instruções avançadas). Se vazio, gera a partir dos demais campos. */
       systemPrompt: z.string().optional(),
@@ -862,8 +895,8 @@ export const waRouter = router({
               d.instagramLink ?? null,
               Array.isArray(d.extraLinks) && d.extraLinks.length ? JSON.stringify(d.extraLinks) : null,
               d.maxContextMessages ?? 10,
-              d.responseDelayMin ?? 1000,
-              d.responseDelayMax ?? 3000,
+              d.responseDelayMin ?? 3500,
+              d.responseDelayMax ?? 9000,
               keywordsJson,
               systemPromptFinal,
             ]
