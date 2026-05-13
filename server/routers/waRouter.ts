@@ -529,6 +529,54 @@ export const waRouter = router({
     }),
 
   /**
+   * Diagnóstico: devolve campos de mídia de uma mensagem + tentativa de presign.
+   * Usado pelo painel para descobrir POR QUE uma imagem cai em 404.
+   */
+  debugMessageMedia: publicProcedure
+    .input(z.object({ messageId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const db = await getDb();
+      try {
+        const [rows] = (await db.execute("SELECT * FROM wa_messages WHERE id = ? LIMIT 1", [input.messageId])) as any;
+        const raw = (rows as Record<string, unknown>[])[0];
+        if (!raw) {
+          return { found: false as const, messageId: input.messageId };
+        }
+        const type = String(getMysqlRowField(raw, "type") ?? "text");
+        const mediaUrl = getMysqlRowField(raw, "mediaUrl");
+        const mediaStorageKey = getMysqlRowField(raw, "mediaStorageKey");
+        const mediaUrlStr = mediaUrl == null ? "" : String(mediaUrl);
+        const mediaKeyStr = mediaStorageKey == null ? "" : String(mediaStorageKey);
+
+        let resolved: string | null = null;
+        let resolveError: string | null = null;
+        try {
+          resolved = await resolveStoredMediaToViewUrl(mediaUrlStr || null, mediaKeyStr || null);
+        } catch (e) {
+          resolveError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+        }
+
+        return {
+          found: true as const,
+          messageId: input.messageId,
+          type,
+          fromMe: !!getMysqlRowField(raw, "fromMe"),
+          contentPreview: String(getMysqlRowField(raw, "content") ?? "").slice(0, 80),
+          mediaUrl: mediaUrlStr,
+          mediaUrlLength: mediaUrlStr.length,
+          mediaStorageKey: mediaKeyStr,
+          mediaStorageKeyLength: mediaKeyStr.length,
+          resolvedUrl: resolved ? resolved.slice(0, 200) + (resolved.length > 200 ? "…" : "") : null,
+          resolveError,
+          forgeConfigured: !!process.env.BUILT_IN_FORGE_API_URL && !!process.env.BUILT_IN_FORGE_API_KEY,
+        };
+      } finally {
+        await db.end();
+      }
+    }),
+
+  /**
    * JWT curto para anexar em `/api/pdv/wa-media/:id?t=...`.
    * `<img>` e `<audio>` não enviam `Authorization: Bearer`; muitos vendedores só têm `pdv_token` no localStorage.
    */
@@ -614,6 +662,27 @@ export const waRouter = router({
         const normalizedJid = input.remoteJid.replace(/:(\d+)@/, "@");
 
         const msgType = normalizeIncomingWaMessageType(input.type);
+
+        // Diagnóstico: logar todos os campos que o wa-bridge mandou para mídia.
+        if (["image", "video", "audio", "document", "sticker"].includes(msgType)) {
+          const summary: Record<string, unknown> = {};
+          for (const k of Object.keys(raw)) {
+            const v = (raw as any)[k];
+            if (v == null) {
+              summary[k] = null;
+            } else if (typeof v === "string") {
+              summary[k] = v.length > 80 ? `${v.slice(0, 80)}...[${v.length} chars]` : v;
+            } else if (typeof v === "number" || typeof v === "boolean") {
+              summary[k] = v;
+            } else {
+              summary[k] = `[${typeof v}]`;
+            }
+          }
+          console.log(
+            `[webhook-media-in] type=${input.type} norm=${msgType} jid=${normalizedJid} payload=`,
+            JSON.stringify(summary)
+          );
+        }
         const hasContent = !!(input.content && input.content.trim().length > 0);
         const MEDIA_TYPES = ["image", "video", "audio", "document", "sticker", "location", "contact", "reaction"];
         const isMediaType = MEDIA_TYPES.includes(msgType);

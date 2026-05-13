@@ -314,11 +314,46 @@ function waPanelMediaSrc(msg: any, mediaJwt?: string | null): string | null {
   return direct;
 }
 
+function WaMediaDebugButton({ messageId }: { messageId: number }) {
+  const [open, setOpen] = useState(false);
+  const debugQuery = trpc.wa.debugMessageMedia.useQuery(
+    { messageId },
+    { enabled: open, staleTime: 30 * 1000 }
+  );
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        className="text-[9px] underline"
+        style={{ color: "#888" }}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? "ocultar diagnóstico" : "diagnosticar"}
+      </button>
+      {open && (
+        <pre
+          className="mt-1 text-[9px] p-2 rounded whitespace-pre-wrap break-all"
+          style={{ background: "#000", color: "#9ca3af", maxWidth: 320 }}
+        >
+          {debugQuery.isLoading
+            ? "carregando…"
+            : debugQuery.error
+              ? `erro: ${String(debugQuery.error.message)}`
+              : JSON.stringify(debugQuery.data, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?: string | null }) {
   const type = msg.type ?? "text";
   const content = msg.content ?? "";
   const mediaUrl = waPanelMediaSrc(msg, mediaAccessToken);
   const caption = msg.mediaCaption ?? null;
+  const numericId = waMessageNumericId(msg);
+  const hasNumericId = Number.isFinite(numericId) && numericId > 0;
+  const [imgFailed, setImgFailed] = useState(false);
 
   if (type === "audio") {
     return (
@@ -332,11 +367,18 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
   }
 
   if (type === "image") {
+    const showPlaceholder = !mediaUrl || imgFailed;
     return (
       <div>
-        {mediaUrl ? (
-          <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
-            <img src={mediaUrl} alt="Imagem" className="rounded-lg max-w-full" style={{ maxHeight: 220, objectFit: "cover" }} />
+        {!showPlaceholder ? (
+          <a href={mediaUrl!} target="_blank" rel="noopener noreferrer">
+            <img
+              src={mediaUrl!}
+              alt="Imagem"
+              className="rounded-lg max-w-full"
+              style={{ maxHeight: 220, objectFit: "cover" }}
+              onError={() => setImgFailed(true)}
+            />
           </a>
         ) : (
           <div className="flex items-center gap-2 px-2 py-2 rounded-lg" style={{ background: "#ffffff10" }}>
@@ -344,6 +386,7 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
             <span className="text-[11px]" style={{ color: "#888" }}>Imagem</span>
           </div>
         )}
+        {showPlaceholder && hasNumericId && <WaMediaDebugButton messageId={numericId} />}
         {(caption || (content && content !== "[image]")) && (
           <p className="text-[11px] mt-1" style={{ wordBreak: "break-word" }}>{caption || content}</p>
         )}

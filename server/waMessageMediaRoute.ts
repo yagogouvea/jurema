@@ -96,6 +96,7 @@ export function registerWaMessageMediaRoute(app: Express): void {
       const [rows] = await conn.execute("SELECT * FROM wa_messages WHERE id = ? LIMIT 1", [messageId]);
       const raw = (rows as any[])[0] as Record<string, unknown> | undefined;
       if (!raw) {
+        console.warn(`[wa-media] 404 messageId=${messageId} motivo=row_not_found`);
         res.status(404).type("text/plain").send("Mensagem não encontrada");
         return;
       }
@@ -103,16 +104,34 @@ export function registerWaMessageMediaRoute(app: Express): void {
       const type = String(mysqlRowField(raw, "type") || "text");
       const mediaUrl = mysqlRowField(raw, "mediaUrl");
       const mediaStorageKey = mysqlRowField(raw, "mediaStorageKey");
+      const mediaUrlStr = mediaUrl == null ? "" : String(mediaUrl);
+      const mediaKeyStr = mediaStorageKey == null ? "" : String(mediaStorageKey);
 
-      const upstream = await resolveStoredMediaToViewUrl(
-        mediaUrl == null ? null : String(mediaUrl),
-        mediaStorageKey == null ? null : String(mediaStorageKey)
+      console.log(
+        `[wa-media] in messageId=${messageId} type=${type} urlLen=${mediaUrlStr.length} keyLen=${mediaKeyStr.length} urlPrefix=${mediaUrlStr.substring(0, 60)} key=${mediaKeyStr.substring(0, 80)}`
       );
+
+      let upstream: string | null = null;
+      let resolutionErr: string | null = null;
+      try {
+        upstream = await resolveStoredMediaToViewUrl(mediaUrlStr || null, mediaKeyStr || null);
+      } catch (e) {
+        resolutionErr = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+        console.error(`[wa-media] resolveStoredMediaToViewUrl falhou messageId=${messageId}`, e);
+      }
+
       if (!upstream) {
         console.warn(
-          `[wa-media] sem URL resolvida messageId=${messageId} type=${type} hasUrl=${!!mediaUrl} hasKey=${!!mediaStorageKey}`
+          `[wa-media] 404 messageId=${messageId} motivo=upstream_null hasUrl=${!!mediaUrlStr} hasKey=${!!mediaKeyStr} err=${resolutionErr ?? "none"}`
         );
-        res.status(404).type("text/plain").send("Mídia indisponível");
+        res
+          .status(404)
+          .type("text/plain")
+          .send(
+            mediaUrlStr || mediaKeyStr
+              ? `Mídia não pôde ser resolvida no storage${resolutionErr ? ` (${resolutionErr})` : ""}`
+              : "Mensagem sem mídia gravada no servidor"
+          );
         return;
       }
 
