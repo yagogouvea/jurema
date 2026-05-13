@@ -19,6 +19,52 @@ async function getDb() {
   return mysql.createConnection(url);
 }
 
+/** mysql2 em alguns hosts devolve nomes de colunas só em minúsculas — evita mediaUrl/id vazios no painel. */
+function getMysqlRowField(row: Record<string, unknown>, name: string): unknown {
+  if (row == null || typeof row !== "object") return undefined;
+  if (Object.prototype.hasOwnProperty.call(row, name)) return (row as any)[name];
+  const want = name.toLowerCase();
+  for (const key of Object.keys(row)) {
+    if (key.toLowerCase() === want) return (row as any)[key];
+  }
+  return undefined;
+}
+
+function coerceFiniteNumber(v: unknown): number {
+  if (typeof v === "bigint") return Number(v);
+  const n = Number(v);
+  if (Number.isFinite(n)) return n;
+  const p = Number.parseInt(String(v ?? "").trim(), 10);
+  return Number.isFinite(p) ? p : NaN;
+}
+
+function normalizeWaMessageRow(row: Record<string, unknown>) {
+  const g = (n: string) => getMysqlRowField(row, n);
+  const fromRaw = g("fromMe");
+  const fromMe = fromRaw === true || fromRaw === 1 || fromRaw === "1";
+  const id = coerceFiniteNumber(g("id"));
+  const mu = g("mediaUrl");
+  const mk = g("mediaStorageKey");
+  return {
+    id,
+    conversationId: coerceFiniteNumber(g("conversationId")) || 0,
+    instanceId: coerceFiniteNumber(g("instanceId")) || 0,
+    messageId: g("messageId") == null || g("messageId") === "" ? null : String(g("messageId")),
+    fromMe,
+    senderType: String(g("senderType") ?? "customer"),
+    senderName: g("senderName") == null ? null : String(g("senderName")),
+    type: String(g("type") ?? "text"),
+    content: g("content") == null ? null : String(g("content")),
+    mediaUrl: mu == null || mu === "" ? null : String(mu),
+    mediaStorageKey: mk == null || mk === "" ? null : String(mk),
+    mediaCaption: g("mediaCaption") == null ? null : String(g("mediaCaption")),
+    quotedMessageId: g("quotedMessageId") == null ? null : String(g("quotedMessageId")),
+    status: String(g("status") ?? "pending"),
+    timestamp: g("timestamp"),
+    createdAt: g("createdAt"),
+  };
+}
+
 /** URL pública no mesmo host do PDV — redireciona para presign do storage (cookie de sessão não exigido). */
 function manusStoragePublicPath(relKey: string): string {
   const norm = relKey.replace(/^\/+/, "");
@@ -452,7 +498,8 @@ export const waRouter = router({
         const safeLimit2 = Math.max(1, Math.min(200, Math.floor(input.limit)));
         sql += ` ORDER BY timestamp DESC LIMIT ${safeLimit2}`;
         const [rows] = await db.execute(sql, params);
-        return (rows as any[]).reverse(); // retorna em ordem cronológica
+        const list = (rows as any[]).reverse() as Record<string, unknown>[];
+        return list.map((r) => normalizeWaMessageRow(r));
       } finally { await db.end(); }
     }),
 
@@ -473,13 +520,20 @@ export const waRouter = router({
           unique
         ) as any;
         const results: { messageId: number; url: string }[] = [];
-        for (const r of rows as { id: number; mediaUrl: string | null; mediaStorageKey: string | null }[]) {
-          const resolved = await resolveStoredMediaToViewUrl(r.mediaUrl, r.mediaStorageKey).catch((e) => {
-            console.warn(`[resolveMediaViewUrls] falha id=${r.id}:`, e);
+        for (const raw of rows as Record<string, unknown>[]) {
+          const rid = getMysqlRowField(raw, "id");
+          const idNum = coerceFiniteNumber(rid);
+          const mediaUrl = getMysqlRowField(raw, "mediaUrl") as string | null | undefined;
+          const mediaStorageKey = getMysqlRowField(raw, "mediaStorageKey") as string | null | undefined;
+          const resolved = await resolveStoredMediaToViewUrl(
+            mediaUrl == null ? null : String(mediaUrl),
+            mediaStorageKey == null ? null : String(mediaStorageKey)
+          ).catch((e) => {
+            console.warn(`[resolveMediaViewUrls] falha id=${rid}:`, e);
             return null;
           });
-          if (resolved) {
-            results.push({ messageId: Number(r.id), url: resolved });
+          if (resolved && Number.isFinite(idNum)) {
+            results.push({ messageId: idNum, url: resolved });
           }
         }
         return { results };

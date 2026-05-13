@@ -265,6 +265,14 @@ function AudioPlayer({ url, duration }: { url?: string | null; duration?: number
 
 // ─── MessageContent ───────────────────────────────────────────────────────────
 
+/** PK numérica de wa_messages (superjson/mysql podem devolver string ou bigint). */
+function waMessageNumericId(m: { id?: unknown }): number {
+  const v = m?.id;
+  if (typeof v === "bigint") return Number(v);
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 /** Resolve URL de mídia do WhatsApp para exibição no painel (mesmo host que o app). */
 function resolveWaMediaUrl(mediaUrl: string | null | undefined): string | null {
   if (!mediaUrl || !String(mediaUrl).trim()) return null;
@@ -281,7 +289,12 @@ function resolveWaMediaUrl(mediaUrl: string | null | undefined): string | null {
 function MessageContent({ msg }: { msg: any }) {
   const type = msg.type ?? "text";
   const content = msg.content ?? "";
-  const mediaUrl = resolveWaMediaUrl(msg.mediaUrl ?? null);
+  const rawMedia =
+    msg.mediaUrl
+    ?? msg.media_url
+    ?? msg.MEDIAURL
+    ?? null;
+  const mediaUrl = resolveWaMediaUrl(rawMedia);
   const caption = msg.mediaCaption ?? null;
 
   if (type === "audio") {
@@ -478,9 +491,16 @@ export default function PdvWhatsApp() {
   const displayMessages = useMemo(() => {
     const list = mediaUrlResolveQuery.data?.results;
     if (!list?.length) return messages;
-    const map = new Map(list.map((x) => [x.messageId, x.url]));
+    const map = new Map<string, string>();
+    for (const x of list) {
+      const mid = Number((x as { messageId?: unknown }).messageId);
+      if (!Number.isFinite(mid) || mid <= 0) continue;
+      const url = String((x as { url?: unknown }).url ?? "").trim();
+      if (url) map.set(String(mid), url);
+    }
     return messages.map((m) => {
-      const u = map.get(Number(m.id));
+      const idn = waMessageNumericId(m);
+      const u = Number.isFinite(idn) ? map.get(String(idn)) : undefined;
       if (u) return { ...m, mediaUrl: u };
       return m;
     });
