@@ -11,6 +11,7 @@ import {
   DEFAULT_ESCALATE_KEYWORDS,
   DEFAULT_GREETING_MESSAGE,
   DEFAULT_PERSONALITY,
+  ORDER_QUANTITY_RULES_BLOCK,
 } from "../../shared/waAiDefaultStrings";
 
 export {
@@ -20,6 +21,7 @@ export {
   DEFAULT_ESCALATE_KEYWORDS,
   DEFAULT_GREETING_MESSAGE,
   DEFAULT_PERSONALITY,
+  ORDER_QUANTITY_RULES_BLOCK,
 } from "../../shared/waAiDefaultStrings";
 
 function rowVal(row: Record<string, unknown> | null | undefined, camelKey: string): unknown {
@@ -125,7 +127,8 @@ REGRAS GERAIS:
 - Seja objetiva; evite blocos de texto longos sem necessidade.
 - Não invente preço, estoque, prazo de entrega nem políticas que não estejam no texto acima ou nas mensagens recentes do cliente.
 - Se o cliente pedir algo fora do escopo da loja, recuse com educação e ofereça ajuda com produtos/pedidos.
-- Se não tiver certeza absoluta, responda exatamente: "Só um momento."`;
+- Se não tiver certeza absoluta, responda exatamente: "Só um momento."
+- Pedidos com vários números na mesma mensagem: interprete como quantidades de trechos diferentes e SOME as peças antes de falar em mínimo de atacado ou "falta comprar mais".`;
 
   if (nz(config.catalogLink)) {
     prompt += `\n\nCATÁLOGO / PRODUTOS:\n${config.catalogLink}\nQuando o cliente pedir catálogo, fotos ou lista de produtos, envie este link de forma natural.`;
@@ -148,6 +151,7 @@ REGRAS GERAIS:
     )}, responda primeiro com "Só um momento." e não continue argumentando.`;
   }
 
+  prompt += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
   return prompt;
 }
 

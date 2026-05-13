@@ -18,9 +18,12 @@
  */
 
 import mysql from "mysql2/promise";
+import { ORDER_QUANTITY_RULES_BLOCK } from "@shared/waAiDefaultStrings";
 import { invokeLLM } from "../_core/llm";
 import { isStoreOpenNowSaoPaulo } from "./waHours";
 import { parseExtraLinks } from "./waAiTrainingDefaults";
+
+const QTY_RULES_MARKER = "INTERPRETAÇÃO DE QUANTIDADES E PEDIDOS";
 
 const SO_UM_MOMENTO_PREFIX = ["só um momento", "so um momento"];
 
@@ -111,6 +114,9 @@ REGRAS:
   const extras = parseExtraLinks(cfg.extraLinks);
   for (const e of extras) {
     if (e.url) p += `\n${e.label}: ${e.url}`;
+  }
+  if (!p.includes(QTY_RULES_MARKER)) {
+    p += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
   }
   return p;
 }
@@ -228,7 +234,10 @@ export async function generateAiResponse(
         if (e.url && !base.includes(e.url)) linkLines.push(`${e.label}: ${e.url}`);
       }
       if (linkLines.length > 0) pieces.push(`\n\n===== LINKS ÚTEIS =====\n${linkLines.join("\n")}`);
-      const systemPrompt = pieces.join("");
+      let systemPrompt = pieces.join("");
+      if (!systemPrompt.includes(QTY_RULES_MARKER)) {
+        systemPrompt += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
+      }
 
       const history = msgs.map((m) => ({
         role: m.fromMe ? ("assistant" as const) : ("user" as const),
