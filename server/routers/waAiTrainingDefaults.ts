@@ -12,6 +12,7 @@ import {
   DEFAULT_GREETING_MESSAGE,
   DEFAULT_PERSONALITY,
   ORDER_QUANTITY_RULES_BLOCK,
+  PRINTS_ORDER_CONTEXT_BLOCK,
 } from "../../shared/waAiDefaultStrings";
 
 export {
@@ -22,6 +23,7 @@ export {
   DEFAULT_GREETING_MESSAGE,
   DEFAULT_PERSONALITY,
   ORDER_QUANTITY_RULES_BLOCK,
+  PRINTS_ORDER_CONTEXT_BLOCK,
 } from "../../shared/waAiDefaultStrings";
 
 function rowVal(row: Record<string, unknown> | null | undefined, camelKey: string): unknown {
@@ -152,6 +154,7 @@ REGRAS GERAIS:
   }
 
   prompt += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
+  prompt += `\n\n${PRINTS_ORDER_CONTEXT_BLOCK}`;
   return prompt;
 }
 

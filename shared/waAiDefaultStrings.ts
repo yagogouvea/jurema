@@ -91,3 +91,14 @@ export const ORDER_QUANTITY_RULES_BLOCK = `===== INTERPRETAÇÃO DE QUANTIDADES 
 - Nunca assuma que só o primeiro número da frase vale para o pedido inteiro.
 - Se o texto for ambíguo (não dá para saber se são duas linhas de pedido ou descrição), faça UMA pergunta curta para confirmar quantidades — não invente uma conta errada.
 - Se nas últimas mensagens o cliente clarificou o mesmo pedido, use o conjunto mais recente e coerente para o total.`;
+
+/**
+ * Regras sobre prints/imagens vs. linhas de pedido (sem análise visual da foto).
+ * Injetado no system prompt quando ainda não está presente.
+ */
+export const PRINTS_ORDER_CONTEXT_BLOCK = `===== PRINTS, IMAGENS E CONTEXTO DO PEDIDO (obrigatório) =====
+- Você NÃO vê o conteúdo das fotos; trate cada mensagem de imagem/print como "1 arquivo enviado pelo cliente" (o histórico pode indicar quantas houve).
+- Quando o cliente descreveu VÁRIAS linhas de produto/modelos diferentes (ex.: um modelo em uma frase e outro modelo em outra, ou duas quantidades+produtos distintos na mesma mensagem), para seguir com separação ou confirmação final do pedido COMPLETO normalmente serão necessários tantos prints/arquivos quantas forem essas linhas distintas de personalização ou modelo — a menos que o próprio texto deixe claro que um único print vale para todos.
+- Se o texto do pedido indica mais de uma linha de produto/personalização e o cliente enviou menos mensagens de imagem do que linhas distintas, NÃO confirme o pedido inteiro como fechado: peça educadamente o(s) print(s) que faltam, citando de forma curta o que ainda falta (ex.: "falta o print do segundo modelo").
+- Se o cliente enviou imagens a mais em relação ao que descreveu, pode perguntar com calma se há outro item ou se foi duplicidade — não assuma sozinha.
+- Se não houver imagem no histórico mas o fluxo da loja exige print para seguir, peça o envio antes de dar como certo.`;

@@ -19,6 +19,57 @@ async function getDb() {
   return mysql.createConnection(url);
 }
 
+/** URL pública no mesmo host do PDV — redireciona para presign do storage (cookie de sessão não exigido). */
+function manusStoragePublicPath(relKey: string): string {
+  const norm = relKey.replace(/^\/+/, "");
+  return "/manus-storage/" + norm.split("/").map(encodeURIComponent).join("/");
+}
+
+const WEBHOOK_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Devolve URL HTTP atualizada para exibir mídia no painel (presign do storage).
+ * @param mediaStorageKey — chave persistida (ex.: `wa-media/1/abc.jpg`); preferida quando presente.
+ * @param mediaUrl — proxy `/manus-storage/...`, URL https legada, etc.
+ */
+async function resolveStoredMediaToViewUrl(
+  mediaUrl: string | null | undefined,
+  mediaStorageKey?: string | null | undefined
+): Promise<string | null> {
+  const keyDirect = mediaStorageKey && String(mediaStorageKey).trim();
+  if (keyDirect) {
+    try {
+      const { storageGet } = await import("../storage");
+      const { url } = await storageGet(keyDirect);
+      return url;
+    } catch (e) {
+      console.warn(`[resolveStoredMedia] storageGet("${keyDirect}") falhou:`, e);
+    }
+  }
+
+  const s = mediaUrl && String(mediaUrl).trim();
+  if (!s) return null;
+  if (s.startsWith("/manus-storage/")) {
+    const enc = s.slice("/manus-storage/".length);
+    const key = enc.split("/").map((p) => decodeURIComponent(p)).join("/");
+    const { storageGet } = await import("../storage");
+    const { url } = await storageGet(key);
+    return url;
+  }
+  const m = s.match(/(wa-media\/\d+\/[^?\s#'"]+)/i);
+  if (m) {
+    try {
+      const { storageGet } = await import("../storage");
+      const { url } = await storageGet(m[1]);
+      return url;
+    } catch {
+      /* segue para passthrough */
+    }
+  }
+  if (/^https?:\/\//i.test(s)) return s;
+  return s;
+}
+
 // ─── Helpers de permissão ─────────────────────────────────────────────────────
 
 /** Aceita usuários Manus OAuth (admin) ou vendedores PDV autenticados */
@@ -360,6 +411,38 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
+  /**
+   * Resolve URLs de mídia antigas (ex.: presign expirado) para uma URL de leitura atual.
+   * Chamado em lote pelo painel só para mensagens cujo mediaUrl ainda é https absoluto.
+   */
+  resolveMediaViewUrls: publicProcedure
+    .input(z.object({ messageIds: z.array(z.number().int()).min(1).max(100) }))
+    .query(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const unique = Array.from(new Set(input.messageIds));
+      const db = await getDb();
+      try {
+        const placeholders = unique.map(() => "?").join(",");
+        const [rows] = await db.execute(
+          `SELECT id, mediaUrl, mediaStorageKey FROM wa_messages WHERE id IN (${placeholders})`,
+          unique
+        ) as any;
+        const results: { messageId: number; url: string }[] = [];
+        for (const r of rows as { id: number; mediaUrl: string | null; mediaStorageKey: string | null }[]) {
+          const resolved = await resolveStoredMediaToViewUrl(r.mediaUrl, r.mediaStorageKey).catch((e) => {
+            console.warn(`[resolveMediaViewUrls] falha id=${r.id}:`, e);
+            return null;
+          });
+          if (resolved) {
+            results.push({ messageId: Number(r.id), url: resolved });
+          }
+        }
+        return { results };
+      } finally {
+        await db.end();
+      }
+    }),
+
   sendMessage: publicProcedure
     .input(z.object({
       conversationId: z.number(),
@@ -408,6 +491,7 @@ export const waRouter = router({
       mediaUrl: z.string().optional(),
       mediaBase64: z.string().optional(),
       mediaMimeType: z.string().optional(),
+      mediaCaption: z.string().optional(),
       timestamp: z.number(),
       contactName: z.string().optional(),
       contactPhone: z.string().optional(),
@@ -490,34 +574,93 @@ export const waRouter = router({
         };
         const msgType = normalizeType(input.type);
 
-        // Upload de mídia para S3 se vier base64 do wa-bridge
-        let finalMediaUrl: string | null = input.mediaUrl ?? null;
+        // Mídia: gravar URL servida por /manus-storage/... para o painel carregar a imagem/áudio no mesmo host.
+        // Preserva URL assinada do forge em audioTranscribeUrl para o Whisper (fetch server-side).
+        let finalMediaUrl: string | null = (input.mediaUrl && input.mediaUrl.trim()) ? input.mediaUrl.trim() : null;
+        let audioTranscribeUrl: string | null = null;
+        let mediaStorageKey: string | null = null;
+
+        const putAndProxy = async (key: string, buf: Buffer, mime: string) => {
+          const { storagePut } = await import("../storage");
+          const { url } = await storagePut(key, buf, mime);
+          return { forgeUrl: url, proxyPath: manusStoragePublicPath(key) };
+        };
+
         if (input.mediaBase64 && input.mediaMimeType) {
           try {
-            const { storagePut } = await import("../storage");
             const buf = Buffer.from(input.mediaBase64, "base64");
+            if (buf.length > WEBHOOK_MEDIA_MAX_BYTES) {
+              throw new Error(`media exceeds ${WEBHOOK_MEDIA_MAX_BYTES} bytes`);
+            }
             const ext = input.mediaMimeType.split("/")[1]?.split(";")[0] ?? "bin";
             const key = `wa-media/${input.instanceId}/${input.messageId ?? Date.now()}.${ext}`;
-            const { url } = await storagePut(key, buf, input.mediaMimeType);
-            finalMediaUrl = url;
+            const { forgeUrl, proxyPath } = await putAndProxy(key, buf, input.mediaMimeType);
+            mediaStorageKey = key;
+            audioTranscribeUrl = forgeUrl;
+            finalMediaUrl = proxyPath;
           } catch (e) {
-            console.error("[webhook] Erro ao fazer upload de mídia para S3:", e);
+            console.error("[webhook] Erro ao fazer upload de mídia para storage:", e);
+          }
+        } else if (
+          finalMediaUrl
+          && /^https?:\/\//i.test(finalMediaUrl)
+          && ["image", "video", "audio", "document", "sticker"].includes(msgType)
+        ) {
+          try {
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 30000);
+            const r = await fetch(finalMediaUrl, { signal: ctrl.signal, redirect: "follow" });
+            clearTimeout(tid);
+            if (r.ok) {
+              const buf = Buffer.from(await r.arrayBuffer());
+              if (buf.length <= WEBHOOK_MEDIA_MAX_BYTES) {
+                const ct =
+                  r.headers.get("content-type")?.split(";")[0]?.trim()
+                  || input.mediaMimeType
+                  || "application/octet-stream";
+                const extGuess = ct.split("/")[1]?.split("+")[0] ?? "bin";
+                const key = `wa-media/${input.instanceId}/${input.messageId ?? Date.now()}.${extGuess}`;
+                const { forgeUrl, proxyPath } = await putAndProxy(key, buf, ct);
+                mediaStorageKey = key;
+                audioTranscribeUrl = forgeUrl;
+                finalMediaUrl = proxyPath;
+              }
+            }
+          } catch (e) {
+            console.warn("[webhook] Espelho de mediaUrl falhou; mantendo URL original:", e);
           }
         }
 
+        const transcribeAudioUrl =
+          audioTranscribeUrl
+          || (finalMediaUrl && /^https?:\/\//i.test(finalMediaUrl) ? finalMediaUrl : null);
+
         const [insertedMsg] = await db.execute(
-          "INSERT INTO wa_messages (conversationId, instanceId, messageId, fromMe, senderType, type, content, mediaUrl, status, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?)",
-          [conversationId, input.instanceId, input.messageId, input.fromMe, input.fromMe ? "human" : "customer", msgType, input.content ?? null, finalMediaUrl, "delivered", msgTimestamp]
+          "INSERT INTO wa_messages (conversationId, instanceId, messageId, fromMe, senderType, type, content, mediaUrl, mediaStorageKey, mediaCaption, status, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+          [
+            conversationId,
+            input.instanceId,
+            input.messageId,
+            input.fromMe,
+            input.fromMe ? "human" : "customer",
+            msgType,
+            input.content ?? null,
+            finalMediaUrl,
+            mediaStorageKey,
+            input.mediaCaption?.trim() || null,
+            "delivered",
+            msgTimestamp,
+          ]
         ) as any;
         const insertedMsgId = insertedMsg.insertId;
 
         // Transcrição assíncrona de áudio
-        if (msgType === "audio" && finalMediaUrl) {
+        if (msgType === "audio" && transcribeAudioUrl) {
           setImmediate(async () => {
             const transcribeDb = await getDb();
             try {
               const { transcribeAudio } = await import("../_core/voiceTranscription");
-              const result = await transcribeAudio({ audioUrl: finalMediaUrl! });
+              const result = await transcribeAudio({ audioUrl: transcribeAudioUrl! });
               if (result && !('error' in result) && result.text) {
                 await transcribeDb.execute(
                   "UPDATE wa_messages SET content=? WHERE id=?",

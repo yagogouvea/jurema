@@ -265,10 +265,23 @@ function AudioPlayer({ url, duration }: { url?: string | null; duration?: number
 
 // ─── MessageContent ───────────────────────────────────────────────────────────
 
+/** Resolve URL de mídia do WhatsApp para exibição no painel (mesmo host que o app). */
+function resolveWaMediaUrl(mediaUrl: string | null | undefined): string | null {
+  if (!mediaUrl || !String(mediaUrl).trim()) return null;
+  const u = String(mediaUrl).trim();
+  if (u.startsWith("/")) {
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return `${window.location.origin}${u}`;
+    }
+    return u;
+  }
+  return u;
+}
+
 function MessageContent({ msg }: { msg: any }) {
   const type = msg.type ?? "text";
   const content = msg.content ?? "";
-  const mediaUrl = msg.mediaUrl ?? null;
+  const mediaUrl = resolveWaMediaUrl(msg.mediaUrl ?? null);
   const caption = msg.mediaCaption ?? null;
 
   if (type === "audio") {
@@ -438,6 +451,40 @@ export default function PdvWhatsApp() {
     { enabled: selectedConvId !== null, refetchInterval: 2000, refetchOnWindowFocus: true }
   );
   const messages: any[] = messagesQuery.data ?? [];
+
+  const httpLegacyMediaIds = useMemo(() => {
+    const types = new Set(["image", "video", "audio", "document", "sticker"]);
+    return messages
+      .filter((m) => {
+        if (!types.has(m.type)) return false;
+        const u = (m.mediaUrl != null && String(m.mediaUrl).trim()) || "";
+        const k = (m.mediaStorageKey != null && String(m.mediaStorageKey).trim()) || "";
+        if (k && !u) return true;
+        return /^https?:\/\//i.test(u);
+      })
+      .map((m) => Number(m.id))
+      .filter((id) => Number.isFinite(id) && id > 0)
+      .slice(0, 100);
+  }, [messages]);
+
+  const mediaUrlResolveQuery = trpc.wa.resolveMediaViewUrls.useQuery(
+    { messageIds: httpLegacyMediaIds },
+    {
+      enabled: selectedConvId !== null && httpLegacyMediaIds.length > 0,
+      staleTime: 5 * 60 * 1000,
+    }
+  );
+
+  const displayMessages = useMemo(() => {
+    const list = mediaUrlResolveQuery.data?.results;
+    if (!list?.length) return messages;
+    const map = new Map(list.map((x) => [x.messageId, x.url]));
+    return messages.map((m) => {
+      const u = map.get(Number(m.id));
+      if (u) return { ...m, mediaUrl: u };
+      return m;
+    });
+  }, [messages, mediaUrlResolveQuery.data?.results]);
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
 
@@ -944,21 +991,21 @@ export default function PdvWhatsApp() {
                       Carregando mensagens...
                     </div>
                   )}
-                  {messages.length === 0 && !messagesQuery.isLoading && (
+                  {displayMessages.length === 0 && !messagesQuery.isLoading && (
                     <div className="flex items-center justify-center h-16 text-xs" style={{ color: "#333" }}>
                       Nenhuma mensagem ainda
                     </div>
                   )}
 
-                  {messages.map((msg: any, idx: number) => {
+                  {displayMessages.map((msg: any, idx: number) => {
                     // Separador de data
-                    const prevMsg = messages[idx - 1];
+                    const prevMsg = displayMessages[idx - 1];
                     const msgDate = new Date(msg.timestamp).toDateString();
                     const prevDate = prevMsg ? new Date(prevMsg.timestamp).toDateString() : null;
                     const showDateSep = msgDate !== prevDate;
 
                     return (
-                      <div key={msg.id}>
+                      <div key={`wa-msg-${msg.id}-${idx}`}>
                         {showDateSep && (
                           <div className="flex items-center justify-center my-3">
                             <span
@@ -1001,7 +1048,7 @@ export default function PdvWhatsApp() {
                                 }
                             }
                           >
-                            {msg.fromMe && msg.senderType === "ai" && (
+                            {(Boolean(msg.fromMe) && msg.senderType === "ai") && (
                               <div className="flex items-center gap-1 text-[10px] mb-1" style={{ color: "#25D36699" }}>
                                 <Bot size={9} /> Respondido pela Ju
                               </div>
@@ -1013,7 +1060,7 @@ export default function PdvWhatsApp() {
                           </div>
 
                           {/* Indicador de operador humano */}
-                          {msg.fromMe && msg.senderType !== "ai" && (
+                          {(Boolean(msg.fromMe) && msg.senderType !== "ai") && (
                             <div
                               className="rounded-full flex items-center justify-center flex-shrink-0 font-black"
                               style={{

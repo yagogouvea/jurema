@@ -442,6 +442,7 @@ export const waMessages = mysqlTable("wa_messages", {
   type: mysqlEnum("type", ["text", "image", "audio", "video", "document", "sticker", "location", "contact", "reaction"]).default("text").notNull(),
   content: text("content"), // texto da mensagem
   mediaUrl: text("mediaUrl"), // URL da mídia (imagem, áudio, etc.)
+  mediaStorageKey: varchar("mediaStorageKey", { length: 512 }), // chave relativa no storage (ex.: wa-media/1/abc.jpg)
   mediaCaption: text("mediaCaption"), // legenda da mídia
   quotedMessageId: varchar("quotedMessageId", { length: 255 }), // ID da mensagem citada
   status: mysqlEnum("status", ["pending", "sent", "delivered", "read", "failed"]).default("pending").notNull(),

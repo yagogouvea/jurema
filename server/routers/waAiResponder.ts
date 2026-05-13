@@ -18,12 +18,13 @@
  */
 
 import mysql from "mysql2/promise";
-import { ORDER_QUANTITY_RULES_BLOCK } from "@shared/waAiDefaultStrings";
+import { ORDER_QUANTITY_RULES_BLOCK, PRINTS_ORDER_CONTEXT_BLOCK } from "@shared/waAiDefaultStrings";
 import { invokeLLM } from "../_core/llm";
 import { isStoreOpenNowSaoPaulo } from "./waHours";
 import { parseExtraLinks } from "./waAiTrainingDefaults";
 
 const QTY_RULES_MARKER = "INTERPRETAÇÃO DE QUANTIDADES E PEDIDOS";
+const PRINTS_CONTEXT_MARKER = "PRINTS, IMAGENS E CONTEXTO DO PEDIDO";
 
 const SO_UM_MOMENTO_PREFIX = ["só um momento", "so um momento"];
 
@@ -88,6 +89,7 @@ type MsgRow = {
   senderType: string;
   type: string;
   content: string | null;
+  mediaUrl: string | null;
   timestamp: Date | string;
 };
 
@@ -117,6 +119,9 @@ REGRAS:
   }
   if (!p.includes(QTY_RULES_MARKER)) {
     p += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
+  }
+  if (!p.includes(PRINTS_CONTEXT_MARKER)) {
+    p += `\n\n${PRINTS_ORDER_CONTEXT_BLOCK}`;
   }
   return p;
 }
@@ -187,7 +192,7 @@ export async function generateAiResponse(
     // 5. Buscar últimas N mensagens (maxContextMessages, default 10) em ordem cronológica
     const N = Math.max(1, Math.min(50, cfg.maxContextMessages ?? 10));
     const [msgRowsDesc] = await db.execute<any[]>(
-      `SELECT fromMe, senderType, type, content, timestamp
+      `SELECT fromMe, senderType, type, content, mediaUrl, timestamp
        FROM wa_messages
        WHERE conversationId = ?
        ORDER BY timestamp DESC
@@ -238,20 +243,42 @@ export async function generateAiResponse(
       if (!systemPrompt.includes(QTY_RULES_MARKER)) {
         systemPrompt += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
       }
+      if (!systemPrompt.includes(PRINTS_CONTEXT_MARKER)) {
+        systemPrompt += `\n\n${PRINTS_ORDER_CONTEXT_BLOCK}`;
+      }
 
-      const history = msgs.map((m) => ({
-        role: m.fromMe ? ("assistant" as const) : ("user" as const),
-        content: m.content && m.content.trim().length > 0
-          ? m.content
-          : (m.type === "audio"
-              ? "[áudio sem transcrição]"
-              : m.type === "image" ? "[imagem]"
-              : m.type === "video" ? "[vídeo]"
-              : m.type === "document" ? "[documento]"
-              : m.type === "sticker" ? "[figurinha]"
-              : m.type === "location" ? "[localização]"
-              : "[mídia]"),
-      }));
+      const customerImageCount = msgs.filter((m) => !m.fromMe && m.type === "image").length;
+      if (customerImageCount > 0) {
+        systemPrompt += `\n\n===== RESUMO AUTOMÁTICO DO TRECHO =====\nMensagens só de imagem/print enviadas pelo cliente neste contexto: ${customerImageCount}.`;
+      }
+
+      const history = msgs.map((m) => {
+        const hasMedia = !!(m.mediaUrl && String(m.mediaUrl).trim());
+        const text = m.content && m.content.trim().length > 0 ? m.content.trim() : "";
+        const mediaHint =
+          m.type === "audio"
+            ? "[áudio sem transcrição]"
+            : m.type === "image"
+              ? hasMedia
+                ? "[Cliente enviou 1 imagem/print — arquivo recebido no sistema]"
+                : "[Cliente enviou 1 imagem/print — sem arquivo no sistema; peça reenvio se precisar do arquivo]"
+              : m.type === "video"
+                ? "[vídeo]"
+                : m.type === "document"
+                  ? "[documento]"
+                  : m.type === "sticker"
+                    ? "[figurinha]"
+                    : m.type === "location"
+                      ? "[localização]"
+                      : "[mídia]";
+        const content =
+          text.length > 0
+            ? m.type === "image"
+              ? `${text}\n${mediaHint}`
+              : text
+            : mediaHint;
+        return { role: m.fromMe ? ("assistant" as const) : ("user" as const), content };
+      });
 
       const llmRes = await invokeLLM({
         messages: [

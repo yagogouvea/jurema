@@ -13,7 +13,9 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "node --import dotenv/config ./node_modules/vitest/vitest.mjs run",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "db:push": "drizzle-kit generate && drizzle-kit migrate",
+    "wa:backfill-media-key": "node --import dotenv/config scripts/backfill-wa-media-storage-key.mjs",
+    "wa:apply-media-key-column": "node --import dotenv/config scripts/apply-wa-media-storage-key-column.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

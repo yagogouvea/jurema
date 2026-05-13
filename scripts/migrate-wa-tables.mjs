@@ -55,6 +55,7 @@ const tables = [
   \`type\` enum('text','image','audio','video','document','sticker','location','contact','reaction') NOT NULL DEFAULT 'text',
   \`content\` text,
   \`mediaUrl\` text,
+  \`mediaStorageKey\` varchar(512),
   \`mediaCaption\` text,
   \`quotedMessageId\` varchar(255),
   \`status\` enum('pending','sent','delivered','read','failed') NOT NULL DEFAULT 'pending',
@@ -122,6 +123,22 @@ const tables = [
 for (const table of tables) {
   await conn.execute(table.sql);
   console.log(`✅ ${table.name} OK`);
+}
+
+// Instalações antigas: coluna mediaStorageKey (idempotente)
+try {
+  await conn.execute(
+    "ALTER TABLE `wa_messages` ADD COLUMN `mediaStorageKey` varchar(512) NULL COMMENT 'Chave no storage (ex.: wa-media/1/abc.jpg)' AFTER `mediaUrl`"
+  );
+  console.log("✅ wa_messages.mediaStorageKey adicionada");
+} catch (e) {
+  const code = e && typeof e === "object" && "errno" in e ? e.errno : null;
+  const msg = String((e && e.message) || e);
+  if (code === 1060 || msg.includes("Duplicate column")) {
+    console.log("⏭ wa_messages.mediaStorageKey já existe");
+  } else {
+    throw e;
+  }
 }
 
 // Seed: 3 instâncias padrão da Jumera
