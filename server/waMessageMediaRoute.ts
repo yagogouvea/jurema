@@ -36,25 +36,52 @@ async function openMysqlLikeWaRouter(): Promise<mysql.Connection | null> {
   return mysql.createConnection(url);
 }
 
+type MediaAuthFail = { ok: false; status: number; text: string };
+type MediaAuthOk = { ok: true };
+type MediaAuth = MediaAuthOk | MediaAuthFail;
+
+async function authorizeWaMediaRequest(req: Request, messageId: number): Promise<MediaAuth> {
+  const cookieUser = await verifyPdvToken(req).catch(() => null);
+  if (cookieUser) return { ok: true };
+
+  const raw = req.query?.t;
+  const token = typeof raw === "string" ? raw : Array.isArray(raw) ? (raw[0] ?? "") : "";
+  if (!String(token).trim()) return { ok: false, status: 401, text: "Não autenticado" };
+
+  try {
+    const { jwtVerify } = await import("jose");
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET || "pdv_jwt_secret_fallback");
+    const { payload } = await jwtVerify(String(token).trim(), secret);
+    const p = payload as Record<string, unknown>;
+    if (p.p !== "wa_media") return { ok: false, status: 403, text: "Token inválido" };
+    const mid = Number(p.mid);
+    if (!Number.isFinite(mid) || mid !== messageId) {
+      return { ok: false, status: 403, text: "Token não corresponde à mensagem" };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, status: 401, text: "Sessão de mídia inválida ou expirada" };
+  }
+}
+
 const PROXY_MAX_BYTES = 25 * 1024 * 1024;
 
 /**
- * GET /api/pdv/wa-media/:messageId
+ * GET /api/pdv/wa-media/:messageId?t=<jwt opcional>
  *
- * Faz proxy da mídia de `wa_messages` com autenticação PDV (cookie `pdv_token`).
- * Usado quando não há URL https direta (ex.: só `mediaStorageKey` no banco).
+ * Autenticação: cookie `pdv_token` **ou** query `t` (JWT emitido por `wa.getMediaViewTokens`).
  */
 export function registerWaMessageMediaRoute(app: Express): void {
   app.get("/api/pdv/wa-media/:messageId", async (req: Request, res: Response) => {
-    const seller = await verifyPdvToken(req).catch(() => null);
-    if (!seller) {
-      res.status(401).type("text/plain").send("Não autenticado");
-      return;
-    }
-
     const messageId = Number.parseInt(String(req.params.messageId || ""), 10);
     if (!Number.isFinite(messageId) || messageId <= 0) {
       res.status(400).end();
+      return;
+    }
+
+    const auth = await authorizeWaMediaRequest(req, messageId);
+    if (!auth.ok) {
+      res.status(auth.status).type("text/plain").send(auth.text);
       return;
     }
 
@@ -82,6 +109,9 @@ export function registerWaMessageMediaRoute(app: Express): void {
         mediaStorageKey == null ? null : String(mediaStorageKey)
       );
       if (!upstream) {
+        console.warn(
+          `[wa-media] sem URL resolvida messageId=${messageId} type=${type} hasUrl=${!!mediaUrl} hasKey=${!!mediaStorageKey}`
+        );
         res.status(404).type("text/plain").send("Mídia indisponível");
         return;
       }

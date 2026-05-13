@@ -291,7 +291,7 @@ function resolveWaMediaUrl(mediaUrl: string | null | undefined): string | null {
  * 1) Preferir URL absoluta (presign do batch `resolveMediaViewUrls`, https do bridge, ou /manus-storage no mesmo host).
  * 2) Só então `/api/pdv/wa-media/:id` — cookie PDV; evita 404 quando o batch já resolveu a URL e o proxy falhava por leitura duplicada no MySQL.
  */
-function waPanelMediaSrc(msg: any): string | null {
+function waPanelMediaSrc(msg: any, mediaJwt?: string | null): string | null {
   const type = String(msg?.type ?? "text");
   const binaryTypes = new Set(["image", "video", "audio", "document", "sticker"]);
   const raw =
@@ -304,15 +304,20 @@ function waPanelMediaSrc(msg: any): string | null {
   if (binaryTypes.has(type)) {
     if (direct && /^https?:\/\//i.test(direct)) return direct;
     const id = waMessageNumericId(msg);
-    if (Number.isFinite(id) && id > 0) return `/api/pdv/wa-media/${id}`;
+    if (Number.isFinite(id) && id > 0) {
+      const base = `/api/pdv/wa-media/${id}`;
+      const j = mediaJwt?.trim();
+      if (j) return `${base}?t=${encodeURIComponent(j)}`;
+      return base;
+    }
   }
   return direct;
 }
 
-function MessageContent({ msg }: { msg: any }) {
+function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?: string | null }) {
   const type = msg.type ?? "text";
   const content = msg.content ?? "";
-  const mediaUrl = waPanelMediaSrc(msg);
+  const mediaUrl = waPanelMediaSrc(msg, mediaAccessToken);
   const caption = msg.mediaCaption ?? null;
 
   if (type === "audio") {
@@ -529,6 +534,31 @@ export default function PdvWhatsApp() {
       return m;
     });
   }, [messages, mediaUrlResolveQuery.data?.results]);
+
+  const mediaMessageIdsForJwt = useMemo(() => {
+    const types = new Set(["image", "video", "audio", "document", "sticker"]);
+    const ids = displayMessages
+      .filter((m) => types.has(String(m.type)))
+      .map((m) => waMessageNumericId(m))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    return Array.from(new Set(ids)).slice(0, 100);
+  }, [displayMessages]);
+
+  const mediaTokensQuery = trpc.wa.getMediaViewTokens.useQuery(
+    { messageIds: mediaMessageIdsForJwt },
+    {
+      enabled: selectedConvId !== null && mediaMessageIdsForJwt.length > 0,
+      staleTime: 15 * 60 * 1000,
+    }
+  );
+
+  const mediaJwtByMessageId = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const row of mediaTokensQuery.data?.tokens ?? []) {
+      if (Number.isFinite(row.messageId) && row.token) m.set(row.messageId, row.token);
+    }
+    return m;
+  }, [mediaTokensQuery.data?.tokens]);
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
 
@@ -1097,7 +1127,10 @@ export default function PdvWhatsApp() {
                                 <Bot size={9} /> Respondido pela Ju
                               </div>
                             )}
-                            <MessageContent msg={msg} />
+                            <MessageContent
+                              msg={msg}
+                              mediaAccessToken={mediaJwtByMessageId.get(waMessageNumericId(msg)) ?? undefined}
+                            />
                             <div className="text-[10px] mt-1 text-right" style={{ color: "#555" }}>
                               {formatMsgTime(msg.timestamp)}
                             </div>

@@ -528,6 +528,31 @@ export const waRouter = router({
       }
     }),
 
+  /**
+   * JWT curto para anexar em `/api/pdv/wa-media/:id?t=...`.
+   * `<img>` e `<audio>` não enviam `Authorization: Bearer`; muitos vendedores só têm `pdv_token` no localStorage.
+   */
+  getMediaViewTokens: publicProcedure
+    .input(z.object({ messageIds: z.array(z.number().int()).min(1).max(100) }))
+    .query(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const unique = Array.from(
+        new Set(input.messageIds.filter((id) => Number.isFinite(id) && id > 0))
+      );
+      if (unique.length === 0) return { tokens: [] as { messageId: number; token: string }[] };
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET || "pdv_jwt_secret_fallback");
+      const { SignJWT } = await import("jose");
+      const tokens: { messageId: number; token: string }[] = [];
+      for (const mid of unique) {
+        const token = await new SignJWT({ mid, p: "wa_media" })
+          .setProtectedHeader({ alg: "HS256" })
+          .setExpirationTime("45m")
+          .sign(secret);
+        tokens.push({ messageId: mid, token });
+      }
+      return { tokens };
+    }),
+
   sendMessage: publicProcedure
     .input(z.object({
       conversationId: z.number(),
