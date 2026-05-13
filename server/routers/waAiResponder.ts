@@ -210,6 +210,36 @@ export async function generateAiResponse(
     if (!msgRowsDesc.length) return { ok: false, skipped: "no_customer_message" };
     const msgs = (msgRowsDesc as MsgRow[]).reverse();
 
+    // 5b. Garante transcrição dos áudios do cliente antes de chamar a IA.
+    //     Whisper a partir do LONGBLOB salvo em wa_messages.mediaBlob.
+    try {
+      const { transcribeAudioBuffer } = await import("../_core/voiceTranscription");
+      for (const m of msgs) {
+        if (m.fromMe) continue;
+        if (m.type !== "audio") continue;
+        const text = (m.content ?? "").trim();
+        if (text && text !== "[audio]" && text !== "[áudio sem transcrição]") continue;
+        const [audioRows] = (await db.execute(
+          "SELECT id, mediaBlob, mediaMimeType FROM wa_messages WHERE conversationId = ? AND type='audio' AND fromMe = 0 AND (content IS NULL OR content = '' OR content = '[audio]') ORDER BY timestamp DESC LIMIT 1",
+          [conversationId]
+        )) as any;
+        const row = (audioRows as any[])[0];
+        if (!row || !row.mediaBlob) continue;
+        const buf = Buffer.isBuffer(row.mediaBlob) ? row.mediaBlob : Buffer.from(row.mediaBlob);
+        const mime = String(row.mediaMimeType ?? "audio/ogg");
+        const result = await transcribeAudioBuffer({ audioBuffer: buf, mimeType: mime, language: "pt" });
+        if (result && !("error" in result) && result.text) {
+          const newContent = `[Áudio] ${result.text}`.slice(0, 8000);
+          await db.execute("UPDATE wa_messages SET content = ? WHERE id = ?", [newContent, row.id]);
+          m.content = newContent;
+          console.log(`[ai] transcrição inline mid=${row.id} chars=${result.text.length}`);
+        }
+        break;
+      }
+    } catch (e) {
+      console.warn("[ai] Erro na transcrição inline antes da resposta:", e);
+    }
+
     // Anti-loop: só responde se a última mensagem na conversa é do CLIENTE
     const last = msgs[msgs.length - 1];
     if (last.fromMe) return { ok: false, skipped: "last_message_was_us" };

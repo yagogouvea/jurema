@@ -64,6 +64,95 @@ export type TranscriptionError = {
   details?: string;
 };
 
+export type TranscribeBufferOptions = {
+  audioBuffer: Buffer;
+  mimeType?: string;
+  language?: string;
+  prompt?: string;
+};
+
+/**
+ * Transcribe a raw audio Buffer (no URL needed — usado quando os bytes já estão no servidor).
+ */
+export async function transcribeAudioBuffer(
+  options: TranscribeBufferOptions
+): Promise<TranscriptionResponse | TranscriptionError> {
+  try {
+    const isPlaceholder = (v: string) => !v || v.trim().length === 0 || v.trim().startsWith("<");
+    const useOpenAI = !isPlaceholder(ENV.openaiApiKey);
+    const apiBaseUrl = useOpenAI
+      ? (ENV.openaiBaseUrl || "https://api.openai.com")
+      : ENV.forgeApiUrl;
+    const apiKey = useOpenAI ? ENV.openaiApiKey : ENV.forgeApiKey;
+
+    if (!apiBaseUrl || !apiKey) {
+      return {
+        error: "Voice transcription service is not configured",
+        code: "SERVICE_ERROR",
+        details: "OPENAI_API_KEY ou BUILT_IN_FORGE_API_URL/KEY ausentes",
+      };
+    }
+
+    const buf = options.audioBuffer;
+    const sizeMB = buf.length / (1024 * 1024);
+    if (sizeMB > 24) {
+      return {
+        error: "Audio file exceeds maximum size limit",
+        code: "FILE_TOO_LARGE",
+        details: `File size is ${sizeMB.toFixed(2)}MB`,
+      };
+    }
+
+    const mime = options.mimeType || "audio/ogg";
+    const formData = new FormData();
+    const filename = `audio.${getFileExtension(mime)}`;
+    formData.append("file", new Blob([new Uint8Array(buf)], { type: mime }), filename);
+    formData.append("model", "whisper-1");
+    formData.append("response_format", "verbose_json");
+    const prompt = options.prompt
+      || (options.language
+        ? `Transcribe the user's voice to text, the user's working language is ${getLanguageName(options.language)}`
+        : "Transcribe the user's voice to text. Idioma padrão: pt-BR.");
+    formData.append("prompt", prompt);
+
+    const baseUrl = apiBaseUrl.endsWith("/") ? apiBaseUrl : `${apiBaseUrl}/`;
+    const fullUrl = new URL("v1/audio/transcriptions", baseUrl).toString();
+    const response = await fetch(fullUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "Accept-Encoding": "identity",
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      return {
+        error: "Transcription service request failed",
+        code: "TRANSCRIPTION_FAILED",
+        details: `${response.status} ${response.statusText}${errorText ? `: ${errorText.slice(0, 200)}` : ""}`,
+      };
+    }
+
+    const whisperResponse = (await response.json()) as WhisperResponse;
+    if (!whisperResponse.text || typeof whisperResponse.text !== "string") {
+      return {
+        error: "Invalid transcription response",
+        code: "SERVICE_ERROR",
+        details: "Whisper retornou resposta inválida",
+      };
+    }
+    return whisperResponse;
+  } catch (error) {
+    return {
+      error: "Voice transcription failed",
+      code: "SERVICE_ERROR",
+      details: error instanceof Error ? error.message : "An unexpected error occurred",
+    };
+  }
+}
+
 /**
  * Transcribe audio to text using the internal Speech-to-Text service
  * 

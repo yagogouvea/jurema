@@ -387,6 +387,43 @@ function ImageLightbox({
   );
 }
 
+function TranscribeAudioButton({
+  messageId,
+  conversationId,
+}: {
+  messageId: number;
+  conversationId: number;
+}) {
+  const utils = trpc.useUtils();
+  const [done, setDone] = useState<string | null>(null);
+  const mut = trpc.wa.transcribeMessageAudio.useMutation({
+    onSuccess: (data) => {
+      setDone(data.text);
+      utils.wa.listMessages.invalidate({ conversationId });
+      toast.success("Áudio transcrito");
+    },
+    onError: (e) => toast.error(`Falha ao transcrever: ${e.message}`),
+  });
+  if (done) {
+    return (
+      <p className="text-[10px] mt-1 italic" style={{ color: "#aaa" }}>
+        “{done}”
+      </p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="text-[10px] mt-1 underline self-start"
+      style={{ color: "#25D366" }}
+      onClick={() => mut.mutate({ messageId })}
+      disabled={mut.isPending}
+    >
+      {mut.isPending ? "transcrevendo…" : "Transcrever áudio"}
+    </button>
+  );
+}
+
 function WaMediaDebugButton({ messageId }: { messageId: number }) {
   const [open, setOpen] = useState(false);
   const debugQuery = trpc.wa.debugMessageMedia.useQuery(
@@ -430,11 +467,21 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   if (type === "audio") {
+    const hasTranscription =
+      typeof content === "string"
+        && content.trim().length > 0
+        && content.trim() !== "[audio]"
+        && content.trim() !== "[áudio sem transcrição]";
+    const convId = Number(msg?.conversationId);
     return (
       <div>
         <AudioPlayer url={mediaUrl} />
-        {content && content !== "[audio]" && (
+        {hasTranscription ? (
           <p className="text-[11px] mt-1" style={{ color: "#aaa" }}>{content}</p>
+        ) : (
+          mediaUrl && hasNumericId && Number.isFinite(convId) && (
+            <TranscribeAudioButton messageId={numericId} conversationId={convId} />
+          )
         )}
       </div>
     );

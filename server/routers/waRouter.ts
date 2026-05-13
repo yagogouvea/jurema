@@ -611,6 +611,55 @@ export const waRouter = router({
     }),
 
   /**
+   * Transcreve manualmente um áudio existente (usa o LONGBLOB salvo em wa_messages).
+   * Atualiza `content` para `[Áudio] <texto>` e devolve a transcrição.
+   */
+  transcribeMessageAudio: publicProcedure
+    .input(z.object({ messageId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const db = await getDb();
+      try {
+        const [rows] = (await db.execute(
+          "SELECT id, type, mediaBlob, mediaMimeType, mediaUrl FROM wa_messages WHERE id = ? LIMIT 1",
+          [input.messageId]
+        )) as any;
+        const raw = (rows as Record<string, unknown>[])[0];
+        if (!raw) throw new TRPCError({ code: "NOT_FOUND", message: "Mensagem não encontrada" });
+        const type = String(getMysqlRowField(raw, "type") ?? "text");
+        if (type !== "audio") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Mensagem não é áudio" });
+        }
+
+        const blobRaw = getMysqlRowField(raw, "mediaBlob");
+        const mime = String(getMysqlRowField(raw, "mediaMimeType") ?? "audio/ogg");
+
+        const { transcribeAudio, transcribeAudioBuffer } = await import("../_core/voiceTranscription");
+        let result: Awaited<ReturnType<typeof transcribeAudioBuffer>>;
+        if (blobRaw) {
+          const buf = Buffer.isBuffer(blobRaw) ? blobRaw : Buffer.from(blobRaw as any);
+          result = await transcribeAudioBuffer({ audioBuffer: buf, mimeType: mime, language: "pt" });
+        } else {
+          const url = String(getMysqlRowField(raw, "mediaUrl") ?? "");
+          if (!/^https?:\/\//i.test(url)) {
+            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Áudio sem bytes salvos no servidor" });
+          }
+          result = await transcribeAudio({ audioUrl: url });
+        }
+
+        if ("error" in result) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
+        }
+
+        const newContent = `[Áudio] ${result.text}`.slice(0, 8000);
+        await db.execute("UPDATE wa_messages SET content = ? WHERE id = ?", [newContent, input.messageId]);
+        return { text: result.text, content: newContent };
+      } finally {
+        await db.end();
+      }
+    }),
+
+  /**
    * JWT curto para anexar em `/api/pdv/wa-media/:id?t=...`.
    * `<img>` e `<audio>` não enviam `Authorization: Bearer`; muitos vendedores só têm `pdv_token` no localStorage.
    */
@@ -932,23 +981,37 @@ export const waRouter = router({
         ) as any;
         const insertedMsgId = insertedMsg.insertId;
 
-        // Transcrição assíncrona de áudio
-        if (msgType === "audio" && transcribeAudioUrl) {
+        // Transcrição assíncrona de áudio:
+        //  - Prefere os bytes em memória (mediaBlob recém-decodificado/baixado).
+        //  - Cai para URL https se existir (storage Manus configurado).
+        if (msgType === "audio" && (mediaBlob || transcribeAudioUrl)) {
+          const blobCopy = mediaBlob ? Buffer.from(mediaBlob) : null;
+          const mimeCopy = mediaMimeFinal ?? null;
           setImmediate(async () => {
             const transcribeDb = await getDb();
             try {
-              const { transcribeAudio } = await import("../_core/voiceTranscription");
-              const result = await transcribeAudio({ audioUrl: transcribeAudioUrl! });
-              if (result && !('error' in result) && result.text) {
+              const { transcribeAudio, transcribeAudioBuffer } = await import("../_core/voiceTranscription");
+              const result = blobCopy
+                ? await transcribeAudioBuffer({
+                    audioBuffer: blobCopy,
+                    mimeType: mimeCopy ?? undefined,
+                    language: "pt",
+                  })
+                : await transcribeAudio({ audioUrl: transcribeAudioUrl! });
+              if (result && !("error" in result) && result.text) {
                 await transcribeDb.execute(
                   "UPDATE wa_messages SET content=? WHERE id=?",
                   [`[Áudio] ${result.text}`, insertedMsgId]
                 );
-                console.log(`[webhook] Transcrição de áudio salva para mensagem ${insertedMsgId}`);
+                console.log(`[webhook] Transcrição salva mid=${insertedMsgId} chars=${result.text.length}`);
+              } else if (result && "error" in result) {
+                console.error(`[webhook] Whisper falhou mid=${insertedMsgId}:`, result);
               }
             } catch (e) {
               console.error("[webhook] Erro ao transcrever áudio:", e);
-            } finally { await transcribeDb.end(); }
+            } finally {
+              await transcribeDb.end();
+            }
           });
         }
 
