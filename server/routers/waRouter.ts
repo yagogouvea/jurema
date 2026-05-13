@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { router, protectedProcedure, publicProcedure } from "../_core/trpc";
+import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import type { Request } from "express";
@@ -590,7 +590,7 @@ export const waRouter = router({
 
   // ── Configuração da IA ──────────────────────────────────────────────────────
 
-  getAiConfig: protectedProcedure
+  getAiConfig: publicProcedure
     .input(z.object({ instanceId: z.number() }))
     .query(async ({ ctx, input }) => {
       await requireWaAccess(ctx);
@@ -602,7 +602,7 @@ export const waRouter = router({
     }),
 
   /** Texto modelo completo (sem usar o banco) — botão "recarregar rascunho" no Treinamento IA. */
-  getAiTrainingDefaults: protectedProcedure.query(async ({ ctx }) => {
+  getAiTrainingDefaults: publicProcedure.query(async ({ ctx }) => {
     await requireWaAccess(ctx);
     return mergeDbRowWithDefaults(null, 0);
   }),
@@ -611,7 +611,7 @@ export const waRouter = router({
    * Lê o pedido em linguagem natural + treinamento atual e devolve proposta de alterações (ou recusa).
    * Só admin. Não grava no banco — o cliente confirma no painel e salva depois.
    */
-  refineAiTrainingFromRequest: protectedProcedure
+  refineAiTrainingFromRequest: publicProcedure
     .input(refineTrainingInputSchema)
     .mutation(async ({ ctx, input }) => {
       await requireWaAdmin(ctx);
@@ -623,7 +623,7 @@ export const waRouter = router({
       }
     }),
 
-  saveAiConfig: protectedProcedure
+  saveAiConfig: publicProcedure
     .input(z.object({
       instanceId: z.number(),
       enabled: z.boolean().optional(),
@@ -713,7 +713,7 @@ export const waRouter = router({
 
   // ── Respostas Rápidas ───────────────────────────────────────────────────────
 
-  listQuickReplies: protectedProcedure
+  listQuickReplies: publicProcedure
     .input(z.object({ instanceId: z.number().optional() }))
     .query(async ({ ctx, input }) => {
       await requireWaAccess(ctx);
@@ -731,7 +731,7 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
-  upsertQuickReply: protectedProcedure
+  upsertQuickReply: publicProcedure
     .input(z.object({
       id: z.number().optional(),
       instanceId: z.number().optional(),
@@ -759,7 +759,7 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
-  deleteQuickReply: protectedProcedure
+  deleteQuickReply: publicProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       await requireWaAdmin(ctx);
@@ -772,7 +772,7 @@ export const waRouter = router({
 
   // ── Métricas ─────────────────────────────────────────────────────────────────
 
-  getMetrics: protectedProcedure
+  getMetrics: publicProcedure
     .input(z.object({ instanceId: z.number().optional() }))
     .query(async ({ ctx, input }) => {
       await requireWaAccess(ctx);
@@ -867,7 +867,7 @@ export const waRouter = router({
    * Deduplica conversas com o mesmo instanceId+remoteJid, mesclando mensagens na mais antiga.
    * Admin only.
    */
-  deduplicateConversations: protectedProcedure
+  deduplicateConversations: publicProcedure
     .mutation(async ({ ctx }) => {
       await requireWaAdmin(ctx);
       const db = await getDb();

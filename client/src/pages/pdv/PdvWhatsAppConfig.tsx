@@ -21,6 +21,14 @@ import {
 } from "@/components/ui/select";
 import { Link } from "wouter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DEFAULT_AI_NAME,
+  DEFAULT_AWAY_MESSAGE,
+  DEFAULT_BUSINESS_CONTEXT,
+  DEFAULT_ESCALATE_KEYWORDS,
+  DEFAULT_GREETING_MESSAGE,
+  DEFAULT_PERSONALITY,
+} from "@shared/waAiDefaultStrings";
 
 const AWAY_DAY_KEYS = ["0", "1", "2", "3", "4", "5", "6"] as const;
 const AWAY_DAY_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
@@ -266,15 +274,36 @@ export default function PdvWhatsAppConfig() {
 
   const { data: instances = [], refetch: refetchInst } = trpc.wa.listInstances.useQuery();
 
-  const { data: aiConfig, isLoading: aiConfigLoading, refetch: refetchAiConfig } = trpc.wa.getAiConfig.useQuery(
+  const {
+    data: aiConfig,
+    isLoading: aiConfigLoading,
+    isError: aiConfigIsError,
+    refetch: refetchAiConfig,
+  } = trpc.wa.getAiConfig.useQuery(
     { instanceId: selectedInstanceId! },
-    { enabled: !!selectedInstanceId, staleTime: 0 }
+    { enabled: !!selectedInstanceId, staleTime: 0, retry: 1 }
   );
 
-  const { data: aiTrainingDefaults } = trpc.wa.getAiTrainingDefaults.useQuery(undefined, {
-    enabled: activeTab === "treinamento",
+  const {
+    data: aiTrainingDefaults,
+    isLoading: aiDefaultsLoading,
+    refetch: refetchAiDefaults,
+  } = trpc.wa.getAiTrainingDefaults.useQuery(undefined, {
+    /** Com instância selecionada já buscamos o modelo — assim o rascunho não fica vazio se getAiConfig falhar. */
+    enabled: !!selectedInstanceId,
     staleTime: 60_000,
   });
+
+  const aiUiPayload = aiConfig ?? aiTrainingDefaults;
+  const aiHydrationPending =
+    !!selectedInstanceId &&
+    (aiConfigLoading ||
+      (aiConfig === undefined && aiTrainingDefaults === undefined && aiDefaultsLoading));
+
+  const warnedAiLoadRef = useRef(false);
+  useEffect(() => {
+    warnedAiLoadRef.current = false;
+  }, [selectedInstanceId]);
 
   const { data: quickReplies = [], refetch: refetchQr } = trpc.wa.listQuickReplies.useQuery(
     { instanceId: selectedInstanceId ?? undefined }
@@ -286,35 +315,91 @@ export default function PdvWhatsAppConfig() {
     { refetchInterval: 15_000 }
   );
 
-  // Preenche o formulário com valores do servidor já mesclados ao modelo Jurema (campos vazios no banco vêm preenchidos).
+  // Preenche o formulário: getAiConfig (banco + defaults) ou, se falhar, getAiTrainingDefaults; se ambos falharem, defaults do pacote compartilhado.
   useEffect(() => {
-    if (aiConfig === undefined || !selectedInstanceId) return;
-    const { modes, opens } = parseScheduleToState(aiConfig.awaySchedule);
+    if (!selectedInstanceId) return;
+    if (aiConfigLoading) return;
+    if (aiConfig === undefined && aiTrainingDefaults === undefined && aiDefaultsLoading) return;
+
+    const d = aiTrainingDefaults;
+    const cfg = aiConfig ?? aiTrainingDefaults;
+
+    const pickStr = (apiVal: string | null | undefined, draftVal: string | null | undefined, fallback: string) => {
+      const s = apiVal != null ? String(apiVal).trim() : "";
+      if (s) return s;
+      const t = draftVal != null ? String(draftVal).trim() : "";
+      if (t) return t;
+      return fallback;
+    };
+
+    if (cfg === undefined) {
+      const { modes, opens } = parseScheduleToState(null);
+      setAwayDayMode(modes);
+      setAwayDayOpen(opens);
+      setAiForm({
+        enabled: false,
+        aiName: DEFAULT_AI_NAME,
+        personality: DEFAULT_PERSONALITY,
+        businessContext: DEFAULT_BUSINESS_CONTEXT,
+        greetingMessage: DEFAULT_GREETING_MESSAGE,
+        systemPrompt: "",
+        catalogLink: "",
+        groupLink: "",
+        instagramLink: "",
+        maxContextMessages: 10,
+        responseDelayMin: 1000,
+        responseDelayMax: 3000,
+        escalateKeywords: [...DEFAULT_ESCALATE_KEYWORDS],
+        newKeyword: "",
+      });
+      setAwayForm({
+        awayEnabled: false,
+        awayStart: "18:00",
+        awayEnd: "08:00",
+        awayMessage: DEFAULT_AWAY_MESSAGE,
+      });
+      if (aiConfigIsError && !warnedAiLoadRef.current) {
+        warnedAiLoadRef.current = true;
+        toast.error(
+          "Não foi possível carregar a configuração da IA no servidor. Mostramos o modelo local — após atualizar o sistema, use \"Buscar de novo\"."
+        );
+      }
+      return;
+    }
+
+    const { modes, opens } = parseScheduleToState(cfg.awaySchedule);
     setAwayDayMode(modes);
     setAwayDayOpen(opens);
     setAiForm({
-      enabled: Boolean(aiConfig.enabled),
-      aiName: aiConfig.aiName,
-      personality: aiConfig.personality,
-      businessContext: aiConfig.businessContext,
-      greetingMessage: aiConfig.greetingMessage,
-      systemPrompt: aiConfig.systemPrompt,
-      catalogLink: aiConfig.catalogLink,
-      groupLink: aiConfig.groupLink,
-      instagramLink: aiConfig.instagramLink,
-      maxContextMessages: aiConfig.maxContextMessages,
-      responseDelayMin: aiConfig.responseDelayMin,
-      responseDelayMax: aiConfig.responseDelayMax,
-      escalateKeywords: Array.isArray(aiConfig.escalateKeywords) ? [...aiConfig.escalateKeywords] : [],
+      enabled: Boolean(cfg.enabled),
+      aiName: pickStr(cfg.aiName, d?.aiName, DEFAULT_AI_NAME),
+      personality: pickStr(cfg.personality, d?.personality, DEFAULT_PERSONALITY),
+      businessContext: pickStr(cfg.businessContext, d?.businessContext, DEFAULT_BUSINESS_CONTEXT),
+      greetingMessage: pickStr(cfg.greetingMessage, d?.greetingMessage, DEFAULT_GREETING_MESSAGE),
+      systemPrompt: cfg.systemPrompt,
+      catalogLink: cfg.catalogLink,
+      groupLink: cfg.groupLink,
+      instagramLink: cfg.instagramLink,
+      maxContextMessages: cfg.maxContextMessages,
+      responseDelayMin: cfg.responseDelayMin,
+      responseDelayMax: cfg.responseDelayMax,
+      escalateKeywords: Array.isArray(cfg.escalateKeywords) ? [...cfg.escalateKeywords] : [],
       newKeyword: "",
     });
     setAwayForm({
-      awayEnabled: Boolean(aiConfig.awayEnabled),
-      awayStart: aiConfig.awayStart,
-      awayEnd: aiConfig.awayEnd,
-      awayMessage: aiConfig.awayMessage,
+      awayEnabled: Boolean(cfg.awayEnabled),
+      awayStart: cfg.awayStart,
+      awayEnd: cfg.awayEnd,
+      awayMessage: pickStr(cfg.awayMessage, d?.awayMessage, DEFAULT_AWAY_MESSAGE),
     });
-  }, [aiConfig, selectedInstanceId]);
+  }, [
+    selectedInstanceId,
+    aiConfig,
+    aiTrainingDefaults,
+    aiConfigLoading,
+    aiDefaultsLoading,
+    aiConfigIsError,
+  ]);
 
   useEffect(() => {
     if (activeTab !== "horarios" || !instances.length) return;
@@ -934,7 +1019,15 @@ export default function PdvWhatsAppConfig() {
                 </p>
               </div>
 
-              {selectedInstanceId && aiConfig && !aiConfigLoading && (
+              {selectedInstanceId && aiConfigIsError && (
+                <div className="rounded-xl border border-red-800/45 bg-red-950/25 px-4 py-3 text-red-100/95 text-xs leading-relaxed">
+                  <strong className="text-red-200">Aviso:</strong> a configuração desta instância não foi carregada do
+                  servidor (sessão, rede ou versão antiga do backend). Os campos podem mostrar só o modelo local até a
+                  correção subir em produção. Use &quot;Buscar de novo&quot; após o deploy.
+                </div>
+              )}
+
+              {selectedInstanceId && aiUiPayload && !aiHydrationPending && (
                 <div className="space-y-3">
                   <div className="rounded-xl border border-green-800/40 bg-green-950/15 p-4 text-[13px] text-gray-200 leading-relaxed space-y-3">
                     <p>
@@ -977,13 +1070,16 @@ export default function PdvWhatsAppConfig() {
                         variant="ghost"
                         size="sm"
                         className="text-gray-400 hover:text-white"
-                        onClick={() => refetchAiConfig()}
+                        onClick={() => {
+                          void refetchAiConfig();
+                          void refetchAiDefaults();
+                        }}
                       >
                         Buscar de novo no servidor
                       </Button>
                     </div>
                   </div>
-                  {!aiConfig.hasPersistedRow && (
+                  {!aiUiPayload.hasPersistedRow && (
                     <p className="text-amber-200/90 text-xs bg-amber-950/20 border border-amber-900/30 rounded-lg px-3 py-2">
                       Ainda não há configuração salva para esta instância no banco. Ao clicar em{" "}
                       <strong className="text-amber-100">Salvar Configuração da IA</strong>, o registro será criado com o
@@ -993,7 +1089,7 @@ export default function PdvWhatsAppConfig() {
                 </div>
               )}
 
-              {selectedInstanceId && !aiConfigLoading && (
+              {selectedInstanceId && !aiHydrationPending && (
                 <div className="rounded-xl border border-violet-800/40 bg-violet-950/20 p-4 space-y-3">
                   <div className="flex items-start gap-2">
                     <Sparkles className="w-5 h-5 text-violet-300 shrink-0 mt-0.5" />
@@ -1067,7 +1163,7 @@ export default function PdvWhatsAppConfig() {
               )}
 
               {/* Skeleton de carregamento */}
-              {aiConfigLoading && selectedInstanceId && (
+              {aiHydrationPending && selectedInstanceId && (
                 <div className="space-y-4 animate-pulse">
                   <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-16" />
                   <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 h-40" />
@@ -1077,7 +1173,7 @@ export default function PdvWhatsAppConfig() {
               )}
 
               {/* Conteúdo real — só renderiza após dados carregarem */}
-              {!aiConfigLoading && selectedInstanceId && (<>
+              {!aiHydrationPending && selectedInstanceId && (<>
               {/* Toggle IA */}              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${aiForm.enabled ? "bg-green-900" : "bg-gray-800"}`}>
@@ -1361,7 +1457,7 @@ export default function PdvWhatsAppConfig() {
                 {saveAiConfig.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Salvar Configuração da IA
               </Button>
-              </>)} {/* fecha !aiConfigLoading && selectedInstanceId */}
+              </>)} {/* fecha !aiHydrationPending && selectedInstanceId */}
             </div>
           )}
           {/* ── Tab: Respostas Rápidass ──────────────────────────────────────── */}
@@ -1513,14 +1609,14 @@ export default function PdvWhatsAppConfig() {
               )}
 
               {/* Skeleton */}
-              {aiConfigLoading && selectedInstanceId && (
+              {aiHydrationPending && selectedInstanceId && (
                 <div className="space-y-4 animate-pulse">
                   <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 h-48" />
                   <p className="text-center text-gray-500 text-sm py-2">Carregando horários...</p>
                 </div>
               )}
 
-              {!aiConfigLoading && selectedInstanceId && (<>
+              {!aiHydrationPending && selectedInstanceId && (<>
               {/* Aviso de integração com IA */}
               {aiForm.enabled && (
                 <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl p-4 flex gap-3">
@@ -1680,7 +1776,7 @@ export default function PdvWhatsAppConfig() {
                 {saveAwayBatch.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Salvar horários (instâncias marcadas)
               </Button>
-              </>)} {/* fecha !aiConfigLoading && selectedInstanceId */}
+              </>)} {/* fecha !aiHydrationPending && selectedInstanceId */}
             </div>
           )}
         </div>
