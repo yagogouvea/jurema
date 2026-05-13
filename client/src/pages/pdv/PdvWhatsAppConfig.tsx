@@ -7,7 +7,7 @@ import {
   Bot, Save, Plus, Wifi, WifiOff, Settings,
   Clock, Zap, Brain, Link2, Users, Trash2,
   ChevronLeft, Eye, RefreshCw, AlertCircle,
-  QrCode, RotateCcw, CheckCircle2, Radio, ExternalLink, ChevronDown,
+  QrCode, RotateCcw, CheckCircle2, Radio, ExternalLink, ChevronDown, Sparkles, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -217,7 +217,13 @@ export default function PdvWhatsAppConfig() {
   const { isAdmin } = usePdvAuth();
   const [activeTab, setActiveTab] = useState<Tab>("instancias");
   const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
-  const [trainingAdvancedOpen, setTrainingAdvancedOpen] = useState(false);
+  const [trainingAdvancedOpen, setTrainingAdvancedOpen] = useState(true);
+  const [refineWish, setRefineWish] = useState("");
+  const [refinePreview, setRefinePreview] = useState<
+    | { outcome: "proposal"; messageForUser: string; updates: Record<string, unknown> }
+    | { outcome: "reject"; messageForUser: string; rejectCode: string }
+    | null
+  >(null);
 
   // ── Instâncias ──────────────────────────────────────────────────────────────
   const [instForm, setInstForm] = useState({ id: 0, name: "", phone: "", instanceId: "", apiKey: "", webhookUrl: "", active: true });
@@ -367,6 +373,18 @@ export default function PdvWhatsAppConfig() {
     }
   }, [activeTab, bridgeData?.available, bridgeData?.sessions]);
 
+  const refineTrainingAi = trpc.wa.refineAiTrainingFromRequest.useMutation({
+    onSuccess: (data) => {
+      setRefinePreview(data);
+      if (data.outcome === "proposal") {
+        toast.success("Sugestão pronta — leia o resumo e confirme para aplicar.");
+      } else {
+        toast.message(data.messageForUser);
+      }
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const saveAiConfig = trpc.wa.saveAiConfig.useMutation({
     onSuccess: (data) => {
       toast.success("Configuração da IA salva!");
@@ -459,6 +477,93 @@ export default function PdvWhatsAppConfig() {
       ...awayForm,
       escalateKeywords: aiForm.escalateKeywords,
       systemPrompt: aiForm.systemPrompt,
+    });
+  }
+
+  type RefineUpdates = {
+    personality?: string | null;
+    businessContext?: string | null;
+    greetingMessage?: string | null;
+    systemPrompt?: string | null;
+    catalogLink?: string | null;
+    groupLink?: string | null;
+    instagramLink?: string | null;
+    escalateKeywords?: string[] | null;
+  };
+
+  function mergeRefineIntoAiForm(base: typeof aiForm, u: RefineUpdates): typeof aiForm {
+    const pick = (patch: string | null | undefined, prev: string) =>
+      patch != null && String(patch).trim().length > 0 ? String(patch).trim() : prev;
+    return {
+      ...base,
+      personality: pick(u.personality ?? undefined, base.personality),
+      businessContext: pick(u.businessContext ?? undefined, base.businessContext),
+      greetingMessage: pick(u.greetingMessage ?? undefined, base.greetingMessage),
+      systemPrompt: pick(u.systemPrompt ?? undefined, base.systemPrompt),
+      catalogLink: pick(u.catalogLink ?? undefined, base.catalogLink),
+      groupLink: pick(u.groupLink ?? undefined, base.groupLink),
+      instagramLink: pick(u.instagramLink ?? undefined, base.instagramLink),
+      escalateKeywords: Array.isArray(u.escalateKeywords) ? u.escalateKeywords : base.escalateKeywords,
+    };
+  }
+
+  function refineChangedLabels(u: RefineUpdates): string {
+    const out: string[] = [];
+    if (u.personality != null && String(u.personality).trim()) out.push("comportamento");
+    if (u.businessContext != null && String(u.businessContext).trim()) out.push("base de conhecimento");
+    if (u.greetingMessage != null && String(u.greetingMessage).trim()) out.push("saudação");
+    if (u.systemPrompt != null && String(u.systemPrompt).trim()) out.push("texto completo (system)");
+    if (u.catalogLink != null && String(u.catalogLink).trim()) out.push("link catálogo");
+    if (u.groupLink != null && String(u.groupLink).trim()) out.push("link grupo");
+    if (u.instagramLink != null && String(u.instagramLink).trim()) out.push("links úteis");
+    if (Array.isArray(u.escalateKeywords)) out.push("palavras de escalação");
+    return out.length ? out.join(", ") : "—";
+  }
+
+  function submitRefineTrainingRequest() {
+    if (!selectedInstanceId) return toast.error("Selecione uma instância");
+    const t = refineWish.trim();
+    if (t.length < 12) return toast.error("Escreva um pouco mais de detalhe (mínimo 12 caracteres).");
+    setRefinePreview(null);
+    refineTrainingAi.mutate({
+      instanceId: selectedInstanceId,
+      request: t,
+      current: {
+        personality: aiForm.personality,
+        businessContext: aiForm.businessContext,
+        greetingMessage: aiForm.greetingMessage,
+        systemPrompt: aiForm.systemPrompt,
+        catalogLink: aiForm.catalogLink,
+        groupLink: aiForm.groupLink,
+        instagramLink: aiForm.instagramLink,
+        escalateKeywords: aiForm.escalateKeywords,
+      },
+    });
+  }
+
+  function applyRefineDraft() {
+    if (!refinePreview || refinePreview.outcome !== "proposal") return;
+    const merged = mergeRefineIntoAiForm(aiForm, refinePreview.updates as RefineUpdates);
+    setAiForm(merged);
+    setRefinePreview(null);
+    setRefineWish("");
+    setTrainingAdvancedOpen(true);
+    toast.success("Sugestão aplicada ao rascunho. Revise os campos e clique em Salvar para gravar no servidor.");
+  }
+
+  function applyRefineAndSave() {
+    if (!refinePreview || refinePreview.outcome !== "proposal" || !selectedInstanceId) return;
+    const merged = mergeRefineIntoAiForm(aiForm, refinePreview.updates as RefineUpdates);
+    setAiForm(merged);
+    setRefinePreview(null);
+    setRefineWish("");
+    setTrainingAdvancedOpen(true);
+    saveAiConfig.mutate({
+      instanceId: selectedInstanceId,
+      ...merged,
+      ...awayForm,
+      escalateKeywords: merged.escalateKeywords,
+      systemPrompt: merged.systemPrompt,
     });
   }
 
@@ -888,6 +993,71 @@ export default function PdvWhatsAppConfig() {
                 </div>
               )}
 
+              {selectedInstanceId && !aiConfigLoading && (
+                <div className="rounded-xl border border-violet-800/40 bg-violet-950/20 p-4 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="w-5 h-5 text-violet-300 shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-white font-semibold text-sm">Assistente para melhorar o treinamento</h3>
+                      <p className="text-gray-400 text-xs mt-0.5 leading-relaxed">
+                        Escreva em português o que deseja mudar no comportamento ou nas regras da atendente (ex.: &quot;mais
+                        formal&quot;, &quot;sem emoji&quot;, &quot;sempre perguntar tamanho antes do preço&quot;). A IA lê o treinamento
+                        atual, propõe alterações e você confirma antes de aplicar. Pedidos técnicos (servidor, senha,
+                        código) ou fora do escopo são recusados com orientação para falar com o desenvolvedor.
+                      </p>
+                    </div>
+                  </div>
+                  <Textarea
+                    value={refineWish}
+                    onChange={(e) => setRefineWish(e.target.value)}
+                    placeholder='Ex.: "Quero respostas mais curtas e que nunca prometa entrega no mesmo dia."'
+                    className="bg-gray-900/80 border-violet-900/40 text-white text-sm min-h-[96px] leading-relaxed"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={submitRefineTrainingRequest}
+                      disabled={refineTrainingAi.isPending}
+                      className="bg-violet-700 hover:bg-violet-600 gap-2"
+                    >
+                      {refineTrainingAi.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-4 h-4" />
+                      )}
+                      Pedir sugestão da IA
+                    </Button>
+                    {refinePreview && (
+                      <Button type="button" variant="ghost" size="sm" className="text-gray-400" onClick={() => setRefinePreview(null)}>
+                        Limpar resultado
+                      </Button>
+                    )}
+                  </div>
+                  {refinePreview?.outcome === "proposal" && (
+                    <div className="rounded-lg border border-green-800/35 bg-green-950/25 p-3 space-y-3">
+                      <p className="text-green-100 text-sm whitespace-pre-wrap leading-relaxed">{refinePreview.messageForUser}</p>
+                      <p className="text-gray-400 text-[11px]">
+                        Campos afetados:{" "}
+                        <span className="text-gray-200">{refineChangedLabels(refinePreview.updates as RefineUpdates)}</span>
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" className="border-green-700/50 text-green-200" onClick={applyRefineDraft}>
+                          Aplicar no rascunho
+                        </Button>
+                        <Button type="button" className="bg-green-700 hover:bg-green-600" onClick={applyRefineAndSave}>
+                          Aplicar e salvar agora
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {refinePreview?.outcome === "reject" && (
+                    <div className="rounded-lg border border-amber-800/35 bg-amber-950/20 p-3">
+                      <p className="text-amber-100 text-sm whitespace-pre-wrap leading-relaxed">{refinePreview.messageForUser}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Aviso sem instância */}
               {!selectedInstanceId && (
                 <div className="bg-yellow-950/20 border border-yellow-800/40 rounded-xl p-4 flex gap-3">
@@ -1160,10 +1330,10 @@ export default function PdvWhatsAppConfig() {
                 <Collapsible open={trainingAdvancedOpen} onOpenChange={setTrainingAdvancedOpen}>
                   <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-700 bg-gray-800/50 px-3 py-2.5 text-left hover:bg-gray-800">
                     <div>
-                      <h3 className="text-white font-semibold text-sm">Texto técnico avançado (opcional)</h3>
+                      <h3 className="text-white font-semibold text-sm">Texto completo da IA (edição direta)</h3>
                       <p className="text-gray-500 text-[11px] font-normal">
-                        Só abra se quiser editar o prompt inteiro enviado ao modelo. O normal é editar os blocos acima e
-                        salvar; deixe isto fechado se não tiver certeza.
+                        Abaixo está o prompt completo enviado ao modelo. Está aberto por padrão para quem preferir
+                        ajustar linha a linha. Se esvaziar e salvar, o sistema regenera a partir dos blocos principais.
                       </p>
                     </div>
                     <ChevronDown className={`w-5 h-5 shrink-0 text-gray-400 transition-transform ${trainingAdvancedOpen ? "rotate-180" : ""}`} />

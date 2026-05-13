@@ -11,6 +11,7 @@ import mysql from "mysql2/promise";
 import type { Request } from "express";
 import { verifyPdvToken } from "./pdvAuth";
 import { buildSystemPrompt, mergeDbRowWithDefaults } from "./waAiTrainingDefaults";
+import { refineAiTrainingFromNaturalLanguage, refineTrainingInputSchema } from "./waAiTrainingRefine";
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -605,6 +606,22 @@ export const waRouter = router({
     await requireWaAccess(ctx);
     return mergeDbRowWithDefaults(null, 0);
   }),
+
+  /**
+   * Lê o pedido em linguagem natural + treinamento atual e devolve proposta de alterações (ou recusa).
+   * Só admin. Não grava no banco — o cliente confirma no painel e salva depois.
+   */
+  refineAiTrainingFromRequest: protectedProcedure
+    .input(refineTrainingInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAdmin(ctx);
+      try {
+        return await refineAiTrainingFromNaturalLanguage(input);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Erro ao consultar a IA";
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
+    }),
 
   saveAiConfig: protectedProcedure
     .input(z.object({
