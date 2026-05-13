@@ -452,15 +452,15 @@ export default function PdvWhatsApp() {
   );
   const messages: any[] = messagesQuery.data ?? [];
 
-  const httpLegacyMediaIds = useMemo(() => {
+  /** Todas as mensagens de mídia com URL ou chave no storage — resolve no servidor para URL presignada (evita falha de <img> com /manus-storage ou redirect). */
+  const mediaPanelResolveIds = useMemo(() => {
     const types = new Set(["image", "video", "audio", "document", "sticker"]);
     return messages
       .filter((m) => {
         if (!types.has(m.type)) return false;
         const u = (m.mediaUrl != null && String(m.mediaUrl).trim()) || "";
         const k = (m.mediaStorageKey != null && String(m.mediaStorageKey).trim()) || "";
-        if (k && !u) return true;
-        return /^https?:\/\//i.test(u);
+        return !!(u || k);
       })
       .map((m) => Number(m.id))
       .filter((id) => Number.isFinite(id) && id > 0)
@@ -468,9 +468,9 @@ export default function PdvWhatsApp() {
   }, [messages]);
 
   const mediaUrlResolveQuery = trpc.wa.resolveMediaViewUrls.useQuery(
-    { messageIds: httpLegacyMediaIds },
+    { messageIds: mediaPanelResolveIds },
     {
-      enabled: selectedConvId !== null && httpLegacyMediaIds.length > 0,
+      enabled: selectedConvId !== null && mediaPanelResolveIds.length > 0,
       staleTime: 5 * 60 * 1000,
     }
   );
