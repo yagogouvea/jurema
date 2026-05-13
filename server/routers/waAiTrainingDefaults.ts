@@ -68,6 +68,34 @@ export function parseEscalateKeywords(raw: unknown): string[] {
   return [...DEFAULT_ESCALATE_KEYWORDS];
 }
 
+export type WaExtraLink = { label: string; url: string };
+
+export function parseExtraLinks(raw: unknown): WaExtraLink[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((x) => x && typeof x === "object")
+      .map((x) => {
+        const o = x as Record<string, unknown>;
+        return {
+          label: String(o.label ?? "").trim(),
+          url: String(o.url ?? "").trim(),
+        };
+      })
+      .filter((x) => x.label && x.url);
+  }
+  if (typeof raw === "string") {
+    const t = raw.trim();
+    if (!t || t === "null") return [];
+    try {
+      return parseExtraLinks(JSON.parse(t));
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export function buildSystemPrompt(config: {
   aiName?: string;
   personality?: string;
@@ -75,6 +103,7 @@ export function buildSystemPrompt(config: {
   catalogLink?: string;
   groupLink?: string;
   instagramLink?: string;
+  extraLinks?: WaExtraLink[];
   escalateKeywords?: string[];
 }): string {
   const name = nz(config.aiName) ?? DEFAULT_AI_NAME;
@@ -107,6 +136,12 @@ REGRAS GERAIS:
   if (nz(config.instagramLink)) {
     prompt += `\n\nLINKS ÚTEIS (Linktree, Instagram, outros números):\n${config.instagramLink}\nUse quando fizer sentido (ex.: restrição do WhatsApp Business, contato alternativo).`;
   }
+  const extras = (config.extraLinks ?? []).filter((e) => nz(e.label) && nz(e.url));
+  if (extras.length) {
+    prompt += `\n\nOUTROS LINKS (envie quando o assunto combinar com o rótulo; não invente URLs):\n${extras
+      .map((e) => `- ${e.label}: ${e.url}`)
+      .join("\n")}`;
+  }
   if (kw.length) {
     prompt += `\n\nESCALAÇÃO PARA ATENDENTE HUMANO:\nSe o assunto indicar insatisfação grave, pedido de gerente, cancelamento sensível, ameaça legal ou palavras como: ${kw.join(
       ", "
@@ -134,6 +169,8 @@ export type AiTrainingConfigPayload = {
   catalogLink: string;
   groupLink: string;
   instagramLink: string;
+  /** Links extras (rótulo + URL) além de catálogo / grupo / Linktree. */
+  extraLinks: WaExtraLink[];
   maxContextMessages: number;
   responseDelayMin: number;
   responseDelayMax: number;
@@ -155,6 +192,7 @@ export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | und
   const catalogLink = nz(rowVal(row, "catalogLink")) ?? "";
   const groupLink = nz(rowVal(row, "groupLink")) ?? "";
   const instagramLink = nz(rowVal(row, "instagramLink")) ?? "";
+  const extraLinks = parseExtraLinks(rowVal(row, "extraLinks"));
 
   const escalateKeywords = parseEscalateKeywords(rowVal(row, "escalateKeywords"));
 
@@ -168,6 +206,7 @@ export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | und
       catalogLink: catalogLink || undefined,
       groupLink: groupLink || undefined,
       instagramLink: instagramLink || undefined,
+      extraLinks: extraLinks.length ? extraLinks : undefined,
       escalateKeywords,
     });
 
@@ -188,6 +227,7 @@ export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | und
     catalogLink,
     groupLink,
     instagramLink,
+    extraLinks,
     maxContextMessages: Math.max(1, Math.min(50, Number(rowVal(row, "maxContextMessages")) || 10)),
     responseDelayMin: Number(rowVal(row, "responseDelayMin")) >= 0 ? Number(rowVal(row, "responseDelayMin")) : 1000,
     responseDelayMax: Number(rowVal(row, "responseDelayMax")) >= 0 ? Number(rowVal(row, "responseDelayMax")) : 3000,

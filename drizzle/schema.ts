@@ -468,6 +468,8 @@ export const waAiConfig = mysqlTable("wa_ai_config", {
   catalogLink: text("catalogLink"), // link do catálogo de produtos
   groupLink: text("groupLink"), // link do grupo WhatsApp
   instagramLink: text("instagramLink"), // link do Instagram
+  /** Links extras configuráveis (catálogo/grupo/linktree continuam nos campos fixos). JSON: [{ label, url }, ...] */
+  extraLinks: json("extraLinks"),
   maxContextMessages: int("maxContextMessages").default(10).notNull(), // quantas mensagens anteriores enviar para a IA
   responseDelayMin: int("responseDelayMin").default(1000).notNull(), // delay mínimo em ms (humanização)
   responseDelayMax: int("responseDelayMax").default(3000).notNull(), // delay máximo em ms

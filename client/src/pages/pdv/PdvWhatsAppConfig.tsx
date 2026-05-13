@@ -33,6 +33,19 @@ import {
 const AWAY_DAY_KEYS = ["0", "1", "2", "3", "4", "5", "6"] as const;
 const AWAY_DAY_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
+type AiExtraLink = { label: string; url: string };
+
+function normalizeExtraLinks(raw: unknown): AiExtraLink[] {
+  if (!raw || !Array.isArray(raw)) return [];
+  return raw
+    .filter((x) => x && typeof x === "object")
+    .map((x) => ({
+      label: String((x as AiExtraLink).label ?? "").trim(),
+      url: String((x as AiExtraLink).url ?? "").trim(),
+    }))
+    .filter((x) => x.label && x.url);
+}
+
 /** Modelos rápidos de tom — substituem o campo "comportamento" inteiro; a equipe pode editar depois. */
 const PERSONALITY_PRESETS: { label: string; text: string }[] = [
   {
@@ -248,6 +261,7 @@ export default function PdvWhatsAppConfig() {
     catalogLink: "",
     groupLink: "",
     instagramLink: "",
+    extraLinks: [] as AiExtraLink[],
     maxContextMessages: 10,
     responseDelayMin: 1000,
     responseDelayMax: 3000,
@@ -346,6 +360,7 @@ export default function PdvWhatsAppConfig() {
         catalogLink: "",
         groupLink: "",
         instagramLink: "",
+        extraLinks: [],
         maxContextMessages: 10,
         responseDelayMin: 1000,
         responseDelayMax: 3000,
@@ -380,6 +395,7 @@ export default function PdvWhatsAppConfig() {
       catalogLink: cfg.catalogLink,
       groupLink: cfg.groupLink,
       instagramLink: cfg.instagramLink,
+      extraLinks: normalizeExtraLinks((cfg as { extraLinks?: unknown }).extraLinks),
       maxContextMessages: cfg.maxContextMessages,
       responseDelayMin: cfg.responseDelayMin,
       responseDelayMax: cfg.responseDelayMax,
@@ -534,6 +550,7 @@ export default function PdvWhatsAppConfig() {
       catalogLink: d.catalogLink,
       groupLink: d.groupLink,
       instagramLink: d.instagramLink,
+      extraLinks: normalizeExtraLinks((d as { extraLinks?: unknown }).extraLinks),
       maxContextMessages: d.maxContextMessages,
       responseDelayMin: d.responseDelayMin,
       responseDelayMax: d.responseDelayMax,
@@ -559,6 +576,7 @@ export default function PdvWhatsAppConfig() {
     saveAiConfig.mutate({
       instanceId: selectedInstanceId,
       ...aiForm,
+      extraLinks: aiForm.extraLinks.filter((x) => x.label.trim() && x.url.trim()),
       ...awayForm,
       escalateKeywords: aiForm.escalateKeywords,
       systemPrompt: aiForm.systemPrompt,
@@ -566,6 +584,7 @@ export default function PdvWhatsAppConfig() {
   }
 
   type RefineUpdates = {
+    aiName?: string | null;
     personality?: string | null;
     businessContext?: string | null;
     greetingMessage?: string | null;
@@ -573,14 +592,30 @@ export default function PdvWhatsAppConfig() {
     catalogLink?: string | null;
     groupLink?: string | null;
     instagramLink?: string | null;
+    extraLinks?: AiExtraLink[] | null;
     escalateKeywords?: string[] | null;
+    maxContextMessages?: number | null;
+    responseDelayMin?: number | null;
+    responseDelayMax?: number | null;
   };
 
   function mergeRefineIntoAiForm(base: typeof aiForm, u: RefineUpdates): typeof aiForm {
     const pick = (patch: string | null | undefined, prev: string) =>
       patch != null && String(patch).trim().length > 0 ? String(patch).trim() : prev;
+
+    let responseDelayMin = base.responseDelayMin;
+    let responseDelayMax = base.responseDelayMax;
+    if (u.responseDelayMin != null) responseDelayMin = u.responseDelayMin;
+    if (u.responseDelayMax != null) responseDelayMax = u.responseDelayMax;
+    if (responseDelayMin > responseDelayMax) {
+      const t = responseDelayMin;
+      responseDelayMin = responseDelayMax;
+      responseDelayMax = t;
+    }
+
     return {
       ...base,
+      aiName: pick(u.aiName ?? undefined, base.aiName),
       personality: pick(u.personality ?? undefined, base.personality),
       businessContext: pick(u.businessContext ?? undefined, base.businessContext),
       greetingMessage: pick(u.greetingMessage ?? undefined, base.greetingMessage),
@@ -588,20 +623,31 @@ export default function PdvWhatsAppConfig() {
       catalogLink: pick(u.catalogLink ?? undefined, base.catalogLink),
       groupLink: pick(u.groupLink ?? undefined, base.groupLink),
       instagramLink: pick(u.instagramLink ?? undefined, base.instagramLink),
+      extraLinks: u.extraLinks != null ? u.extraLinks.map((x) => ({ label: x.label, url: x.url })) : base.extraLinks,
       escalateKeywords: Array.isArray(u.escalateKeywords) ? u.escalateKeywords : base.escalateKeywords,
+      maxContextMessages:
+        u.maxContextMessages != null
+          ? Math.max(1, Math.min(50, Math.round(Number(u.maxContextMessages))))
+          : base.maxContextMessages,
+      responseDelayMin,
+      responseDelayMax,
     };
   }
 
   function refineChangedLabels(u: RefineUpdates): string {
     const out: string[] = [];
+    if (u.aiName != null && String(u.aiName).trim()) out.push("nome da atendente");
     if (u.personality != null && String(u.personality).trim()) out.push("comportamento");
     if (u.businessContext != null && String(u.businessContext).trim()) out.push("base de conhecimento");
     if (u.greetingMessage != null && String(u.greetingMessage).trim()) out.push("saudação");
     if (u.systemPrompt != null && String(u.systemPrompt).trim()) out.push("texto completo (system)");
     if (u.catalogLink != null && String(u.catalogLink).trim()) out.push("link catálogo");
     if (u.groupLink != null && String(u.groupLink).trim()) out.push("link grupo");
-    if (u.instagramLink != null && String(u.instagramLink).trim()) out.push("links úteis");
+    if (u.instagramLink != null && String(u.instagramLink).trim()) out.push("Linktree / links úteis");
+    if (u.extraLinks != null) out.push("links extras");
     if (Array.isArray(u.escalateKeywords)) out.push("palavras de escalação");
+    if (u.maxContextMessages != null) out.push("memória da conversa");
+    if (u.responseDelayMin != null || u.responseDelayMax != null) out.push("delays de resposta");
     return out.length ? out.join(", ") : "—";
   }
 
@@ -614,6 +660,7 @@ export default function PdvWhatsAppConfig() {
       instanceId: selectedInstanceId,
       request: t,
       current: {
+        aiName: aiForm.aiName,
         personality: aiForm.personality,
         businessContext: aiForm.businessContext,
         greetingMessage: aiForm.greetingMessage,
@@ -621,7 +668,13 @@ export default function PdvWhatsAppConfig() {
         catalogLink: aiForm.catalogLink,
         groupLink: aiForm.groupLink,
         instagramLink: aiForm.instagramLink,
+        extraLinks: aiForm.extraLinks
+          .map((x) => ({ label: x.label.trim(), url: x.url.trim() }))
+          .filter((x) => x.label && x.url),
         escalateKeywords: aiForm.escalateKeywords,
+        maxContextMessages: aiForm.maxContextMessages,
+        responseDelayMin: aiForm.responseDelayMin,
+        responseDelayMax: aiForm.responseDelayMax,
       },
     });
   }
@@ -646,6 +699,7 @@ export default function PdvWhatsAppConfig() {
     saveAiConfig.mutate({
       instanceId: selectedInstanceId,
       ...merged,
+      extraLinks: merged.extraLinks.filter((x) => x.label.trim() && x.url.trim()),
       ...awayForm,
       escalateKeywords: merged.escalateKeywords,
       systemPrompt: merged.systemPrompt,
@@ -683,6 +737,27 @@ export default function PdvWhatsAppConfig() {
       awayStart: awayForm.awayStart,
       awayEnd: awayForm.awayEnd,
       awaySchedule: buildAwaySchedulePayload(awayDayMode, awayDayOpen),
+    });
+  }
+
+  function setExtraLinkAt(index: number, patch: Partial<AiExtraLink>) {
+    setAiForm((f) => ({
+      ...f,
+      extraLinks: f.extraLinks.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    }));
+  }
+
+  function removeExtraLinkRow(index: number) {
+    setAiForm((f) => ({ ...f, extraLinks: f.extraLinks.filter((_, i) => i !== index) }));
+  }
+
+  function addExtraLinkRow() {
+    setAiForm((f) => {
+      if (f.extraLinks.length >= 20) {
+        toast.error("Limite de 20 links extras.");
+        return f;
+      }
+      return { ...f, extraLinks: [...f.extraLinks, { label: "", url: "" }] };
     });
   }
 
@@ -1047,7 +1122,8 @@ export default function PdvWhatsAppConfig() {
                         (pode apagar seções que não usar).
                       </li>
                       <li>
-                        <strong>Links</strong>: catálogo, grupo e Linktree — a IA usa quando o cliente pedir.
+                        <strong>Links</strong>: catálogo, grupo, Linktree e{" "}
+                        <strong className="text-gray-200">links extras</strong> (rótulo + URL) — a IA usa quando o cliente pedir.
                       </li>
                       <li>
                         <strong>Palavras de escalação</strong>: se o cliente escrever algo parecido, a conversa pode ir
@@ -1096,10 +1172,13 @@ export default function PdvWhatsAppConfig() {
                     <div>
                       <h3 className="text-white font-semibold text-sm">Assistente para melhorar o treinamento</h3>
                       <p className="text-gray-400 text-xs mt-0.5 leading-relaxed">
-                        Escreva em português o que deseja mudar no comportamento ou nas regras da atendente (ex.: &quot;mais
-                        formal&quot;, &quot;sem emoji&quot;, &quot;sempre perguntar tamanho antes do preço&quot;). A IA lê o treinamento
-                        atual, propõe alterações e você confirma antes de aplicar. Pedidos técnicos (servidor, senha,
-                        código) ou fora do escopo são recusados com orientação para falar com o desenvolvedor.
+                        Descreva em português o que deseja alterar. O assistente lê{" "}
+                        <strong className="text-gray-300">toda</strong> a configuração atual (identidade, saudação,
+                        comportamento, base de conhecimento, links fixos e extras, escalação, memória da conversa, delays
+                        e o texto completo da IA) e devolve uma proposta. Use{" "}
+                        <strong className="text-gray-300">Aplicar no rascunho</strong> para ver nos campos ou{" "}
+                        <strong className="text-gray-300">Aplicar e salvar</strong> para gravar no servidor. Pedidos
+                        técnicos (servidor, senha, código) ou fora do escopo são recusados.
                       </p>
                     </div>
                   </div>
@@ -1280,7 +1359,11 @@ export default function PdvWhatsAppConfig() {
                 <h3 className="text-white font-semibold text-sm flex items-center gap-2">
                   <Link2 className="w-4 h-4 text-green-400" /> Links Automaticos
                 </h3>
-                <p className="text-gray-400 text-xs">A IA envia estes links automaticamente quando o cliente pedir. Atualize sempre que os links mudarem.</p>
+                <p className="text-gray-400 text-xs leading-relaxed">
+                  Três campos fixos abaixo (catálogo, grupo, Linktree). Para <strong className="text-gray-200">qualquer outro link</strong>{" "}
+                  (rastreio, TikTok, política, etc.) use a seção <strong className="text-gray-200">Links extras</strong> — ou peça ao
+                  assistente de treinamento para sugerir novos pares rótulo + URL.
+                </p>
                 <div className="space-y-3">
                   <div className="space-y-1.5">
                     <Label className="text-gray-300 text-xs">Catalogo de Produtos</Label>
@@ -1338,6 +1421,78 @@ export default function PdvWhatsAppConfig() {
                       )}
                     </div>
                     <p className="text-gray-500 text-xs">Enviado no aviso de restricao do WhatsApp Business para o cliente encontrar outros numeros.</p>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-gray-800">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                      <div>
+                        <Label className="text-gray-300 text-xs">Links extras</Label>
+                        <p className="text-gray-500 text-[11px] mt-0.5 max-w-xl">
+                          Até 20 linhas (rótulo + URL). Começa vazio: use o botão verde para abrir o primeiro campo. A IA
+                          só envia quando combinar com o pedido do cliente. O assistente de treinamento pode preencher
+                          vários de uma vez após você aprovar.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="shrink-0 bg-green-800/80 hover:bg-green-700 text-white border border-green-600/50"
+                        onClick={addExtraLinkRow}
+                        disabled={aiForm.extraLinks.length >= 20}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" /> Novo link extra
+                      </Button>
+                    </div>
+                    {aiForm.extraLinks.length === 0 && (
+                      <p className="text-amber-200/85 text-[11px] bg-amber-950/25 border border-amber-900/35 rounded-md px-2 py-1.5">
+                        Nenhum link extra ainda — clique em <strong className="text-amber-100">Novo link extra</strong> para
+                        criar a primeira linha.
+                      </p>
+                    )}
+                    {aiForm.extraLinks.map((row, idx) => (
+                      <div key={idx} className="flex flex-col sm:flex-row gap-2 sm:items-end">
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <Label className="text-gray-500 text-[10px]">Rótulo</Label>
+                          <Input
+                            value={row.label}
+                            onChange={(e) => setExtraLinkAt(idx, { label: e.target.value })}
+                            placeholder="ex.: Rastreio de pedido"
+                            className="bg-gray-800 border-gray-700 text-white text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1 flex-[2] min-w-0">
+                          <Label className="text-gray-500 text-[10px]">URL</Label>
+                          <Input
+                            value={row.url}
+                            onChange={(e) => setExtraLinkAt(idx, { url: e.target.value })}
+                            placeholder="https://..."
+                            className="bg-gray-800 border-gray-700 text-white text-xs font-mono"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-gray-500 hover:text-red-400 shrink-0 h-9 w-9"
+                          onClick={() => removeExtraLinkRow(idx)}
+                          aria-label="Remover link"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {aiForm.extraLinks.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="border-green-700/60 text-green-200 hover:bg-green-950/40 w-full sm:w-auto"
+                        onClick={addExtraLinkRow}
+                        disabled={aiForm.extraLinks.length >= 20}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar outro link extra
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>

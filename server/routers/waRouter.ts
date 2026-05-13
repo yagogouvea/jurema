@@ -639,6 +639,11 @@ export const waRouter = router({
       catalogLink: z.string().optional(),
       groupLink: z.string().optional(),
       instagramLink: z.string().optional(),
+      /** Links extras (rótulo + URL), além dos três campos fixos. Máx. 20. */
+      extraLinks: z
+        .array(z.object({ label: z.string().max(120), url: z.string().max(2000) }))
+        .max(20)
+        .optional(),
       maxContextMessages: z.number().min(1).max(50).optional(),
       responseDelayMin: z.number().min(0).max(10000).optional(),
       responseDelayMax: z.number().min(0).max(30000).optional(),
@@ -661,7 +666,16 @@ export const waRouter = router({
         const systemPromptFinal =
           systemPromptInput !== undefined && String(systemPromptInput).trim().length > 0
             ? String(systemPromptInput).trim()
-            : buildSystemPrompt(input);
+            : buildSystemPrompt({
+                aiName: input.aiName,
+                personality: input.personality,
+                businessContext: input.businessContext,
+                catalogLink: input.catalogLink,
+                groupLink: input.groupLink,
+                instagramLink: input.instagramLink,
+                extraLinks: input.extraLinks?.length ? input.extraLinks : undefined,
+                escalateKeywords: input.escalateKeywords,
+              });
 
         const keywordsJson = escalateKeywords ? JSON.stringify(escalateKeywords) : null;
 
@@ -669,6 +683,10 @@ export const waRouter = router({
         if (awayScheduleInput !== undefined) {
           data.awaySchedule =
             awayScheduleInput === null ? null : JSON.stringify(awayScheduleInput);
+        }
+        if (Array.isArray(data.extraLinks)) {
+          data.extraLinks =
+            (data.extraLinks as unknown[]).length > 0 ? JSON.stringify(data.extraLinks) : null;
         }
 
         const [existing] = await db.execute("SELECT id FROM wa_ai_config WHERE instanceId=?", [instanceId]) as any;
@@ -683,7 +701,7 @@ export const waRouter = router({
         } else {
           const d = data as any;
           await db.execute(
-            "INSERT INTO wa_ai_config (instanceId, enabled, aiName, personality, businessContext, greetingMessage, awayMessage, awayEnabled, awayStart, awayEnd, awaySchedule, catalogLink, groupLink, instagramLink, maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords, systemPrompt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO wa_ai_config (instanceId, enabled, aiName, personality, businessContext, greetingMessage, awayMessage, awayEnabled, awayStart, awayEnd, awaySchedule, catalogLink, groupLink, instagramLink, extraLinks, maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords, systemPrompt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
               instanceId,
               d.enabled ?? false,
@@ -699,6 +717,7 @@ export const waRouter = router({
               d.catalogLink ?? null,
               d.groupLink ?? null,
               d.instagramLink ?? null,
+              Array.isArray(d.extraLinks) && d.extraLinks.length ? JSON.stringify(d.extraLinks) : null,
               d.maxContextMessages ?? 10,
               d.responseDelayMin ?? 1000,
               d.responseDelayMax ?? 3000,

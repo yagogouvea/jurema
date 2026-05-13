@@ -1,11 +1,14 @@
 /**
  * Refinamento do treinamento da IA a partir de pedido em linguagem natural (admin).
+ * Pode propor alterações em todos os campos visíveis do Treinamento IA + texto completo (system)
+ * e links extras dinâmicos, memória da conversa e delays — escopo limitado a texto de treinamento.
  */
 
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
+import type { WaExtraLink } from "./waAiTrainingDefaults";
 
-/** Patches: string vazio = sem alteração nesse campo. escalateKeywords: JSON array ou "__KEEP__". */
+/** Patches: string vazio = sem alteração nesse campo. escalateKeywords / extraLinks: JSON ou "__KEEP__". */
 const REFINE_SCHEMA = {
   name: "wa_ai_training_refine",
   strict: true,
@@ -21,6 +24,7 @@ const REFINE_SCHEMA = {
         type: "string",
         enum: ["too_advanced", "unsafe", "unclear", "none"],
       },
+      patch_aiName: { type: "string" },
       patch_personality: { type: "string" },
       patch_businessContext: { type: "string" },
       patch_greetingMessage: { type: "string" },
@@ -28,12 +32,17 @@ const REFINE_SCHEMA = {
       patch_catalogLink: { type: "string" },
       patch_groupLink: { type: "string" },
       patch_instagramLink: { type: "string" },
+      patch_extraLinksJson: { type: "string" },
       patch_escalateKeywordsJson: { type: "string" },
+      patch_maxContextMessages: { type: "string" },
+      patch_responseDelayMin: { type: "string" },
+      patch_responseDelayMax: { type: "string" },
     },
     required: [
       "outcome",
       "messageForUser",
       "rejectCode",
+      "patch_aiName",
       "patch_personality",
       "patch_businessContext",
       "patch_greetingMessage",
@@ -41,11 +50,20 @@ const REFINE_SCHEMA = {
       "patch_catalogLink",
       "patch_groupLink",
       "patch_instagramLink",
+      "patch_extraLinksJson",
       "patch_escalateKeywordsJson",
+      "patch_maxContextMessages",
+      "patch_responseDelayMin",
+      "patch_responseDelayMax",
     ],
     additionalProperties: false,
   },
 } as const;
+
+const extraLinkSchema = z.object({
+  label: z.string().max(120),
+  url: z.string().max(2000),
+});
 
 export const refineTrainingInputSchema = z.object({
   instanceId: z.number(),
@@ -54,6 +72,7 @@ export const refineTrainingInputSchema = z.object({
     .min(12, "Descreva com um pouco mais de detalhe o que deseja (pelo menos 12 caracteres).")
     .max(4000),
   current: z.object({
+    aiName: z.string(),
     personality: z.string(),
     businessContext: z.string(),
     greetingMessage: z.string(),
@@ -61,11 +80,16 @@ export const refineTrainingInputSchema = z.object({
     catalogLink: z.string().optional(),
     groupLink: z.string().optional(),
     instagramLink: z.string().optional(),
+    extraLinks: z.array(extraLinkSchema).max(20),
     escalateKeywords: z.array(z.string()),
+    maxContextMessages: z.number().min(1).max(50),
+    responseDelayMin: z.number().min(0).max(10000),
+    responseDelayMax: z.number().min(0).max(30000),
   }),
 });
 
 export type RefineTrainingUpdates = {
+  aiName: string | null;
   personality: string | null;
   businessContext: string | null;
   greetingMessage: string | null;
@@ -73,7 +97,11 @@ export type RefineTrainingUpdates = {
   catalogLink: string | null;
   groupLink: string | null;
   instagramLink: string | null;
+  extraLinks: WaExtraLink[] | null;
   escalateKeywords: string[] | null;
+  maxContextMessages: number | null;
+  responseDelayMin: number | null;
+  responseDelayMax: number | null;
 };
 
 export type RefineTrainingResult =
@@ -93,8 +121,43 @@ function clip(s: string, max: number): string {
   return s.slice(0, max) + "\n…(texto truncado para análise)";
 }
 
+function pickStr(v: string | undefined): string | null {
+  const t = (v ?? "").trim();
+  return t.length ? t : null;
+}
+
+function parseIntPatch(v: string | undefined, min: number, max: number): number | null {
+  const t = (v ?? "").trim();
+  if (!t.length) return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function parseExtraLinksPatch(raw: string | undefined): WaExtraLink[] | null {
+  const t = (raw ?? "").trim();
+  if (!t.length || t === "__KEEP__") return null;
+  try {
+    const j = JSON.parse(t);
+    if (!Array.isArray(j)) return null;
+    const out: WaExtraLink[] = [];
+    for (const item of j) {
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      const label = String(o.label ?? "").trim();
+      const url = String(o.url ?? "").trim();
+      if (label && url) out.push({ label, url });
+      if (out.length >= 20) break;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 function hasNonEmptyPatch(parsed: Record<string, string>): boolean {
-  const keys = [
+  const strKeys = [
+    "patch_aiName",
     "patch_personality",
     "patch_businessContext",
     "patch_greetingMessage",
@@ -103,9 +166,15 @@ function hasNonEmptyPatch(parsed: Record<string, string>): boolean {
     "patch_groupLink",
     "patch_instagramLink",
   ];
-  if (keys.some((k) => (parsed[k] ?? "").trim().length > 0)) return true;
+  if (strKeys.some((k) => (parsed[k] ?? "").trim().length > 0)) return true;
   const kw = (parsed.patch_escalateKeywordsJson ?? "").trim();
-  return kw.length > 0 && kw !== "__KEEP__";
+  if (kw.length > 0 && kw !== "__KEEP__") return true;
+  const ex = (parsed.patch_extraLinksJson ?? "").trim();
+  if (ex.length > 0 && ex !== "__KEEP__") return true;
+  if ((parsed.patch_maxContextMessages ?? "").trim().length > 0) return true;
+  if ((parsed.patch_responseDelayMin ?? "").trim().length > 0) return true;
+  if ((parsed.patch_responseDelayMax ?? "").trim().length > 0) return true;
+  return false;
 }
 
 function patchesToUpdates(parsed: Record<string, string>): RefineTrainingUpdates {
@@ -118,24 +187,28 @@ function patchesToUpdates(parsed: Record<string, string>): RefineTrainingUpdates
     } catch {
       escalateKeywords = null;
     }
-  } else if (kwRaw === "__KEEP__") {
-    escalateKeywords = null;
   }
 
-  const pick = (v: string | undefined) => {
-    const t = (v ?? "").trim();
-    return t.length ? t : null;
-  };
+  const extraRaw = parsed.patch_extraLinksJson?.trim() ?? "";
+  let extraLinks: WaExtraLink[] | null = null;
+  if (extraRaw && extraRaw !== "__KEEP__") {
+    extraLinks = parseExtraLinksPatch(extraRaw);
+  }
 
   return {
-    personality: pick(parsed.patch_personality),
-    businessContext: pick(parsed.patch_businessContext),
-    greetingMessage: pick(parsed.patch_greetingMessage),
-    systemPrompt: pick(parsed.patch_systemPrompt),
-    catalogLink: pick(parsed.patch_catalogLink),
-    groupLink: pick(parsed.patch_groupLink),
-    instagramLink: pick(parsed.patch_instagramLink),
+    aiName: pickStr(parsed.patch_aiName),
+    personality: pickStr(parsed.patch_personality),
+    businessContext: pickStr(parsed.patch_businessContext),
+    greetingMessage: pickStr(parsed.patch_greetingMessage),
+    systemPrompt: pickStr(parsed.patch_systemPrompt),
+    catalogLink: pickStr(parsed.patch_catalogLink),
+    groupLink: pickStr(parsed.patch_groupLink),
+    instagramLink: pickStr(parsed.patch_instagramLink),
+    extraLinks,
     escalateKeywords,
+    maxContextMessages: parseIntPatch(parsed.patch_maxContextMessages, 1, 50),
+    responseDelayMin: parseIntPatch(parsed.patch_responseDelayMin, 0, 10000),
+    responseDelayMax: parseIntPatch(parsed.patch_responseDelayMax, 0, 30000),
   };
 }
 
@@ -145,6 +218,7 @@ export async function refineAiTrainingFromNaturalLanguage(
   const { request, current } = input;
 
   const payload = {
+    aiName: clip(current.aiName, 120),
     personality: clip(current.personality, 12_000),
     businessContext: clip(current.businessContext, 24_000),
     greetingMessage: clip(current.greetingMessage, 500),
@@ -152,30 +226,42 @@ export async function refineAiTrainingFromNaturalLanguage(
     catalogLink: current.catalogLink ?? "",
     groupLink: current.groupLink ?? "",
     instagramLink: current.instagramLink ?? "",
+    extraLinks: current.extraLinks,
     escalateKeywords: current.escalateKeywords,
+    maxContextMessages: current.maxContextMessages,
+    responseDelayMin: current.responseDelayMin,
+    responseDelayMax: current.responseDelayMax,
   };
 
   const system = `Você é um assistente interno da Jurema Sport que ajuda LOJISTAS (sem conhecimento técnico) a melhorar o TREINAMENTO da atendente virtual no WhatsApp.
 
 FORMATO DA RESPOSTA (JSON obrigatório):
-- outcome: "proposal" se puder sugerir mudanças seguras só nos textos de treinamento; "reject" se não puder.
+- outcome: "proposal" se puder sugerir mudanças seguras só nos textos de treinamento e parâmetros listados abaixo; "reject" se não puder.
 - messageForUser: texto em português claro para a pessoa ler na tela.
 - rejectCode: se outcome for "reject", use "too_advanced" (infra/código/servidor), "unsafe" (ilegal/fraude/ódio/dados de terceiros), ou "unclear" (pedido vago). Se outcome for "proposal", use "none".
-- patch_* : strings. REGRA: deixe string VAZIA para NÃO alterar aquele campo. Só preencha patch_* com texto novo quando for mudar de fato.
+- patch_* : strings. REGRA: deixe string VAZIA para NÃO alterar aquele campo. Só preencha com conteúdo novo quando for mudar de fato.
 
-Campos patch:
-- patch_personality, patch_businessContext, patch_greetingMessage, patch_systemPrompt
-- patch_catalogLink, patch_groupLink, patch_instagramLink (URLs públicas)
-- patch_escalateKeywordsJson: JSON array de strings em minúsculas, ex: ["reclamação","gerente"] OU exatamente __KEEP__ para manter a lista atual.
+Campos de texto (patch):
+- patch_aiName: nome da atendente (curto).
+- patch_personality: tom de voz e comportamento (substitui o bloco inteiro se preenchido).
+- patch_businessContext: base de conhecimento / manual da loja.
+- patch_greetingMessage: mensagem de boas-vindas.
+- patch_systemPrompt: texto completo enviado ao modelo (edição avançada). Só altere se fizer sentido com o pedido.
+- patch_catalogLink, patch_groupLink, patch_instagramLink: URLs públicas (uma por campo).
+
+Links extras dinâmicos:
+- patch_extraLinksJson: JSON array de objetos {"label":"...","url":"https://..."} (até 20 itens). Use [] para remover todos os extras. Use exatamente __KEEP__ para manter a lista atual.
+
+Escalação e comportamento da IA (painel):
+- patch_escalateKeywordsJson: JSON array de strings em minúsculas OU exatamente __KEEP__.
+- patch_maxContextMessages: número de 1 a 50 como string (ex.: "12") ou vazio para não mudar.
+- patch_responseDelayMin / patch_responseDelayMax: milissegundos (ex.: "1000") ou vazio para não mudar. O máximo deve ser >= mínimo; se precisar ajustar os dois, envie os dois patches.
 
 ESCOPO PERMITIDO (proposal):
-- Tom, formalidade, emojis, cordialidade (personality).
-- Manual da loja: horários, endereço, políticas, pedido, frete, trocas, atacado (businessContext). Preserve seções === quando fizer sentido.
-- Saudação (greetingMessage).
-- Texto completo systemPrompt apenas se for coerente com as mudanças pedidas.
-- Links e palavras-chave de escalação.
+- Tudo que estiver em CONFIGURAÇÃO ATUAL e for editável na tela Treinamento IA (identidade, base, links fixos e extras, palavras de escalação, memória da conversa, delays, texto completo).
+- Você pode propor NOVOS links extras (mais linhas label+url) quando o lojista pedir (ex.: link de rastreio, política de privacidade, canal do Telegram).
 
-REJEITE (outcome=reject) se pedirem: servidor, banco, SQL, API, webhook, chaves, código, wa-bridge, Railway, segurança, logs, alterar sistema de outras lojas, ilegalidade, diagnóstico médico, parecer jurídico definitivo, ou qualquer coisa que não se resolva editando só estes textos. messageForUser deve orientar a falar com o desenvolvedor.
+REJEITE (outcome=reject) se pedirem: servidor, banco, SQL, API, webhook, chaves, código, wa-bridge, Railway, segurança, logs, alterar sistema de outras lojas, ilegalidade, diagnóstico médico, parecer jurídico definitivo, ou qualquer coisa que não se resolva editando só estes campos. messageForUser deve orientar a falar com o desenvolvedor.
 
 Se o pedido for ambíguo ("melhore tudo") sem detalhe, outcome=reject, rejectCode=unclear.`;
 

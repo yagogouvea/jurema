@@ -20,6 +20,7 @@
 import mysql from "mysql2/promise";
 import { invokeLLM } from "../_core/llm";
 import { isStoreOpenNowSaoPaulo } from "./waHours";
+import { parseExtraLinks } from "./waAiTrainingDefaults";
 
 const SO_UM_MOMENTO_PREFIX = ["só um momento", "so um momento"];
 
@@ -68,6 +69,7 @@ type AiCfgRow = {
   catalogLink: string | null;
   groupLink: string | null;
   instagramLink: string | null;
+  extraLinks: unknown;
   awayEnabled: number | boolean;
   awayStart: string | null;
   awayEnd: string | null;
@@ -106,6 +108,10 @@ REGRAS:
   if (cfg.catalogLink) p += `\n\nCATÁLOGO: ${cfg.catalogLink}`;
   if (cfg.groupLink) p += `\nGRUPO: ${cfg.groupLink}`;
   if (cfg.instagramLink) p += `\nINSTAGRAM: ${cfg.instagramLink}`;
+  const extras = parseExtraLinks(cfg.extraLinks);
+  for (const e of extras) {
+    if (e.url) p += `\n${e.label}: ${e.url}`;
+  }
   return p;
 }
 
@@ -139,7 +145,7 @@ export async function generateAiResponse(
     // 1+2+3. Buscar config da IA da instância e dados da conversa
     const [cfgRows] = await db.execute<any[]>(
       `SELECT enabled, aiName, systemPrompt, personality, businessContext,
-              catalogLink, groupLink, instagramLink,
+              catalogLink, groupLink, instagramLink, extraLinks,
               awayEnabled, awayStart, awayEnd, awaySchedule,
               maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords
        FROM wa_ai_config WHERE instanceId = ? LIMIT 1`,
@@ -218,6 +224,9 @@ export async function generateAiResponse(
       if (cfg.catalogLink && !base.includes(cfg.catalogLink)) linkLines.push(`CATÁLOGO: ${cfg.catalogLink}`);
       if (cfg.groupLink && !base.includes(cfg.groupLink)) linkLines.push(`GRUPO WHATSAPP: ${cfg.groupLink}`);
       if (cfg.instagramLink && !base.includes(cfg.instagramLink)) linkLines.push(`INSTAGRAM/SITES: ${cfg.instagramLink}`);
+      for (const e of parseExtraLinks(cfg.extraLinks)) {
+        if (e.url && !base.includes(e.url)) linkLines.push(`${e.label}: ${e.url}`);
+      }
       if (linkLines.length > 0) pieces.push(`\n\n===== LINKS ÚTEIS =====\n${linkLines.join("\n")}`);
       const systemPrompt = pieces.join("");
 
