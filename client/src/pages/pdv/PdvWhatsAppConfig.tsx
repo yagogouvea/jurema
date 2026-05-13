@@ -566,7 +566,8 @@ export default function PdvWhatsAppConfig() {
                     Com o servidor estável, a sessão permanece autenticada no wa-bridge (disco no Railway). O QR aparece
                     automaticamente quando a instância está aguardando pareamento; não é necessário resetar. Use{" "}
                     <span className="text-orange-300/90">Resetar sessão</span> só para trocar de WhatsApp ou refazer o
-                    pareamento — isso desconecta de propósito.
+                    pareamento — isso desconecta de propósito. Enquanto estiver <span className="text-green-400/90">Conectado</span>, o
+                    botão de reset fica oculto para não desligar sem querer; use o painel do wa-bridge se precisar forçar despareamento.
                   </p>
                 </div>
 
@@ -637,6 +638,7 @@ export default function PdvWhatsAppConfig() {
                                 Iniciar conexão
                               </button>
                             )}
+                            {!isConnected && (
                             <button
                               type="button"
                               onClick={() => bridgeReset.mutate({ bridgeInstanceId: sess.instanceId })}
@@ -646,6 +648,7 @@ export default function PdvWhatsAppConfig() {
                             >
                               <RotateCcw className="w-3.5 h-3.5" /> Resetar sessão (novo QR)
                             </button>
+                            )}
                           </div>
                         </div>
                       );
