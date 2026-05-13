@@ -294,24 +294,27 @@ function resolveWaMediaUrl(mediaUrl: string | null | undefined): string | null {
 function waPanelMediaSrc(msg: any, mediaJwt?: string | null): string | null {
   const type = String(msg?.type ?? "text");
   const binaryTypes = new Set(["image", "video", "audio", "document", "sticker"]);
-  const raw =
-    msg?.mediaUrl
-    ?? msg?.media_url
-    ?? msg?.MEDIAURL
-    ?? null;
-  const direct = resolveWaMediaUrl(raw);
 
   if (binaryTypes.has(type)) {
-    if (direct && /^https?:\/\//i.test(direct)) return direct;
     const id = waMessageNumericId(msg);
+    // Quando há blob no banco, vai DIRETO no proxy (mais confiável que presign do storage Manus).
+    if (msg?.hasBlob === true && Number.isFinite(id) && id > 0) {
+      const base = `/api/pdv/wa-media/${id}`;
+      const j = mediaJwt?.trim();
+      return j ? `${base}?t=${encodeURIComponent(j)}` : base;
+    }
+
+    const raw = msg?.mediaUrl ?? msg?.media_url ?? msg?.MEDIAURL ?? null;
+    const direct = resolveWaMediaUrl(raw);
+    if (direct && /^https?:\/\//i.test(direct)) return direct;
     if (Number.isFinite(id) && id > 0) {
       const base = `/api/pdv/wa-media/${id}`;
       const j = mediaJwt?.trim();
-      if (j) return `${base}?t=${encodeURIComponent(j)}`;
-      return base;
+      return j ? `${base}?t=${encodeURIComponent(j)}` : base;
     }
+    return direct;
   }
-  return direct;
+  return resolveWaMediaUrl(msg?.mediaUrl ?? msg?.media_url ?? msg?.MEDIAURL ?? null);
 }
 
 function WaMediaDebugButton({ messageId }: { messageId: number }) {
@@ -537,6 +540,7 @@ export default function PdvWhatsApp() {
     const ids = messages
       .filter((m) => {
         if (!types.has(m.type)) return false;
+        if (m.hasBlob === true) return false; // já temos os bytes; proxy serve direto via blob
         const u =
           (m.mediaUrl != null && String(m.mediaUrl).trim())
           || (m.media_url != null && String(m.media_url).trim())
@@ -581,7 +585,13 @@ export default function PdvWhatsApp() {
   const mediaMessageIdsForJwt = useMemo(() => {
     const types = new Set(["image", "video", "audio", "document", "sticker"]);
     const ids = displayMessages
-      .filter((m) => types.has(String(m.type)))
+      .filter((m) => {
+        if (!types.has(String(m.type))) return false;
+        // Sempre emitir JWT quando há blob ou alguma URL/chave — qualquer caso passa pelo proxy.
+        const u = String(m.mediaUrl ?? "").trim();
+        const k = String(m.mediaStorageKey ?? "").trim();
+        return m.hasBlob === true || !!u || !!k;
+      })
       .map((m) => waMessageNumericId(m))
       .filter((id) => Number.isFinite(id) && id > 0);
     return Array.from(new Set(ids)).slice(0, 100);

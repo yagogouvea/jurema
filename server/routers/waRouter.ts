@@ -478,14 +478,32 @@ export const waRouter = router({
       await requireWaAccess(ctx);
       const db = await getDb();
       try {
-        let sql = "SELECT * FROM wa_messages WHERE conversationId=?";
+        let sql = `
+          SELECT
+            id, conversationId, instanceId, messageId, fromMe, senderType, senderName,
+            type, content, mediaUrl, mediaStorageKey, mediaCaption, quotedMessageId,
+            status, timestamp, createdAt,
+            (mediaBlob IS NOT NULL AND OCTET_LENGTH(mediaBlob) > 0) AS hasBlob,
+            mediaMimeType, mediaSizeBytes
+          FROM wa_messages
+          WHERE conversationId=?`;
         const params: any[] = [input.conversationId];
         if (input.before) { sql += " AND id<?"; params.push(input.before); }
         const safeLimit2 = Math.max(1, Math.min(200, Math.floor(input.limit)));
         sql += ` ORDER BY timestamp DESC LIMIT ${safeLimit2}`;
         const [rows] = await db.execute(sql, params);
         const list = (rows as any[]).reverse() as Record<string, unknown>[];
-        return list.map((r) => normalizeWaMessageRow(r));
+        return list.map((r) => {
+          const base = normalizeWaMessageRow(r);
+          const hasBlobRaw = getMysqlRowField(r, "hasBlob");
+          const hasBlob = hasBlobRaw === 1 || hasBlobRaw === true || hasBlobRaw === "1";
+          const mime = getMysqlRowField(r, "mediaMimeType");
+          return {
+            ...base,
+            hasBlob,
+            mediaMimeType: mime == null ? null : String(mime),
+          };
+        });
       } finally { await db.end(); }
     }),
 
@@ -557,6 +575,20 @@ export const waRouter = router({
           resolveError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
         }
 
+        const blobRaw = getMysqlRowField(raw, "mediaBlob");
+        const blobLength = Buffer.isBuffer(blobRaw)
+          ? blobRaw.length
+          : blobRaw == null
+            ? 0
+            : (() => {
+                try {
+                  return Buffer.from(blobRaw as any).length;
+                } catch {
+                  return 0;
+                }
+              })();
+        const mimeRaw = getMysqlRowField(raw, "mediaMimeType");
+
         return {
           found: true as const,
           messageId: input.messageId,
@@ -567,6 +599,8 @@ export const waRouter = router({
           mediaUrlLength: mediaUrlStr.length,
           mediaStorageKey: mediaKeyStr,
           mediaStorageKeyLength: mediaKeyStr.length,
+          mediaBlobBytes: blobLength,
+          mediaMimeType: mimeRaw == null ? null : String(mimeRaw),
           resolvedUrl: resolved ? resolved.slice(0, 200) + (resolved.length > 200 ? "…" : "") : null,
           resolveError,
           forgeConfigured: !!process.env.BUILT_IN_FORGE_API_URL && !!process.env.BUILT_IN_FORGE_API_KEY,
@@ -760,34 +794,53 @@ export const waRouter = router({
           );
         }
 
-        // Mídia: gravar URL servida por /manus-storage/... para o painel carregar a imagem/áudio no mesmo host.
-        // Preserva URL assinada do forge em audioTranscribeUrl para o Whisper (fetch server-side).
+        // ─── Mídia ──────────────────────────────────────────────────────────────
+        // Estratégia: SEMPRE tentar gravar bytes em wa_messages.mediaBlob (independe de storage Manus).
+        // Como bônus, se storage Manus estiver configurado, também faz upload e guarda mediaStorageKey.
         let finalMediaUrl: string | null = mediaUrlPayload ?? null;
         let audioTranscribeUrl: string | null = null;
         let mediaStorageKey: string | null = null;
+        let mediaBlob: Buffer | null = null;
+        let mediaMimeFinal: string | null = mediaMimePayload ?? null;
 
-        const putAndProxy = async (key: string, buf: Buffer, mime: string) => {
-          const { storagePut } = await import("../storage");
-          const { url } = await storagePut(key, buf, mime);
-          return { forgeUrl: url, proxyPath: manusStoragePublicPath(key) };
+        const isMediaBinary = ["image", "video", "audio", "document", "sticker"].includes(msgType);
+        const forgeReady = !!process.env.BUILT_IN_FORGE_API_URL && !!process.env.BUILT_IN_FORGE_API_KEY;
+
+        const tryStorageMirror = async (buf: Buffer, mime: string) => {
+          if (!forgeReady) return null;
+          try {
+            const { storagePut } = await import("../storage");
+            const ext = mime.split("/")[1]?.split(";")[0]?.split("+")[0] ?? "bin";
+            const key = `wa-media/${input.instanceId}/${input.messageId ?? Date.now()}.${ext}`;
+            const { url } = await storagePut(key, buf, mime);
+            return { key, forgeUrl: url, proxyPath: manusStoragePublicPath(key) };
+          } catch (e) {
+            console.warn("[webhook] storagePut falhou (storage Manus indisponível):", e);
+            return null;
+          }
         };
 
-        if (mediaBase64Payload && mediaMimePayload) {
+        if (isMediaBinary && mediaBase64Payload) {
           try {
             const buf = Buffer.from(mediaBase64Payload, "base64");
-            if (buf.length > WEBHOOK_MEDIA_MAX_BYTES) {
-              throw new Error(`media exceeds ${WEBHOOK_MEDIA_MAX_BYTES} bytes`);
+            if (buf.length > 0 && buf.length <= WEBHOOK_MEDIA_MAX_BYTES) {
+              mediaBlob = buf;
+              if (!mediaMimeFinal) mediaMimeFinal = "application/octet-stream";
+              const mirror = await tryStorageMirror(buf, mediaMimeFinal);
+              if (mirror) {
+                mediaStorageKey = mirror.key;
+                audioTranscribeUrl = mirror.forgeUrl;
+                finalMediaUrl = mirror.proxyPath;
+              }
+            } else if (buf.length > WEBHOOK_MEDIA_MAX_BYTES) {
+              console.warn(`[webhook] media base64 excede ${WEBHOOK_MEDIA_MAX_BYTES} bytes; descartado.`);
             }
-            const ext = mediaMimePayload.split("/")[1]?.split(";")[0] ?? "bin";
-            const key = `wa-media/${input.instanceId}/${input.messageId ?? Date.now()}.${ext}`;
-            const { forgeUrl, proxyPath } = await putAndProxy(key, buf, mediaMimePayload);
-            mediaStorageKey = key;
-            audioTranscribeUrl = forgeUrl;
-            finalMediaUrl = proxyPath;
           } catch (e) {
-            console.error("[webhook] Erro ao fazer upload de mídia para storage:", e);
+            console.error("[webhook] Erro ao decodificar mediaBase64:", e);
           }
-        } else if (finalMediaUrl && ["image", "video", "audio", "document", "sticker"].includes(msgType)) {
+        }
+
+        if (isMediaBinary && !mediaBlob && finalMediaUrl) {
           const bridgeBase = process.env.WA_BRIDGE_URL?.replace(/\/+$/, "") ?? "";
           const proto =
             String((ctx.req.headers["x-forwarded-proto"] as string) || "")
@@ -799,17 +852,17 @@ export const waRouter = router({
               .trim();
           const appOrigin = host ? `${proto}://${host}` : "";
 
-          const resolveMirrorFetchUrl = (u: string): string | null => {
+          const resolveFetchUrl = (u: string): string | null => {
             const s = u.trim();
             if (/^https?:\/\//i.test(s)) return s;
             if (!s.startsWith("/")) return null;
-            if (s.startsWith("/manus-storage") && appOrigin) return `${appOrigin.replace(/\/+$/, "")}${s}`;
+            if (s.startsWith("/manus-storage") && appOrigin) return `${appOrigin}${s}`;
             if (bridgeBase) return `${bridgeBase}${s}`;
-            if (appOrigin) return `${appOrigin.replace(/\/+$/, "")}${s}`;
+            if (appOrigin) return `${appOrigin}${s}`;
             return null;
           };
 
-          const fetchUrl = resolveMirrorFetchUrl(finalMediaUrl);
+          const fetchUrl = resolveFetchUrl(finalMediaUrl);
           if (fetchUrl) {
             try {
               const ctrl = new AbortController();
@@ -820,23 +873,33 @@ export const waRouter = router({
               clearTimeout(tid);
               if (r.ok) {
                 const buf = Buffer.from(await r.arrayBuffer());
-                if (buf.length <= WEBHOOK_MEDIA_MAX_BYTES) {
+                if (buf.length > 0 && buf.length <= WEBHOOK_MEDIA_MAX_BYTES) {
                   const ct =
                     r.headers.get("content-type")?.split(";")[0]?.trim()
-                    || mediaMimePayload
+                    || mediaMimeFinal
                     || "application/octet-stream";
-                  const extGuess = ct.split("/")[1]?.split("+")[0] ?? "bin";
-                  const key = `wa-media/${input.instanceId}/${input.messageId ?? Date.now()}.${extGuess}`;
-                  const { forgeUrl, proxyPath } = await putAndProxy(key, buf, ct);
-                  mediaStorageKey = key;
-                  audioTranscribeUrl = forgeUrl;
-                  finalMediaUrl = proxyPath;
+                  mediaBlob = buf;
+                  mediaMimeFinal = ct;
+                  const mirror = await tryStorageMirror(buf, ct);
+                  if (mirror) {
+                    mediaStorageKey = mirror.key;
+                    audioTranscribeUrl = mirror.forgeUrl;
+                    finalMediaUrl = mirror.proxyPath;
+                  }
                 }
+              } else {
+                console.warn(`[webhook] Download de mídia falhou status=${r.status} url=${fetchUrl}`);
               }
             } catch (e) {
-              console.warn("[webhook] Espelho de mediaUrl falhou; mantendo URL original:", e);
+              console.warn("[webhook] Download de mídia falhou:", e);
             }
           }
+        }
+
+        if (isMediaBinary && !mediaBlob) {
+          console.warn(
+            `[webhook] Mensagem ${input.messageId} (type=${msgType}) recebida SEM base64 e SEM URL utilizável. Painel ficará com placeholder.`
+          );
         }
 
         const transcribeAudioUrl =
@@ -844,7 +907,11 @@ export const waRouter = router({
           || (finalMediaUrl && /^https?:\/\//i.test(finalMediaUrl) ? finalMediaUrl : null);
 
         const [insertedMsg] = await db.execute(
-          "INSERT INTO wa_messages (conversationId, instanceId, messageId, fromMe, senderType, type, content, mediaUrl, mediaStorageKey, mediaCaption, status, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+          `INSERT INTO wa_messages (
+             conversationId, instanceId, messageId, fromMe, senderType, type, content,
+             mediaUrl, mediaStorageKey, mediaBlob, mediaMimeType, mediaSizeBytes,
+             mediaCaption, status, timestamp
+           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             conversationId,
             input.instanceId,
@@ -855,6 +922,9 @@ export const waRouter = router({
             input.content ?? null,
             finalMediaUrl,
             mediaStorageKey,
+            mediaBlob,
+            mediaBlob ? (mediaMimeFinal ?? "application/octet-stream") : null,
+            mediaBlob ? mediaBlob.length : null,
             input.mediaCaption?.trim() || null,
             "delivered",
             msgTimestamp,

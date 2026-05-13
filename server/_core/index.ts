@@ -12,6 +12,7 @@ import { registerUploadRoutes } from "../uploadHandler";
 import { registerPdvSofiaPhotoRoute } from "../pdvSofiaPhotoRoute";
 import { registerWaMessageMediaRoute } from "../waMessageMediaRoute";
 import { runPdvMigration, seedPdvData } from "../routers/pdvMigration";
+import { runWaMediaBlobMigration } from "../routers/waMediaBlobMigration";
 import { runAutoSync } from "../routers/pdvAutoSync";
 
 // `tsx watch` no Windows costuma não definir NODE_ENV; sem isso o Vite não sobe.
@@ -100,6 +101,7 @@ async function startServer() {
     // Run PDV migration and seed after server starts
     runPdvMigration()
       .then(() => seedPdvData())
+      .then(() => runWaMediaBlobMigration())
       .catch(err => console.error("[PDV] Setup error:", err));
   });
 }

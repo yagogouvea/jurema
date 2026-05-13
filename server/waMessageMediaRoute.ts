@@ -107,8 +107,23 @@ export function registerWaMessageMediaRoute(app: Express): void {
       const mediaUrlStr = mediaUrl == null ? "" : String(mediaUrl);
       const mediaKeyStr = mediaStorageKey == null ? "" : String(mediaStorageKey);
 
+      // Caminho 1 (preferido): blob LONGBLOB gravado direto na mensagem.
+      const blobRaw = mysqlRowField(raw, "mediaBlob");
+      const mimeRaw = mysqlRowField(raw, "mediaMimeType");
+      if (blobRaw) {
+        const buf = Buffer.isBuffer(blobRaw) ? blobRaw : Buffer.from(blobRaw as any);
+        if (buf.length > 0) {
+          const ct = (mimeRaw ? String(mimeRaw) : "") || guessContentTypeFromWaType(type);
+          res.setHeader("Content-Type", ct);
+          res.setHeader("Cache-Control", "private, max-age=300");
+          res.setHeader("Content-Length", String(buf.length));
+          res.end(buf);
+          return;
+        }
+      }
+
       console.log(
-        `[wa-media] in messageId=${messageId} type=${type} urlLen=${mediaUrlStr.length} keyLen=${mediaKeyStr.length} urlPrefix=${mediaUrlStr.substring(0, 60)} key=${mediaKeyStr.substring(0, 80)}`
+        `[wa-media] in messageId=${messageId} type=${type} urlLen=${mediaUrlStr.length} keyLen=${mediaKeyStr.length} hasBlob=false`
       );
 
       let upstream: string | null = null;
