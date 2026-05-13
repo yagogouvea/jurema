@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import {
   Bot, Save, Plus, Wifi, WifiOff, Settings,
   Clock, Zap, Brain, Link2, Users, Trash2,
-  ChevronLeft, Eye, EyeOff, RefreshCw, AlertCircle,
-  QrCode, RotateCcw, CheckCircle2, Radio, ExternalLink
+  ChevronLeft, Eye, RefreshCw, AlertCircle,
+  QrCode, RotateCcw, CheckCircle2, Radio, ExternalLink, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,9 +20,46 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { Link } from "wouter";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const AWAY_DAY_KEYS = ["0", "1", "2", "3", "4", "5", "6"] as const;
 const AWAY_DAY_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+/** Modelos rápidos de tom — substituem o campo "comportamento" inteiro; a equipe pode editar depois. */
+const PERSONALITY_PRESETS: { label: string; text: string }[] = [
+  {
+    label: "Padrão Jurema (recomendado)",
+    text: `Você representa uma atendente humana da Jurema Sport no WhatsApp.
+
+Como falar:
+- Educação e clareza em primeiro lugar; frases curtas (em geral até 2 ou 3).
+- Tom profissional e acolhedor, sem exageros, sem gírias forçadas.
+- Evite emojis; use no máximo um quando fizer muito sentido.
+- Nunca diga que é robô, inteligência artificial, chatbot ou "sistema automático".
+- Não repita o nome do cliente em toda mensagem.
+- Se não souber preço, estoque, prazo ou política com certeza, responda exatamente: "Só um momento." e não invente dados.
+
+O que evitar:
+- Prometer desconto ou brinde sem base nas regras da loja.
+- Discutir assuntos que não sejam compra, pedido, produto ou logística da loja.`,
+  },
+  {
+    label: "Mais formal",
+    text: `Atendimento cordial e formal, com vocabulário neutro e respeitoso.
+- Evite gírias, abreviações e emojis.
+- Frases claras e curtas.
+- Nunca mencione automação ou inteligência artificial.
+- Em dúvida sobre dados sensíveis (preço, estoque, prazo), responda apenas: "Só um momento."`,
+  },
+  {
+    label: "Mais leve (ainda profissional)",
+    text: `Atendimento simpático e leve, como uma loja que conhece bem o cliente de WhatsApp.
+- Pode usar uma ou outra expressão calorosa, sem exagerar.
+- No máximo um emoji por mensagem, só quando combinar com o tom do cliente.
+- Nunca diga que é robô ou IA.
+- Não invente informações; se não souber, diga "Só um momento."`,
+  },
+];
 
 type AwayMode = "legacy" | "closed" | "open";
 
@@ -180,7 +217,7 @@ export default function PdvWhatsAppConfig() {
   const { isAdmin } = usePdvAuth();
   const [activeTab, setActiveTab] = useState<Tab>("instancias");
   const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
-  const [showApiKey, setShowApiKey] = useState(false);
+  const [trainingAdvancedOpen, setTrainingAdvancedOpen] = useState(false);
 
   // ── Instâncias ──────────────────────────────────────────────────────────────
   const [instForm, setInstForm] = useState({ id: 0, name: "", phone: "", instanceId: "", apiKey: "", webhookUrl: "", active: true });
@@ -228,6 +265,11 @@ export default function PdvWhatsAppConfig() {
     { enabled: !!selectedInstanceId, staleTime: 0 }
   );
 
+  const { data: aiTrainingDefaults } = trpc.wa.getAiTrainingDefaults.useQuery(undefined, {
+    enabled: activeTab === "treinamento",
+    staleTime: 60_000,
+  });
+
   const { data: quickReplies = [], refetch: refetchQr } = trpc.wa.listQuickReplies.useQuery(
     { instanceId: selectedInstanceId ?? undefined }
   );
@@ -238,61 +280,35 @@ export default function PdvWhatsAppConfig() {
     { refetchInterval: 15_000 }
   );
 
-  // Preenche o form quando a config da IA é carregada — usa aiConfig?.id como chave para forçar reset
+  // Preenche o formulário com valores do servidor já mesclados ao modelo Jurema (campos vazios no banco vêm preenchidos).
   useEffect(() => {
-    if (aiConfig !== undefined) {
-      if (aiConfig === null) {
-        setAiForm({
-          enabled: false,
-          aiName: "Ju",
-          personality: "",
-          businessContext: "",
-          greetingMessage: "",
-          systemPrompt: "",
-          catalogLink: "",
-          groupLink: "",
-          instagramLink: "",
-          maxContextMessages: 10,
-          responseDelayMin: 1000,
-          responseDelayMax: 3000,
-          escalateKeywords: [],
-          newKeyword: "",
-        });
-        setAwayForm({ awayEnabled: false, awayStart: "18:00", awayEnd: "08:00", awayMessage: "" });
-        const empty = parseScheduleToState(null);
-        setAwayDayMode(empty.modes);
-        setAwayDayOpen(empty.opens);
-      } else {
-        const { modes, opens } = parseScheduleToState(aiConfig.awaySchedule);
-        setAwayDayMode(modes);
-        setAwayDayOpen(opens);
-        setAiForm({
-          enabled: Boolean(aiConfig.enabled),
-          aiName: aiConfig.aiName ?? "Ju",
-          personality: aiConfig.personality ?? "",
-          businessContext: aiConfig.businessContext ?? "",
-          greetingMessage: aiConfig.greetingMessage ?? "",
-          systemPrompt: aiConfig.systemPrompt ?? "",
-          catalogLink: aiConfig.catalogLink ?? "",
-          groupLink: aiConfig.groupLink ?? "",
-          instagramLink: aiConfig.instagramLink ?? "",
-          maxContextMessages: aiConfig.maxContextMessages ?? 10,
-          responseDelayMin: aiConfig.responseDelayMin ?? 1000,
-          responseDelayMax: aiConfig.responseDelayMax ?? 3000,
-          escalateKeywords: Array.isArray(aiConfig.escalateKeywords)
-            ? aiConfig.escalateKeywords
-            : (typeof aiConfig.escalateKeywords === "string" ? JSON.parse(aiConfig.escalateKeywords || "[]") : []),
-          newKeyword: "",
-        });
-        setAwayForm({
-          awayEnabled: Boolean(aiConfig.awayEnabled),
-          awayStart: aiConfig.awayStart ?? "18:00",
-          awayEnd: aiConfig.awayEnd ?? "08:00",
-          awayMessage: aiConfig.awayMessage ?? "",
-        });
-      }
-    }
-  }, [aiConfig]);
+    if (aiConfig === undefined || !selectedInstanceId) return;
+    const { modes, opens } = parseScheduleToState(aiConfig.awaySchedule);
+    setAwayDayMode(modes);
+    setAwayDayOpen(opens);
+    setAiForm({
+      enabled: Boolean(aiConfig.enabled),
+      aiName: aiConfig.aiName,
+      personality: aiConfig.personality,
+      businessContext: aiConfig.businessContext,
+      greetingMessage: aiConfig.greetingMessage,
+      systemPrompt: aiConfig.systemPrompt,
+      catalogLink: aiConfig.catalogLink,
+      groupLink: aiConfig.groupLink,
+      instagramLink: aiConfig.instagramLink,
+      maxContextMessages: aiConfig.maxContextMessages,
+      responseDelayMin: aiConfig.responseDelayMin,
+      responseDelayMax: aiConfig.responseDelayMax,
+      escalateKeywords: Array.isArray(aiConfig.escalateKeywords) ? [...aiConfig.escalateKeywords] : [],
+      newKeyword: "",
+    });
+    setAwayForm({
+      awayEnabled: Boolean(aiConfig.awayEnabled),
+      awayStart: aiConfig.awayStart,
+      awayEnd: aiConfig.awayEnd,
+      awayMessage: aiConfig.awayMessage,
+    });
+  }, [aiConfig, selectedInstanceId]);
 
   useEffect(() => {
     if (activeTab !== "horarios" || !instances.length) return;
@@ -393,6 +409,46 @@ export default function PdvWhatsAppConfig() {
 
   function resetQrForm() {
     setQrForm({ id: 0, title: "", shortcut: "", content: "", category: "" });
+  }
+
+  /** Recoloca no formulário o texto modelo completo (não grava no banco até Salvar). */
+  function applyTrainingDefaultsDraft() {
+    if (!aiTrainingDefaults) {
+      toast.error("Aguarde o carregamento do modelo e tente de novo.");
+      return;
+    }
+    const d = aiTrainingDefaults;
+    const { modes, opens } = parseScheduleToState(d.awaySchedule);
+    setAwayDayMode(modes);
+    setAwayDayOpen(opens);
+    setAiForm({
+      enabled: d.enabled,
+      aiName: d.aiName,
+      personality: d.personality,
+      businessContext: d.businessContext,
+      greetingMessage: d.greetingMessage,
+      systemPrompt: d.systemPrompt,
+      catalogLink: d.catalogLink,
+      groupLink: d.groupLink,
+      instagramLink: d.instagramLink,
+      maxContextMessages: d.maxContextMessages,
+      responseDelayMin: d.responseDelayMin,
+      responseDelayMax: d.responseDelayMax,
+      escalateKeywords: [...d.escalateKeywords],
+      newKeyword: "",
+    });
+    setAwayForm({
+      awayEnabled: d.awayEnabled,
+      awayStart: d.awayStart,
+      awayEnd: d.awayEnd,
+      awayMessage: d.awayMessage,
+    });
+    toast.success("Rascunho atualizado com o modelo Jurema. Revise e clique em Salvar para gravar.");
+  }
+
+  function applyPersonalityPreset(text: string) {
+    setAiForm((f) => ({ ...f, personality: text }));
+    toast.success("Tom aplicado — ajuste o texto como quiser.");
   }
 
   function handleSaveAi() {
@@ -768,8 +824,69 @@ export default function PdvWhatsAppConfig() {
             <div className="max-w-3xl space-y-6">
               <div>
                 <h2 className="text-white font-semibold">Treinamento da IA</h2>
-                <p className="text-gray-400 text-sm mt-0.5">Configure como a IA deve se comportar e responder</p>
+                <p className="text-gray-400 text-sm mt-0.5">
+                  Tudo que você editar aqui vira instrução para a atendente virtual — em linguagem simples, sem programação.
+                </p>
               </div>
+
+              {selectedInstanceId && aiConfig && !aiConfigLoading && (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-green-800/40 bg-green-950/15 p-4 text-[13px] text-gray-200 leading-relaxed space-y-3">
+                    <p>
+                      <span className="font-semibold text-green-300">Como usar:</span> os blocos abaixo já vêm com um{" "}
+                      <strong>modelo completo da Jurema Sport</strong>. A equipe só precisa ler, completar o que estiver
+                      entre parênteses ou “(Completar…)”, e salvar. Quanto mais preciso o texto da base de conhecimento,
+                      melhor a IA responde sobre preços, prazos e políticas — ela{" "}
+                      <span className="text-amber-200/90">não deve inventar</span> o que não estiver escrito.
+                    </p>
+                    <ul className="list-disc pl-4 space-y-1 text-gray-300 text-xs">
+                      <li>
+                        <strong>Comportamento</strong>: define tom de voz e limites (use os botões de modelo rápido se
+                        quiser começar de um perfil pronto).
+                      </li>
+                      <li>
+                        <strong>Base de conhecimento</strong>: o “manual” da loja; use títulos com === para organizar
+                        (pode apagar seções que não usar).
+                      </li>
+                      <li>
+                        <strong>Links</strong>: catálogo, grupo e Linktree — a IA usa quando o cliente pedir.
+                      </li>
+                      <li>
+                        <strong>Palavras de escalação</strong>: se o cliente escrever algo parecido, a conversa pode ir
+                        para humano com “Só um momento.”
+                      </li>
+                    </ul>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="border-green-700/50 text-green-200 hover:bg-green-900/30"
+                        onClick={applyTrainingDefaultsDraft}
+                        disabled={!aiTrainingDefaults}
+                      >
+                        Recarregar modelo Jurema no rascunho
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-gray-400 hover:text-white"
+                        onClick={() => refetchAiConfig()}
+                      >
+                        Buscar de novo no servidor
+                      </Button>
+                    </div>
+                  </div>
+                  {!aiConfig.hasPersistedRow && (
+                    <p className="text-amber-200/90 text-xs bg-amber-950/20 border border-amber-900/30 rounded-lg px-3 py-2">
+                      Ainda não há configuração salva para esta instância no banco. Ao clicar em{" "}
+                      <strong className="text-amber-100">Salvar Configuração da IA</strong>, o registro será criado com o
+                      que estiver nos campos.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Aviso sem instância */}
               {!selectedInstanceId && (
@@ -838,12 +955,32 @@ export default function PdvWhatsAppConfig() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-gray-300 text-xs">Tom de voz e comportamento</Label>
+                  <p className="text-gray-500 text-[11px]">
+                    Descreva como a pessoa deve falar no WhatsApp. Modelos rápidos (substituem este bloco inteiro):
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {PERSONALITY_PRESETS.map((p) => (
+                      <Button
+                        key={p.label}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-[11px] border-gray-600 text-gray-300 hover:bg-gray-800"
+                        onClick={() => applyPersonalityPreset(p.text)}
+                      >
+                        {p.label}
+                      </Button>
+                    ))}
+                  </div>
                   <Textarea
                     value={aiForm.personality}
                     onChange={e => setAiForm(f => ({ ...f, personality: e.target.value }))}
-                    className="bg-gray-800 border-gray-700 text-white text-sm min-h-[80px]"
+                    className="bg-gray-800 border-gray-700 text-white text-sm min-h-[140px] leading-relaxed"
                   />
-                  <p className="text-gray-500 text-xs">Descreva como a atendente deve se comportar: tom, linguagem, limites. Sem emojis, sem excessos de cordialidade.</p>
+                  <p className="text-gray-500 text-xs">
+                    Dica: quem não programa não precisa de termos técnicos — escreva como se estivesse treinando uma
+                    funcionária nova.
+                  </p>
                 </div>
               </div>
 
@@ -852,11 +989,15 @@ export default function PdvWhatsAppConfig() {
                 <h3 className="text-white font-semibold text-sm flex items-center gap-2">
                   <Brain className="w-4 h-4 text-green-400" /> Base de Conhecimento
                 </h3>
-                <p className="text-gray-400 text-xs">Tudo que a IA sabe sobre a Jumera Sport. Edite conforme necessario — quanto mais completo, melhor o atendimento.</p>
+                <p className="text-gray-400 text-xs">
+                  Manual da loja em texto corrido. Mantenha os títulos com <span className="font-mono text-gray-300">===</span> para
+                  organizar; apague blocos que não forem usar. Troque todo &quot;(Completar…)&quot; por informação real — a IA só pode
+                  afirmar o que estiver escrito aqui (ou no histórico recente com o cliente).
+                </p>
                 <Textarea
                   value={aiForm.businessContext}
                   onChange={e => setAiForm(f => ({ ...f, businessContext: e.target.value }))}
-                  className="bg-gray-800 border-gray-700 text-white text-sm min-h-[320px] font-mono text-xs leading-relaxed"
+                  className="bg-gray-800 border-gray-700 text-white text-sm min-h-[360px] leading-relaxed"
                 />
                 <div className="bg-gray-800/50 rounded-lg p-3 space-y-1">
                   <p className="text-gray-400 text-xs font-medium">Topicos ja configurados:</p>
@@ -1016,18 +1157,30 @@ export default function PdvWhatsAppConfig() {
               </div>
 
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-3">
-                <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-                  <Brain className="w-4 h-4 text-green-400" /> Instruções avançadas (system prompt)
-                </h3>
-                <p className="text-gray-500 text-xs">
-                  Texto principal enviado ao modelo antes do histórico. Edite diretamente para produção; deixe em branco ao salvar para regenerar a partir dos campos acima (identidade, base, links).
-                </p>
-                <Textarea
-                  value={aiForm.systemPrompt}
-                  onChange={(e) => setAiForm((f) => ({ ...f, systemPrompt: e.target.value }))}
-                  placeholder="Cole ou edite o prompt completo da atendente..."
-                  className="bg-gray-800 border-gray-700 text-white text-xs font-mono min-h-[200px] leading-relaxed"
-                />
+                <Collapsible open={trainingAdvancedOpen} onOpenChange={setTrainingAdvancedOpen}>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-700 bg-gray-800/50 px-3 py-2.5 text-left hover:bg-gray-800">
+                    <div>
+                      <h3 className="text-white font-semibold text-sm">Texto técnico avançado (opcional)</h3>
+                      <p className="text-gray-500 text-[11px] font-normal">
+                        Só abra se quiser editar o prompt inteiro enviado ao modelo. O normal é editar os blocos acima e
+                        salvar; deixe isto fechado se não tiver certeza.
+                      </p>
+                    </div>
+                    <ChevronDown className={`w-5 h-5 shrink-0 text-gray-400 transition-transform ${trainingAdvancedOpen ? "rotate-180" : ""}`} />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-3 space-y-2">
+                    <p className="text-gray-500 text-xs">
+                      Se limpar este campo e salvar, o sistema monta de novo o texto a partir de identidade, base e
+                      links.
+                    </p>
+                    <Textarea
+                      value={aiForm.systemPrompt}
+                      onChange={(e) => setAiForm((f) => ({ ...f, systemPrompt: e.target.value }))}
+                      placeholder="Deixe em branco ao salvar para regenerar a partir dos campos principais."
+                      className="bg-gray-800 border-gray-700 text-white text-xs font-mono min-h-[220px] leading-relaxed"
+                    />
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
 
               <Button

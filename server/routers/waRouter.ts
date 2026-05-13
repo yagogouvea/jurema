@@ -10,6 +10,7 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import type { Request } from "express";
 import { verifyPdvToken } from "./pdvAuth";
+import { buildSystemPrompt, mergeDbRowWithDefaults } from "./waAiTrainingDefaults";
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -595,9 +596,15 @@ export const waRouter = router({
       const db = await getDb();
       try {
         const [rows] = await db.execute("SELECT * FROM wa_ai_config WHERE instanceId=?", [input.instanceId]) as any;
-        return rows[0] ?? null;
+        return mergeDbRowWithDefaults(rows[0], input.instanceId);
       } finally { await db.end(); }
     }),
+
+  /** Texto modelo completo (sem usar o banco) — botão "recarregar rascunho" no Treinamento IA. */
+  getAiTrainingDefaults: protectedProcedure.query(async ({ ctx }) => {
+    await requireWaAccess(ctx);
+    return mergeDbRowWithDefaults(null, 0);
+  }),
 
   saveAiConfig: protectedProcedure
     .input(z.object({
@@ -963,52 +970,4 @@ async function callWaBridge(instanceId: number, remoteJid: string, content: stri
     const text = await res.text().catch(() => "");
     throw new Error(`wa-bridge respondeu ${res.status}: ${text.substring(0, 200)}`);
   }
-}
-
-// ─── Helper: Gerador de System Prompt ─────────────────────────────────────────
-
-function buildSystemPrompt(config: {
-  aiName?: string;
-  personality?: string;
-  businessContext?: string;
-  catalogLink?: string;
-  groupLink?: string;
-  instagramLink?: string;
-  escalateKeywords?: string[];
-}): string {
-  const name = config.aiName ?? "Ju";
-  const personality = config.personality ?? "Sou uma atendente simpática, prestativa e bem-humorada. Uso linguagem informal mas profissional, com emojis moderados.";
-  const business = config.businessContext ?? "Trabalho na Jumera Sport, loja especializada em camisas de times de futebol, seleções e produtos esportivos. Vendemos no atacado e varejo.";
-
-  let prompt = `Você é ${name}, atendente virtual da Jumera Sport.
-
-PERSONALIDADE E TOM:
-${personality}
-
-SOBRE A EMPRESA:
-${business}
-
-REGRAS IMPORTANTES:
-- Responda SEMPRE em português brasileiro
-- Seja natural e humanizada — nunca revele que é uma IA
-- Use emojis com moderação (1-2 por mensagem)
-- Respostas curtas e objetivas (máximo 3 parágrafos)
-- Se não souber algo, diga que vai verificar e peça para aguardar
-- Nunca invente informações sobre produtos, preços ou prazos
-- Sempre pergunte o nome do cliente se ainda não souber`;
-
-  if (config.catalogLink) {
-    prompt += `\n\nCATÁLOGO DE PRODUTOS: ${config.catalogLink}\n- Quando o cliente pedir para ver produtos, envie este link`;
-  }
-  if (config.groupLink) {
-    prompt += `\n\nGRUPO WHATSAPP: ${config.groupLink}\n- Quando o cliente quiser entrar no grupo de novidades, envie este link`;
-  }
-  if (config.instagramLink) {
-    prompt += `\n\nINSTAGRAM: ${config.instagramLink}\n- Mencione o Instagram quando relevante`;
-  }
-  if (config.escalateKeywords?.length) {
-    prompt += `\n\nESCALAMENTO PARA HUMANO:\n- Se o cliente mencionar: ${config.escalateKeywords.join(", ")}\n- Diga: "Só um momento."`;
-  }
-
-  return prompt;
 }
