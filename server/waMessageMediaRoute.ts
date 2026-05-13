@@ -1,8 +1,6 @@
 import type { Express, Request, Response } from "express";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import mysql from "mysql2/promise";
 import { verifyPdvToken } from "./routers/pdvAuth";
-import { createPdvMysqlConnection } from "./pdvMysql";
 import { resolveStoredMediaToViewUrl } from "./waMediaResolve";
 
 function mysqlRowField(row: Record<string, unknown>, name: string): unknown {
@@ -32,11 +30,19 @@ function guessContentTypeFromWaType(type: string): string {
   }
 }
 
+async function openMysqlLikeWaRouter(): Promise<mysql.Connection | null> {
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url) return null;
+  return mysql.createConnection(url);
+}
+
+const PROXY_MAX_BYTES = 25 * 1024 * 1024;
+
 /**
  * GET /api/pdv/wa-media/:messageId
  *
- * Faz proxy da mídia de `wa_messages` com autenticação PDV (cookie `pdv_token` ou Bearer no fetch).
- * O painel usa isso em `<img>` / `<video>` / áudio: tags não enviam Authorization, só cookie same-site.
+ * Faz proxy da mídia de `wa_messages` com autenticação PDV (cookie `pdv_token`).
+ * Usado quando não há URL https direta (ex.: só `mediaStorageKey` no banco).
  */
 export function registerWaMessageMediaRoute(app: Express): void {
   app.get("/api/pdv/wa-media/:messageId", async (req: Request, res: Response) => {
@@ -52,18 +58,15 @@ export function registerWaMessageMediaRoute(app: Express): void {
       return;
     }
 
-    let conn: Awaited<ReturnType<typeof createPdvMysqlConnection>> = null;
+    let conn: mysql.Connection | null = null;
     try {
-      conn = await createPdvMysqlConnection();
+      conn = await openMysqlLikeWaRouter();
       if (!conn) {
         res.status(503).type("text/plain").send("DB indisponível");
         return;
       }
 
-      const [rows] = await conn.execute(
-        "SELECT id, type, mediaUrl, mediaStorageKey FROM wa_messages WHERE id = ? LIMIT 1",
-        [messageId]
-      );
+      const [rows] = await conn.execute("SELECT * FROM wa_messages WHERE id = ? LIMIT 1", [messageId]);
       const raw = (rows as any[])[0] as Record<string, unknown> | undefined;
       if (!raw) {
         res.status(404).type("text/plain").send("Mensagem não encontrada");
@@ -86,6 +89,7 @@ export function registerWaMessageMediaRoute(app: Express): void {
       const upstreamRes = await fetch(upstream, {
         redirect: "follow",
         signal: AbortSignal.timeout(120_000),
+        headers: { "User-Agent": "JuremaPDV/1.0 (wa-media-proxy)" },
       });
       if (!upstreamRes.ok) {
         console.error(`[wa-media] upstream ${upstreamRes.status} messageId=${messageId}`);
@@ -99,13 +103,13 @@ export function registerWaMessageMediaRoute(app: Express): void {
       res.setHeader("Content-Type", ct);
       res.setHeader("Cache-Control", "private, max-age=120");
 
-      if (upstreamRes.body) {
-        await pipeline(Readable.fromWeb(upstreamRes.body as any), res);
-      } else {
-        const buf = Buffer.from(await upstreamRes.arrayBuffer());
-        res.setHeader("Content-Length", String(buf.length));
-        res.end(buf);
+      const buf = Buffer.from(await upstreamRes.arrayBuffer());
+      if (buf.length > PROXY_MAX_BYTES) {
+        res.status(413).type("text/plain").send("Mídia muito grande");
+        return;
       }
+      res.setHeader("Content-Length", String(buf.length));
+      res.end(buf);
     } catch (err) {
       console.error("[wa-media] erro messageId=", messageId, err);
       if (!res.headersSent) res.status(500).type("text/plain").send("Erro ao servir mídia");

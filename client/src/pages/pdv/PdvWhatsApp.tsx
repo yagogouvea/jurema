@@ -286,15 +286,27 @@ function resolveWaMediaUrl(mediaUrl: string | null | undefined): string | null {
   return u;
 }
 
-/** Mídia binária: mesmo host + cookie PDV (`<img>` não envia Authorization Bearer). */
+/**
+ * URL para exibir mídia no painel.
+ * 1) Preferir URL absoluta (presign do batch `resolveMediaViewUrls`, https do bridge, ou /manus-storage no mesmo host).
+ * 2) Só então `/api/pdv/wa-media/:id` — cookie PDV; evita 404 quando o batch já resolveu a URL e o proxy falhava por leitura duplicada no MySQL.
+ */
 function waPanelMediaSrc(msg: any): string | null {
   const type = String(msg?.type ?? "text");
   const binaryTypes = new Set(["image", "video", "audio", "document", "sticker"]);
+  const raw =
+    msg?.mediaUrl
+    ?? msg?.media_url
+    ?? msg?.MEDIAURL
+    ?? null;
+  const direct = resolveWaMediaUrl(raw);
+
   if (binaryTypes.has(type)) {
+    if (direct && /^https?:\/\//i.test(direct)) return direct;
     const id = waMessageNumericId(msg);
     if (Number.isFinite(id) && id > 0) return `/api/pdv/wa-media/${id}`;
   }
-  return resolveWaMediaUrl(msg?.mediaUrl ?? msg?.media_url ?? msg?.MEDIAURL ?? null);
+  return direct;
 }
 
 function MessageContent({ msg }: { msg: any }) {
