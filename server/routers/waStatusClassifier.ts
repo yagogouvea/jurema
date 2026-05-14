@@ -13,23 +13,7 @@ import { invokeLLM } from "../_core/llm";
 import mysql from "mysql2/promise";
 import { isWithinBusinessHoursSp, isStoreOpenNowSaoPaulo, parseAwaySchedule } from "./waHours";
 
-// Status disponíveis com descrições para o classificador (IA analisa o contexto)
-const STATUS_DESCRIPTIONS = {
-  novo: "Primeira mensagem ou cliente que nunca comprou antes — INCLUI saudações simples como 'Bom dia', 'Oi', 'Boa tarde, tudo bem?'",
-  em_atendimento: "Conversa ativa, cliente fazendo perguntas sobre produtos, preços ou tamanhos",
-  aguardando: "IA ou atendente fez uma pergunta e está esperando resposta do cliente",
-  proposta_enviada: "Catálogo foi enviado, cliente está analisando ou pedido está sendo montado",
-  finalizado: "Compra confirmada, pagamento realizado ou cliente agradeceu e encerrou",
-  spam:
-    "APENAS para propaganda não solicitada, links de outras lojas/concorrência, ofertas comerciais de terceiros, " +
-    "mensagens políticas/religiosas em massa, ou abuso/ofensa explícita. Saudação ou cliente perguntando algo NÃO é spam.",
-  intervencao:
-    "URGENTE: precisa de atendente humano AGORA — cliente irritado, reclamação grave, pedido de gerente, " +
-    "problema com pagamento/entrega que exija decisão humana, situação fora do script, ou quando o cliente " +
-    "explicitamente pede para falar com uma pessoa. NÃO use para dúvidas simples de preço ou catálogo.",
-};
-
-export type ConvStatus = keyof typeof STATUS_DESCRIPTIONS;
+export type ConvStatus = string;
 
 interface Message {
   fromMe: boolean;
@@ -37,14 +21,55 @@ interface Message {
   createdAt: Date | string;
 }
 
+interface PresetRow {
+  key: string;
+  label: string;
+  description: string | null;
+  blocksAi: number | boolean;
+  isActive: number | boolean;
+}
+
+async function loadActivePresets(db: mysql.Connection): Promise<PresetRow[]> {
+  try {
+    const [rows] = await db.execute<any[]>(
+      `SELECT \`key\`, \`label\`, \`description\`, \`blocksAi\`, \`isActive\`
+         FROM wa_status_presets
+         WHERE isActive = 1
+         ORDER BY sortOrder ASC, id ASC`
+    );
+    return (rows as PresetRow[]) || [];
+  } catch (e) {
+    console.warn("[waStatusClassifier] loadActivePresets falhou (fallback hardcoded):", e);
+    return [];
+  }
+}
+
+/** Pega o flag blocksAi de um preset; default false se não existir. */
+export async function isStatusBlocking(db: mysql.Connection, statusKey: string): Promise<boolean> {
+  try {
+    const [rows] = await db.execute<any[]>(
+      `SELECT blocksAi FROM wa_status_presets WHERE \`key\` = ? AND isActive = 1 LIMIT 1`,
+      [statusKey]
+    );
+    if (!rows.length) {
+      // Fallback para chaves do sistema antigo se a tabela não existir/preset removido.
+      return statusKey === "spam" || statusKey === "finalizado" || statusKey === "intervencao";
+    }
+    return !!rows[0].blocksAi;
+  } catch {
+    return statusKey === "spam" || statusKey === "finalizado" || statusKey === "intervencao";
+  }
+}
+
 /**
  * Classifica o status de uma conversa analisando o histórico de mensagens.
+ * Devolve a chave do preset escolhido + resumo livre da IA em até 3 palavras (aiStatus).
  * Retorna null se o status não deve ser alterado (ex: bloqueio manual ativo).
  */
 export async function classifyConversationStatus(
   db: mysql.Connection,
   conversationId: number
-): Promise<{ status: ConvStatus; confidence: number } | null> {
+): Promise<{ status: ConvStatus; aiStatus: string; confidence: number } | null> {
   // 1. Verificar se o status está bloqueado por alteração manual
   const [convRows] = await db.execute<any[]>(
     `SELECT status, statusSetBy, statusLockedUntil FROM wa_conversations WHERE id = ?`,
@@ -100,28 +125,37 @@ export async function classifyConversationStatus(
     })
     .join("\n");
 
-  const statusOptions = Object.entries(STATUS_DESCRIPTIONS)
-    .map(([key, desc]) => `- ${key}: ${desc}`)
-    .join("\n");
+  const presets = await loadActivePresets(db);
+  const fallbackKeys = ["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam", "intervencao"];
+  const enumKeys = presets.length > 0 ? presets.map((p) => p.key) : fallbackKeys;
+  const statusOptions = presets.length > 0
+    ? presets
+        .map((p) => `- ${p.key} (${p.label})${p.description ? `: ${p.description}` : ""}${p.blocksAi ? " [BLOQUEIA IA]" : ""}`)
+        .join("\n")
+    : fallbackKeys.map((k) => `- ${k}`).join("\n");
 
   try {
     const response = await invokeLLM({
       messages: [
         {
           role: "system",
-          content: `Você é um classificador de status de conversas de atendimento ao cliente da Jurema Sport (loja de camisas de times). Analise TODO o histórico abaixo (mensagens do cliente e do atendente/IA) e classifique o status ATUAL da conversa com base no contexto real — não use regras fixas por palavras soltas; interprete o sentido.
+          content: `Você é um classificador de status de conversas de atendimento ao cliente da Jurema Sport (loja de camisas de times). Analise TODO o histórico abaixo e devolva DOIS campos:
 
-Status disponíveis:
+1) "status": escolha UMA CHAVE da lista abaixo, que melhor representa a categoria atual da conversa.
+2) "aiStatus": um resumo LIVRE em PORTUGUÊS, ATÉ 3 PALAVRAS, descrevendo a situação real desta conversa neste momento. Exemplos: "Negociando atacado", "Pedindo medidas", "Aguardando pagamento", "Cliente novo curioso", "Comprando 6 camisas", "Conferindo preço".
+
+Categorias disponíveis:
 ${statusOptions}
 
 REGRAS CRÍTICAS:
-- "spam" APENAS para propaganda explícita de TERCEIROS, links de concorrência, ofensas, mensagem política/religiosa em massa. Nunca classifique uma saudação ("Bom dia", "Oi", "Boa tarde, tudo bem?") como spam — isso é "novo".
-- Se o cliente está só dizendo "oi"/"bom dia"/"tudo bem?", classifique como "novo" (sem histórico) ou "em_atendimento" (já existe contexto).
-- "intervencao" SÓ quando humano precisa assumir já: reclamação séria, pedido de gerente, erro grave, disputa, ou pedido explícito para falar com humano. Dúvidas comuns de produto/preço NÃO são intervenção.
-- Em caso de dúvida entre "spam" e qualquer outro status, NUNCA escolha spam.
+- NUNCA classifique uma saudação ("Bom dia", "Oi", "Tudo bem?") como categoria que bloqueia a IA. Saudação é cliente fazendo contato — categoria "novo" ou "em_atendimento".
+- "spam" SÓ para propaganda explícita de terceiros, links de concorrência, ofensas ou mensagem em massa. Em dúvida, NUNCA escolha spam.
+- "intervencao" SÓ quando humano precisa assumir já: reclamação séria, pedido de gerente, erro grave, disputa, ou pedido explícito para falar com humano. Dúvidas de preço/produto NÃO são intervenção.
+- "aiStatus" tem 3 palavras NO MÁXIMO, em português, sem aspas, sem pontuação final. Use verbos no gerúndio quando descrever ação ("Negociando", "Aguardando", "Comprando").
 
-Responda APENAS com JSON no formato: {"status": "nome_do_status", "confidence": 0.0}
-onde confidence é um número entre 0 e 1 indicando sua certeza.`,
+Responda APENAS com JSON no formato:
+{"status": "<chave>", "aiStatus": "Resumo até 3 palavras", "confidence": 0.0}
+onde confidence é um número entre 0 e 1.`,
         },
         {
           role: "user",
@@ -136,15 +170,11 @@ onde confidence é um número entre 0 e 1 indicando sua certeza.`,
           schema: {
             type: "object",
             properties: {
-              status: {
-                type: "string",
-                enum: Object.keys(STATUS_DESCRIPTIONS),
-              },
-              confidence: {
-                type: "number",
-              },
+              status: { type: "string", enum: enumKeys },
+              aiStatus: { type: "string" },
+              confidence: { type: "number" },
             },
-            required: ["status", "confidence"],
+            required: ["status", "aiStatus", "confidence"],
             additionalProperties: false,
           },
         },
@@ -154,15 +184,24 @@ onde confidence é um número entre 0 e 1 indicando sua certeza.`,
     const rawContent = response?.choices?.[0]?.message?.content;
     if (!rawContent) return null;
     const content = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
-
     const parsed = JSON.parse(content);
-    if (!parsed.status || !STATUS_DESCRIPTIONS[parsed.status as ConvStatus]) {
+
+    if (!parsed.status || !enumKeys.includes(String(parsed.status))) {
       return null;
     }
+    const aiStatus = String(parsed.aiStatus ?? "")
+      .replace(/[\n\r"]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(" ")
+      .slice(0, 3)
+      .join(" ")
+      .slice(0, 60);
 
     return {
-      status: parsed.status as ConvStatus,
-      confidence: parsed.confidence ?? 0.8,
+      status: String(parsed.status) as ConvStatus,
+      aiStatus: aiStatus || "",
+      confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.8,
     };
   } catch (err) {
     console.error("[waStatusClassifier] Erro ao classificar status:", err);
@@ -181,35 +220,41 @@ export async function applyAiStatus(
   const result = await classifyConversationStatus(db, conversationId);
   if (!result) return;
 
-  // Só aplica se confiança >= 60%
-  if (result.confidence < 0.6) return;
-
-  // Status que DESLIGAM a IA (spam/finalizado) exigem confiança alta para evitar falso positivo.
-  // "Bom dia, tudo bem?" virando spam por engano deixava a IA muda.
-  if ((result.status === "spam" || result.status === "finalizado") && result.confidence < 0.85) {
+  // Status que DESLIGAM a IA (blocksAi) exigem confiança alta para evitar falso positivo.
+  const willBlock = await isStatusBlocking(db, result.status);
+  const minConfidence = willBlock ? 0.85 : 0.6;
+  if (result.confidence < minConfidence) {
     console.log(
-      `[statusClassifier] conv=${conversationId} status=${result.status} confidence=${result.confidence.toFixed(2)} abaixo do limiar 0.85 — mantendo status atual.`
+      `[statusClassifier] conv=${conversationId} status=${result.status} aiStatus="${result.aiStatus}" confidence=${result.confidence.toFixed(2)} abaixo do limiar ${minConfidence} — mantendo status, mas salvando aiStatus.`
     );
+    // Mesmo sem trocar o status fixo, atualiza o resumo livre da IA.
+    if (result.aiStatus) {
+      await db.execute(
+        `UPDATE wa_conversations SET aiStatus = ?, aiStatusUpdatedAt = NOW() WHERE id = ?`,
+        [result.aiStatus, conversationId]
+      ).catch(() => undefined);
+    }
     return;
   }
 
   await db.execute(
     `UPDATE wa_conversations
-     SET status = ?, statusSetBy = 'ai', updatedAt = NOW()
+     SET status = ?, statusSetBy = 'ai', aiStatus = ?, aiStatusUpdatedAt = NOW(), updatedAt = NOW()
      WHERE id = ?`,
-    [result.status, conversationId]
+    [result.status, result.aiStatus, conversationId]
   );
 
-  if (result.status === "intervencao") {
+  // Se o preset bloqueia a IA, desativa também aiEnabled para evidência visual no painel.
+  if (willBlock) {
     await db.execute(
       `UPDATE wa_conversations
-       SET aiEnabled = false, aiDisabledBy = 'status_intervencao', aiDisabledAt = NOW()
+       SET aiEnabled = false, aiDisabledBy = ?, aiDisabledAt = NOW()
        WHERE id = ?`,
-      [conversationId]
+      [`status_${result.status}`, conversationId]
     );
     await db.execute(
       `INSERT INTO wa_ai_logs (conversationId, action, performedBy, details) VALUES (?,?,?,?)`,
-      [conversationId, "escalated_to_human", "system", "Status classificado como intervenção — IA desativada nesta conversa."]
+      [conversationId, "escalated_to_human", "system", `Status classificado como "${result.status}" (${result.aiStatus}) — IA desativada nesta conversa.`]
     ).catch(() => undefined);
   }
 }

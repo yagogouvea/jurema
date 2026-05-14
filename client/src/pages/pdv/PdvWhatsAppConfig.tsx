@@ -33,6 +33,345 @@ import {
 const AWAY_DAY_KEYS = ["0", "1", "2", "3", "4", "5", "6"] as const;
 const AWAY_DAY_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
+// ─── Status presets manager (CRUD) ──────────────────────────────────────────
+
+type StatusPresetEditForm = {
+  id?: number;
+  key: string;
+  label: string;
+  color: string;
+  emoji: string;
+  description: string;
+  blocksAi: boolean;
+  sortOrder: number;
+  isActive: boolean;
+  isSystem: boolean;
+};
+
+const PRESET_COLORS = [
+  "#60a5fa", "#34d399", "#fbbf24", "#a78bfa", "#f87171",
+  "#fb923c", "#22d3ee", "#f472b6", "#facc15", "#a3e635",
+  "#94a3b8",
+];
+
+function slugifyPresetKey(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 50);
+}
+
+function StatusPresetsManager() {
+  const utils = trpc.useUtils();
+  const presetsQuery = trpc.wa.listStatusPresets.useQuery({ includeInactive: true });
+  const [editing, setEditing] = useState<StatusPresetEditForm | null>(null);
+
+  const upsertMut = trpc.wa.upsertStatusPreset.useMutation({
+    onSuccess: () => {
+      toast.success(editing?.id ? "Preset atualizado" : "Preset criado");
+      setEditing(null);
+      utils.wa.listStatusPresets.invalidate();
+    },
+    onError: (e) => toast.error(`Falha: ${e.message}`),
+  });
+  const deleteMut = trpc.wa.deleteStatusPreset.useMutation({
+    onSuccess: () => {
+      toast.success("Preset removido");
+      utils.wa.listStatusPresets.invalidate();
+    },
+    onError: (e) => toast.error(`Falha: ${e.message}`),
+  });
+
+  const presets = presetsQuery.data ?? [];
+
+  const startCreate = () =>
+    setEditing({
+      key: "",
+      label: "",
+      color: "#60a5fa",
+      emoji: "",
+      description: "",
+      blocksAi: false,
+      sortOrder: (presets[presets.length - 1]?.sortOrder ?? 100) + 10,
+      isActive: true,
+      isSystem: false,
+    });
+
+  const startEdit = (p: any) =>
+    setEditing({
+      id: p.id,
+      key: p.key,
+      label: p.label,
+      color: p.color,
+      emoji: p.emoji ?? "",
+      description: p.description ?? "",
+      blocksAi: !!p.blocksAi,
+      sortOrder: p.sortOrder ?? 100,
+      isActive: !!p.isActive,
+      isSystem: !!p.isSystem,
+    });
+
+  const submit = () => {
+    if (!editing) return;
+    if (!editing.label.trim()) {
+      toast.error("Label é obrigatório");
+      return;
+    }
+    if (!editing.id && !editing.key.trim()) {
+      toast.error("Identificador é obrigatório");
+      return;
+    }
+    upsertMut.mutate({
+      id: editing.id,
+      key: editing.id ? undefined : slugifyPresetKey(editing.key),
+      label: editing.label.trim(),
+      color: editing.color,
+      emoji: editing.emoji.trim() || null,
+      description: editing.description.trim() || null,
+      blocksAi: editing.blocksAi,
+      sortOrder: editing.sortOrder,
+      isActive: editing.isActive,
+    });
+  };
+
+  return (
+    <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+          <Settings className="w-4 h-4 text-green-400" /> Status da conversa (presets)
+        </h3>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-green-700/60 text-green-200 hover:bg-green-950/40"
+          onClick={startCreate}
+        >
+          <Plus className="w-3.5 h-3.5 mr-1" /> Novo status
+        </Button>
+      </div>
+      <p className="text-gray-400 text-xs">
+        Edite, adicione ou desative os status que aparecem no chat. Os do sistema podem ser renomeados
+        e inativados, mas não removidos. Marque <strong>"desliga IA"</strong> para status onde a IA
+        deve ficar muda (ex: spam, finalizado).
+      </p>
+
+      {presetsQuery.isLoading && <p className="text-xs italic text-gray-500">Carregando…</p>}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {presets.map((p: any) => (
+          <div
+            key={p.id}
+            className="flex items-start justify-between gap-2 rounded-lg p-3"
+            style={{
+              background: "#0d1117",
+              border: `1px solid ${p.isActive ? `${p.color}55` : "#2a2a2a"}`,
+              opacity: p.isActive ? 1 : 0.55,
+            }}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap"
+                  style={{ color: p.color, background: `${p.color}26`, border: `1px solid ${p.color}55` }}
+                >
+                  {p.emoji ? <span>{p.emoji}</span> : null}
+                  {p.label}
+                </span>
+                {p.blocksAi && (
+                  <span className="text-[9px] uppercase tracking-wide text-red-300">desliga IA</span>
+                )}
+                {p.isSystem && (
+                  <span className="text-[9px] uppercase tracking-wide text-blue-300">sistema</span>
+                )}
+                {!p.isActive && (
+                  <span className="text-[9px] uppercase tracking-wide text-gray-500">inativo</span>
+                )}
+              </div>
+              {p.description && (
+                <p className="mt-1 text-[11px] leading-snug text-gray-400 truncate">{p.description}</p>
+              )}
+              <p className="mt-0.5 text-[10px] text-gray-600 font-mono truncate">key: {p.key}</p>
+            </div>
+            <div className="flex flex-col gap-1 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-gray-700 text-gray-200 hover:bg-gray-800 h-7 px-2"
+                onClick={() => startEdit(p)}
+              >
+                Editar
+              </Button>
+              {!p.isSystem && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-red-900/60 text-red-300 hover:bg-red-950/40 h-7 px-2"
+                  onClick={() => {
+                    if (confirm(`Remover preset "${p.label}"?`)) deleteMut.mutate({ id: p.id });
+                  }}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.7)" }}
+          onClick={() => setEditing(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-xl p-5 space-y-3"
+            style={{ background: "#0f172a", border: "1px solid #1e293b" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="text-white font-semibold text-sm">
+              {editing.id ? `Editar "${editing.label}"` : "Novo status"}
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-gray-300 text-xs">Label</Label>
+                <Input
+                  value={editing.label}
+                  onChange={(e) =>
+                    setEditing((s) =>
+                      s
+                        ? {
+                            ...s,
+                            label: e.target.value,
+                            key:
+                              s.id || s.isSystem
+                                ? s.key
+                                : slugifyPresetKey(e.target.value),
+                          }
+                        : s
+                    )
+                  }
+                  placeholder="Ex: Em negociação"
+                  className="bg-gray-800 border-gray-700 text-white text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-gray-300 text-xs">
+                  Identificador {editing.id || editing.isSystem ? "(fixo)" : "(slug)"}
+                </Label>
+                <Input
+                  value={editing.key}
+                  onChange={(e) =>
+                    setEditing((s) => (s ? { ...s, key: slugifyPresetKey(e.target.value) } : s))
+                  }
+                  disabled={!!editing.id || editing.isSystem}
+                  placeholder="em_negociacao"
+                  className="bg-gray-800 border-gray-700 text-white text-sm font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-gray-300 text-xs">Emoji (opcional)</Label>
+                <Input
+                  value={editing.emoji}
+                  maxLength={4}
+                  onChange={(e) => setEditing((s) => (s ? { ...s, emoji: e.target.value } : s))}
+                  placeholder="💬"
+                  className="bg-gray-800 border-gray-700 text-white text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-gray-300 text-xs">Cor</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESET_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setEditing((s) => (s ? { ...s, color: c } : s))}
+                      className="w-6 h-6 rounded-full border-2"
+                      style={{
+                        background: c,
+                        borderColor: editing.color === c ? "#fff" : "transparent",
+                      }}
+                      aria-label={`Cor ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-gray-300 text-xs">Descrição (ajuda a IA a classificar)</Label>
+              <Textarea
+                value={editing.description}
+                onChange={(e) =>
+                  setEditing((s) => (s ? { ...s, description: e.target.value } : s))
+                }
+                placeholder="Ex: Cliente está negociando preço/quantidade"
+                rows={2}
+                className="bg-gray-800 border-gray-700 text-white text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={editing.blocksAi}
+                  onCheckedChange={(v) => setEditing((s) => (s ? { ...s, blocksAi: !!v } : s))}
+                />
+                <Label className="text-gray-300 text-xs">Desliga IA</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={editing.isActive}
+                  onCheckedChange={(v) => setEditing((s) => (s ? { ...s, isActive: !!v } : s))}
+                />
+                <Label className="text-gray-300 text-xs">Ativo</Label>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-gray-300 text-xs">Ordem</Label>
+                <Input
+                  type="number"
+                  value={editing.sortOrder}
+                  onChange={(e) =>
+                    setEditing((s) =>
+                      s ? { ...s, sortOrder: Number.parseInt(e.target.value, 10) || 0 } : s
+                    )
+                  }
+                  className="bg-gray-800 border-gray-700 text-white text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                onClick={() => setEditing(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="bg-green-600 hover:bg-green-700 text-black"
+                onClick={submit}
+                disabled={upsertMut.isPending}
+              >
+                {upsertMut.isPending ? "Salvando…" : "Salvar"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type AiExtraLink = { label: string; url: string };
 
 function normalizeExtraLinks(raw: unknown): AiExtraLink[] {
@@ -1531,6 +1870,9 @@ export default function PdvWhatsAppConfig() {
                   </div>
                 )}
               </div>
+
+              {/* Presets de status (configuráveis) */}
+              <StatusPresetsManager />
 
               {/* Configurações avançadas */}
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">

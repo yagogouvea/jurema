@@ -337,7 +337,8 @@ export const waRouter = router({
   listConversations: publicProcedure
     .input(z.object({
       instanceId: z.number().optional(), // 0 ou undefined = todos os números
-      status: z.enum(["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam", "intervencao"]).optional(),
+      // status agora é livre (preset key — pode ser custom).
+      status: z.string().max(50).optional(),
       aiEnabled: z.boolean().optional(),
       unreadOnly: z.boolean().optional(),
       search: z.string().optional(),
@@ -450,19 +451,29 @@ export const waRouter = router({
   updateConversation: publicProcedure
     .input(z.object({
       id: z.number(),
-      status: z.enum(["novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam", "intervencao"]).optional(),
+      // status agora é livre (preset key — sistema ou customizado pelo usuário).
+      status: z.string().min(1).max(50).optional(),
       notes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await requireWaAccess(ctx);
       const db = await getDb();
       try {
-        // Se status foi alterado manualmente, usar lockStatusByHuman (bloqueia IA por 30min)
         if (input.status !== undefined) {
+          // Valida que o preset existe (ou aceita keys sistema legadas como fallback).
+          const [presetRows] = (await db.execute(
+            "SELECT `key` FROM wa_status_presets WHERE `key` = ? AND isActive = 1 LIMIT 1",
+            [input.status]
+          )) as any;
+          const isLegacySystemKey = [
+            "novo", "em_atendimento", "aguardando", "proposta_enviada", "finalizado", "spam", "intervencao",
+          ].includes(input.status);
+          if (!(presetRows as any[]).length && !isLegacySystemKey) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Status inválido" });
+          }
           const { lockStatusByHuman } = await import("./waStatusClassifier");
-          await lockStatusByHuman(db as any, input.id, input.status);
+          await lockStatusByHuman(db as any, input.id, input.status as any);
         }
-        // Atualizar anotações separadamente (não afeta o lock de status)
         if (input.notes !== undefined) {
           await db.execute(
             "UPDATE wa_conversations SET notes=?, updatedAt=NOW() WHERE id=?",
@@ -1551,6 +1562,130 @@ export const waRouter = router({
       // Fallback: retornar URL do dashboard do wa-bridge para abrir em nova aba
       const dashboardUrl = `${bridgeUrl}/qr/${input.bridgeInstanceId}`;
       return { ok: false, qr: null, status: "use_dashboard", dashboardUrl };
+    }),
+
+  // ─── Status presets configuráveis ──────────────────────────────────────────
+  /** Lista presets de status (sistema + customizados). */
+  listStatusPresets: publicProcedure
+    .input(z.object({ includeInactive: z.boolean().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const db = await getDb();
+      try {
+        const where = input?.includeInactive ? "" : "WHERE isActive = 1";
+        const [rows] = (await db.execute(
+          `SELECT id, \`key\`, \`label\`, color, emoji, description, blocksAi, sortOrder, isSystem, isActive
+             FROM wa_status_presets
+             ${where}
+             ORDER BY sortOrder ASC, id ASC`
+        )) as any;
+        return (rows as any[]).map((r) => ({
+          id: Number(r.id),
+          key: String(r.key),
+          label: String(r.label),
+          color: String(r.color ?? "#60a5fa"),
+          emoji: r.emoji == null ? null : String(r.emoji),
+          description: r.description == null ? null : String(r.description),
+          blocksAi: !!r.blocksAi,
+          sortOrder: Number(r.sortOrder ?? 0),
+          isSystem: !!r.isSystem,
+          isActive: !!r.isActive,
+        }));
+      } finally {
+        await db.end();
+      }
+    }),
+
+  /** Cria ou atualiza um preset (admin). Para presets de sistema só permite label/color/emoji/blocksAi/sortOrder/isActive. */
+  upsertStatusPreset: publicProcedure
+    .input(z.object({
+      id: z.number().int().positive().optional(),
+      key: z.string().min(1).max(50).regex(/^[a-z0-9_]+$/, "Use apenas letras minúsculas, números e _").optional(),
+      label: z.string().min(1).max(100),
+      color: z.string().min(4).max(20),
+      emoji: z.string().max(8).optional().nullable(),
+      description: z.string().max(255).optional().nullable(),
+      blocksAi: z.boolean().optional(),
+      sortOrder: z.number().int().min(0).max(9999).optional(),
+      isActive: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAdmin(ctx);
+      const db = await getDb();
+      try {
+        if (input.id) {
+          const [existing] = (await db.execute(
+            "SELECT * FROM wa_status_presets WHERE id = ? LIMIT 1",
+            [input.id]
+          )) as any;
+          if (!(existing as any[]).length) {
+            throw new TRPCError({ code: "NOT_FOUND" });
+          }
+          await db.execute(
+            `UPDATE wa_status_presets
+               SET label = ?, color = ?, emoji = ?, description = ?,
+                   blocksAi = ?, sortOrder = ?, isActive = ?,
+                   updatedAt = NOW()
+             WHERE id = ?`,
+            [
+              input.label,
+              input.color,
+              input.emoji ?? null,
+              input.description ?? null,
+              input.blocksAi ? 1 : 0,
+              input.sortOrder ?? 100,
+              input.isActive === false ? 0 : 1,
+              input.id,
+            ]
+          );
+          return { success: true, id: input.id };
+        }
+
+        if (!input.key) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "'key' é obrigatório para criação." });
+        }
+        const [result] = (await db.execute(
+          `INSERT INTO wa_status_presets
+             (\`key\`, label, color, emoji, description, blocksAi, sortOrder, isSystem, isActive)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+          [
+            input.key,
+            input.label,
+            input.color,
+            input.emoji ?? null,
+            input.description ?? null,
+            input.blocksAi ? 1 : 0,
+            input.sortOrder ?? 100,
+            input.isActive === false ? 0 : 1,
+          ]
+        )) as any;
+        return { success: true, id: Number((result as any).insertId) };
+      } finally {
+        await db.end();
+      }
+    }),
+
+  /** Remove um preset não-sistema. Presets de sistema só podem ser inativados, não deletados. */
+  deleteStatusPreset: publicProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAdmin(ctx);
+      const db = await getDb();
+      try {
+        const [existing] = (await db.execute(
+          "SELECT isSystem FROM wa_status_presets WHERE id = ? LIMIT 1",
+          [input.id]
+        )) as any;
+        const row = (existing as any[])[0];
+        if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+        if (row.isSystem) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Preset do sistema não pode ser deletado. Use 'inativar'." });
+        }
+        await db.execute("DELETE FROM wa_status_presets WHERE id = ?", [input.id]);
+        return { success: true };
+      } finally {
+        await db.end();
+      }
     }),
 
 });

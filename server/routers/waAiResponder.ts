@@ -182,18 +182,18 @@ export async function generateAiResponse(
     const conv = convRows[0] as ConvRow & { statusSetBy?: string };
     if (!conv.aiEnabled) return { ok: false, skipped: "ai_disabled_conversation" };
 
-    // Status que bloqueiam: dar uma segunda chance se foi a IA que classificou.
-    if (conv.status === "finalizado" || conv.status === "spam" || conv.status === "intervencao") {
+    // Status bloqueante? (consulta wa_status_presets.blocksAi)
+    const { isStatusBlocking, applyAiStatus } = await import("./waStatusClassifier");
+    if (await isStatusBlocking(db, conv.status)) {
       if ((conv as any).statusSetBy === "ai") {
         try {
-          const { applyAiStatus } = await import("./waStatusClassifier");
           await applyAiStatus(db, conversationId);
           const [recheck] = await db.execute<any[]>(
             `SELECT status FROM wa_conversations WHERE id = ? LIMIT 1`,
             [conversationId]
           );
-          const newStatus = recheck[0]?.status as string | undefined;
-          if (newStatus && (newStatus === "finalizado" || newStatus === "spam" || newStatus === "intervencao")) {
+          const newStatus = String(recheck[0]?.status ?? "");
+          if (newStatus && (await isStatusBlocking(db, newStatus))) {
             console.log(`[ai] status_blocked conv=${conversationId} status=${newStatus} (reclassificado, ainda bloqueio).`);
             return { ok: false, skipped: "status_blocked" };
           }

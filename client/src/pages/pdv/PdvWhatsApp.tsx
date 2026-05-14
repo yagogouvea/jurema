@@ -22,24 +22,31 @@ import { Link } from "wouter";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type ConvStatus = "novo" | "em_atendimento" | "aguardando" | "proposta_enviada" | "finalizado" | "spam" | "intervencao";
+type ConvStatus = string;
 
-// ─── Configuração de status ───────────────────────────────────────────────────
+// ─── Status presets — agora vêm do servidor (wa_status_presets) ──────────────
 
-const STATUS_CONFIG: Record<ConvStatus, {
+type StatusPreset = {
+  id: number;
+  key: string;
   label: string;
   color: string;
-  bg: string;
-  border: string;
-  Icon: React.FC<{ size?: number }>;
-}> = {
-  novo:             { label: "Novo",             color: "#60a5fa", bg: "rgba(96,165,250,.15)",  border: "rgba(96,165,250,.3)",  Icon: Circle },
-  em_atendimento:   { label: "Em atendimento",   color: "#34d399", bg: "rgba(52,211,153,.15)",  border: "rgba(52,211,153,.3)",  Icon: MessageCircle },
-  aguardando:       { label: "Aguardando",       color: "#fbbf24", bg: "rgba(251,191,36,.15)",  border: "rgba(251,191,36,.3)",  Icon: Clock },
-  proposta_enviada: { label: "Proposta enviada", color: "#a78bfa", bg: "rgba(167,139,250,.15)", border: "rgba(167,139,250,.3)", Icon: Tag },
-  finalizado:       { label: "Finalizado",       color: "#6b7280", bg: "rgba(107,114,128,.15)", border: "rgba(107,114,128,.3)", Icon: CheckCircle2 },
-  spam:             { label: "Spam",             color: "#f87171", bg: "rgba(248,113,113,.15)", border: "rgba(248,113,113,.3)", Icon: Ban },
-  intervencao:      { label: "Intervenção",      color: "#fb923c", bg: "rgba(251,146,60,.18)", border: "rgba(251,146,60,.45)", Icon: AlertCircle },
+  emoji: string | null;
+  description: string | null;
+  blocksAi: boolean;
+  sortOrder: number;
+  isSystem: boolean;
+  isActive: boolean;
+};
+
+const FALLBACK_STATUS_LABELS: Record<string, { label: string; color: string; emoji: string }> = {
+  novo:             { label: "Novo",             color: "#60a5fa", emoji: "🆕" },
+  em_atendimento:   { label: "Em atendimento",   color: "#34d399", emoji: "💬" },
+  aguardando:       { label: "Aguardando",       color: "#fbbf24", emoji: "⏳" },
+  proposta_enviada: { label: "Proposta enviada", color: "#a78bfa", emoji: "📦" },
+  finalizado:       { label: "Finalizado",       color: "#6b7280", emoji: "✅" },
+  spam:             { label: "Spam",             color: "#f87171", emoji: "🚫" },
+  intervencao:      { label: "Intervenção",      color: "#fb923c", emoji: "⚠️" },
 };
 
 // ─── Cores de avatar por contato ─────────────────────────────────────────────
@@ -110,42 +117,103 @@ function getDisplayName(conv: any): string {
 
 // ─── StatusBadge ─────────────────────────────────────────────────────────────
 
-function StatusBadge({ status, byAi }: { status: ConvStatus; byAi?: boolean }) {
-  const cfg = STATUS_CONFIG[status];
-  const { Icon } = cfg;
+function hexWithAlpha(hex: string, alpha: number): string {
+  const m = hex.replace("#", "");
+  if (m.length !== 6) return `rgba(96,165,250,${alpha})`;
+  const r = parseInt(m.slice(0, 2), 16);
+  const g = parseInt(m.slice(2, 4), 16);
+  const b = parseInt(m.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function presetByKey(presets: StatusPreset[], key: string): StatusPreset | null {
+  return presets.find((p) => p.key === key) ?? null;
+}
+
+function displayForStatus(key: string, presets: StatusPreset[]): { label: string; color: string; emoji: string } {
+  const p = presetByKey(presets, key);
+  if (p) return { label: p.label, color: p.color, emoji: p.emoji ?? "" };
+  const f = FALLBACK_STATUS_LABELS[key];
+  if (f) return f;
+  return { label: key || "—", color: "#60a5fa", emoji: "" };
+}
+
+function StatusBadge({
+  status,
+  byAi,
+  presets = [],
+}: {
+  status: ConvStatus;
+  byAi?: boolean;
+  presets?: StatusPreset[];
+}) {
+  const d = displayForStatus(status, presets);
   return (
     <span
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap"
-      style={{ color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}
+      style={{
+        color: d.color,
+        background: hexWithAlpha(d.color, 0.15),
+        border: `1px solid ${hexWithAlpha(d.color, 0.3)}`,
+      }}
       title={byAi ? "Classificado automaticamente pela IA" : "Status definido manualmente"}
     >
-      <Icon size={9} />
-      {cfg.label}
+      {d.emoji ? <span aria-hidden>{d.emoji}</span> : <Circle size={9} />}
+      {d.label}
       {byAi && <Bot size={8} style={{ opacity: 0.65 }} />}
+    </span>
+  );
+}
+
+function AiStatusChip({ aiStatus }: { aiStatus?: string | null }) {
+  const text = (aiStatus ?? "").trim();
+  if (!text) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap"
+      style={{ color: "#25D366", background: "rgba(37,211,102,0.10)", border: "1px solid rgba(37,211,102,0.25)" }}
+      title="Resumo automático da IA (atualizado a cada mensagem)"
+    >
+      <Bot size={9} />
+      {text}
     </span>
   );
 }
 
 // ─── StatusDropdown ───────────────────────────────────────────────────────────
 
-function StatusDropdown({ current, onChange }: { current: ConvStatus; onChange: (s: ConvStatus) => void }) {
-  const cfg = STATUS_CONFIG[current];
+function StatusDropdown({
+  current,
+  onChange,
+  presets,
+}: {
+  current: ConvStatus;
+  onChange: (s: ConvStatus) => void;
+  presets: StatusPreset[];
+}) {
+  const d = displayForStatus(current, presets);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="flex items-center gap-0.5 hover:opacity-80 transition-opacity">
-          <StatusBadge status={current} />
-          <ChevronDown size={10} style={{ color: cfg.color }} />
+          <StatusBadge status={current} presets={presets} />
+          <ChevronDown size={10} style={{ color: d.color }} />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48 bg-[#1a1a1a] border-[#2a2a2a] p-1">
-        {(Object.keys(STATUS_CONFIG) as ConvStatus[]).map(s => (
+      <DropdownMenuContent align="end" className="w-56 bg-[#1a1a1a] border-[#2a2a2a] p-1">
+        {presets.length === 0 && (
+          <div className="px-2 py-1 text-[10px]" style={{ color: "#777" }}>Carregando presets…</div>
+        )}
+        {presets.map((p) => (
           <DropdownMenuItem
-            key={s}
-            onClick={() => onChange(s)}
+            key={p.id}
+            onClick={() => onChange(p.key)}
             className="cursor-pointer rounded hover:bg-[#252525] focus:bg-[#252525] p-1.5"
           >
-            <StatusBadge status={s} />
+            <StatusBadge status={p.key} presets={presets} />
+            {p.blocksAi && (
+              <span className="ml-2 text-[9px]" style={{ color: "#f87171" }}>desliga IA</span>
+            )}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -768,6 +836,12 @@ export default function PdvWhatsApp() {
     refetchOnWindowFocus: true,
   });
 
+  const { data: statusPresets = [] as StatusPreset[] } = trpc.wa.listStatusPresets.useQuery(undefined, {
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+    staleTime: 10_000,
+  });
+
   const convQuery = trpc.wa.listConversations.useQuery({
     instanceId: selectedInstanceId || undefined,
     status: (selectedStatus as ConvStatus) || undefined,
@@ -1138,20 +1212,20 @@ export default function PdvWhatsApp() {
             >
               Todas {totalStatusCount > 0 ? `(${totalStatusCount})` : ""}
             </button>
-            {(Object.keys(STATUS_CONFIG) as ConvStatus[]).map(s => {
-              const cfg = STATUS_CONFIG[s];
-              const cnt = counts[s]?.count ?? 0;
+            {statusPresets.map((p) => {
+              const cnt = counts[p.key]?.count ?? 0;
+              const active = selectedStatus === p.key;
               return (
                 <button
-                  key={s}
-                  onClick={() => setSelectedStatus(selectedStatus === s ? "" : s)}
+                  key={p.id}
+                  onClick={() => setSelectedStatus(active ? "" : p.key)}
                   className="px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap transition-all flex-shrink-0"
-                  style={selectedStatus === s
-                    ? { color: cfg.color, background: cfg.bg, borderColor: cfg.border }
+                  style={active
+                    ? { color: p.color, background: hexWithAlpha(p.color, 0.15), borderColor: hexWithAlpha(p.color, 0.3) }
                     : { color: "#555", borderColor: "#2a2a2a" }
                   }
                 >
-                  {cfg.label}{cnt > 0 ? ` (${cnt})` : ""}
+                  {p.emoji ? `${p.emoji} ` : ""}{p.label}{cnt > 0 ? ` (${cnt})` : ""}
                 </button>
               );
             })}
@@ -1257,7 +1331,10 @@ export default function PdvWhatsApp() {
                       )}
                     </div>
 
-                    <StatusBadge status={conv.status as ConvStatus} byAi={conv.statusSetBy === "ai"} />
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <StatusBadge status={conv.status as ConvStatus} byAi={conv.statusSetBy === "ai"} presets={statusPresets} />
+                      <AiStatusChip aiStatus={conv.aiStatus} />
+                    </div>
                   </div>
                 </div>
               );
@@ -1320,7 +1397,10 @@ export default function PdvWhatsApp() {
                 <StatusDropdown
                   current={selectedConv.status as ConvStatus}
                   onChange={s => updateConvMut.mutate({ id: selectedConv.id, status: s })}
+                  presets={statusPresets}
                 />
+
+                <AiStatusChip aiStatus={selectedConv.aiStatus} />
 
                 {/* Toggle IA */}
                 <button
@@ -1336,9 +1416,15 @@ export default function PdvWhatsApp() {
                   {selectedConv.aiEnabled ? "IA Ativa" : "IA Off"}
                 </button>
 
-                {(selectedConv.status === "spam" || selectedConv.status === "finalizado" || selectedConv.status === "intervencao") && (
-                  <ReopenConversationButton conversationId={selectedConv.id} status={selectedConv.status} />
-                )}
+                {(() => {
+                  const cur = String(selectedConv.status ?? "");
+                  const preset = statusPresets.find((p) => p.key === cur);
+                  const isBlocking =
+                    preset?.blocksAi ?? (cur === "spam" || cur === "finalizado" || cur === "intervencao");
+                  return isBlocking ? (
+                    <ReopenConversationButton conversationId={selectedConv.id} status={cur} />
+                  ) : null;
+                })()}
 
                 <AiAttemptsButton conversationId={selectedConv.id} />
 
@@ -1588,8 +1674,15 @@ export default function PdvWhatsApp() {
                     <StatusDropdown
                       current={selectedConv.status as ConvStatus}
                       onChange={s => updateConvMut.mutate({ id: selectedConv.id, status: s })}
+                      presets={statusPresets}
                     />
                   </div>
+                  {selectedConv.aiStatus && (
+                    <div className="flex justify-between items-center gap-2">
+                      <span style={{ color: "#555" }}>IA resumo</span>
+                      <AiStatusChip aiStatus={selectedConv.aiStatus} />
+                    </div>
+                  )}
                   <div className="flex justify-between items-center">
                     <span style={{ color: "#555" }}>IA</span>
                     <span
