@@ -575,6 +575,53 @@ export const waRouter = router({
     }),
 
   /**
+   * Reabre uma conversa bloqueada (spam/finalizado/intervencao) — força status='em_atendimento',
+   * reativa aiEnabled e dispara nova resposta da IA.
+   */
+  reopenConversation: publicProcedure
+    .input(z.object({ conversationId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await requireWaAccess(ctx);
+      const db = await getDb();
+      try {
+        const [convRows] = (await db.execute(
+          "SELECT id, instanceId, status, aiEnabled FROM wa_conversations WHERE id = ? LIMIT 1",
+          [input.conversationId]
+        )) as any;
+        const conv = (convRows as any[])[0];
+        if (!conv) throw new TRPCError({ code: "NOT_FOUND" });
+
+        await db.execute(
+          `UPDATE wa_conversations
+             SET status = 'em_atendimento',
+                 statusSetBy = 'human',
+                 statusLockedUntil = NULL,
+                 aiEnabled = 1,
+                 aiDisabledBy = NULL,
+                 aiDisabledAt = NULL,
+                 updatedAt = NOW()
+           WHERE id = ?`,
+          [input.conversationId]
+        );
+
+        await logAiAttempt(db, input.conversationId, "conv_reopened", {
+          by: user.name,
+          prevStatus: String(conv.status),
+        });
+
+        // Dispara IA imediatamente (sem debounce, já que foi ação manual).
+        scheduleIaReplyAfterCustomerSequence({
+          conversationId: input.conversationId,
+          instanceId: Number(conv.instanceId),
+        });
+
+        return { success: true };
+      } finally {
+        await db.end();
+      }
+    }),
+
+  /**
    * Diagnóstico: últimas tentativas da IA para essa conversa.
    * Inclui o tipo da ação (ai_replied / ai_skipped:<reason> / ai_exception) e o detalhe.
    */

@@ -317,6 +317,37 @@ function waPanelMediaSrc(msg: any, mediaJwt?: string | null): string | null {
   return resolveWaMediaUrl(msg?.mediaUrl ?? msg?.media_url ?? msg?.MEDIAURL ?? null);
 }
 
+function ReopenConversationButton({
+  conversationId,
+  status,
+}: {
+  conversationId: number;
+  status: string;
+}) {
+  const utils = trpc.useUtils();
+  const mut = trpc.wa.reopenConversation.useMutation({
+    onSuccess: () => {
+      toast.success("Conversa reaberta — IA vai responder em alguns segundos");
+      utils.wa.listConversations.invalidate();
+      utils.wa.listMessages.invalidate({ conversationId });
+    },
+    onError: (e) => toast.error(`Falha ao reabrir: ${e.message}`),
+  });
+  return (
+    <button
+      type="button"
+      onClick={() => mut.mutate({ conversationId })}
+      disabled={mut.isPending}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all flex-shrink-0"
+      style={{ color: "#f59e0b", borderColor: "#f59e0b55", background: "#f59e0b14" }}
+      title={`Status atual: ${status}. A IA está bloqueada por esse status — clique para reabrir.`}
+    >
+      <Unlock size={13} />
+      {mut.isPending ? "Reabrindo…" : "Reabrir conversa"}
+    </button>
+  );
+}
+
 function AiAttemptsButton({ conversationId }: { conversationId: number }) {
   const [open, setOpen] = useState(false);
   const query = trpc.wa.lastAiAttempts.useQuery(
@@ -1304,6 +1335,10 @@ export default function PdvWhatsApp() {
                   {selectedConv.aiEnabled ? <Bot size={13} /> : <BotOff size={13} />}
                   {selectedConv.aiEnabled ? "IA Ativa" : "IA Off"}
                 </button>
+
+                {(selectedConv.status === "spam" || selectedConv.status === "finalizado" || selectedConv.status === "intervencao") && (
+                  <ReopenConversationButton conversationId={selectedConv.id} status={selectedConv.status} />
+                )}
 
                 <AiAttemptsButton conversationId={selectedConv.id} />
 

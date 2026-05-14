@@ -15,12 +15,14 @@ import { isWithinBusinessHoursSp, isStoreOpenNowSaoPaulo, parseAwaySchedule } fr
 
 // Status disponíveis com descrições para o classificador (IA analisa o contexto)
 const STATUS_DESCRIPTIONS = {
-  novo: "Primeira mensagem ou cliente que nunca comprou antes",
+  novo: "Primeira mensagem ou cliente que nunca comprou antes — INCLUI saudações simples como 'Bom dia', 'Oi', 'Boa tarde, tudo bem?'",
   em_atendimento: "Conversa ativa, cliente fazendo perguntas sobre produtos, preços ou tamanhos",
   aguardando: "IA ou atendente fez uma pergunta e está esperando resposta do cliente",
   proposta_enviada: "Catálogo foi enviado, cliente está analisando ou pedido está sendo montado",
   finalizado: "Compra confirmada, pagamento realizado ou cliente agradeceu e encerrou",
-  spam: "Mensagens irrelevantes, propaganda ou contato indesejado",
+  spam:
+    "APENAS para propaganda não solicitada, links de outras lojas/concorrência, ofertas comerciais de terceiros, " +
+    "mensagens políticas/religiosas em massa, ou abuso/ofensa explícita. Saudação ou cliente perguntando algo NÃO é spam.",
   intervencao:
     "URGENTE: precisa de atendente humano AGORA — cliente irritado, reclamação grave, pedido de gerente, " +
     "problema com pagamento/entrega que exija decisão humana, situação fora do script, ou quando o cliente " +
@@ -112,7 +114,11 @@ export async function classifyConversationStatus(
 Status disponíveis:
 ${statusOptions}
 
-Use "intervencao" somente quando for claro que uma pessoa física precisa assumir já (reclamação séria, pedido de gerente, erro grave, cliente muito insatisfeito, disputa, ou pedido explícito para falar com humano). Dúvidas comuns de produto, preço ou catálogo NÃO são intervenção.
+REGRAS CRÍTICAS:
+- "spam" APENAS para propaganda explícita de TERCEIROS, links de concorrência, ofensas, mensagem política/religiosa em massa. Nunca classifique uma saudação ("Bom dia", "Oi", "Boa tarde, tudo bem?") como spam — isso é "novo".
+- Se o cliente está só dizendo "oi"/"bom dia"/"tudo bem?", classifique como "novo" (sem histórico) ou "em_atendimento" (já existe contexto).
+- "intervencao" SÓ quando humano precisa assumir já: reclamação séria, pedido de gerente, erro grave, disputa, ou pedido explícito para falar com humano. Dúvidas comuns de produto/preço NÃO são intervenção.
+- Em caso de dúvida entre "spam" e qualquer outro status, NUNCA escolha spam.
 
 Responda APENAS com JSON no formato: {"status": "nome_do_status", "confidence": 0.0}
 onde confidence é um número entre 0 e 1 indicando sua certeza.`,
@@ -177,6 +183,15 @@ export async function applyAiStatus(
 
   // Só aplica se confiança >= 60%
   if (result.confidence < 0.6) return;
+
+  // Status que DESLIGAM a IA (spam/finalizado) exigem confiança alta para evitar falso positivo.
+  // "Bom dia, tudo bem?" virando spam por engano deixava a IA muda.
+  if ((result.status === "spam" || result.status === "finalizado") && result.confidence < 0.85) {
+    console.log(
+      `[statusClassifier] conv=${conversationId} status=${result.status} confidence=${result.confidence.toFixed(2)} abaixo do limiar 0.85 — mantendo status atual.`
+    );
+    return;
+  }
 
   await db.execute(
     `UPDATE wa_conversations

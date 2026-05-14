@@ -175,14 +175,36 @@ export async function generateAiResponse(
     if (!cfg.enabled) return { ok: false, skipped: "ai_disabled_instance" };
 
     const [convRows] = await db.execute<any[]>(
-      `SELECT id, aiEnabled, status, remoteJid FROM wa_conversations WHERE id = ? LIMIT 1`,
+      `SELECT id, aiEnabled, status, statusSetBy, remoteJid FROM wa_conversations WHERE id = ? LIMIT 1`,
       [conversationId]
     );
     if (!convRows.length) return { ok: false, skipped: "ai_disabled_conversation" };
-    const conv = convRows[0] as ConvRow;
+    const conv = convRows[0] as ConvRow & { statusSetBy?: string };
     if (!conv.aiEnabled) return { ok: false, skipped: "ai_disabled_conversation" };
+
+    // Status que bloqueiam: dar uma segunda chance se foi a IA que classificou.
     if (conv.status === "finalizado" || conv.status === "spam" || conv.status === "intervencao") {
-      return { ok: false, skipped: "status_blocked" };
+      if ((conv as any).statusSetBy === "ai") {
+        try {
+          const { applyAiStatus } = await import("./waStatusClassifier");
+          await applyAiStatus(db, conversationId);
+          const [recheck] = await db.execute<any[]>(
+            `SELECT status FROM wa_conversations WHERE id = ? LIMIT 1`,
+            [conversationId]
+          );
+          const newStatus = recheck[0]?.status as string | undefined;
+          if (newStatus && (newStatus === "finalizado" || newStatus === "spam" || newStatus === "intervencao")) {
+            console.log(`[ai] status_blocked conv=${conversationId} status=${newStatus} (reclassificado, ainda bloqueio).`);
+            return { ok: false, skipped: "status_blocked" };
+          }
+          console.log(`[ai] status reabriu conv=${conversationId}: ${conv.status} -> ${newStatus}`);
+        } catch (e) {
+          console.warn(`[ai] reclassificação inline falhou conv=${conversationId}:`, e);
+          return { ok: false, skipped: "status_blocked" };
+        }
+      } else {
+        return { ok: false, skipped: "status_blocked" };
+      }
     }
 
     // 4. Horário comercial (SP + grade semanal opcional) — fora do horário, awayMessage no webhook
