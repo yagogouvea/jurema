@@ -913,13 +913,16 @@ export default function PdvWhatsAppConfig() {
 
   function handleSaveAi() {
     if (!selectedInstanceId) return toast.error("Selecione uma instância");
+    // Não enviamos `systemPrompt` mais — o servidor sempre regenera a partir dos
+    // campos vivos + blocos atuais (tom cordial, quantidades, prints). Isso garante
+    // que melhorias globais da IA sempre apareçam, sem precisar editar manualmente.
+    const { systemPrompt: _ignoredPrompt, ...formWithoutPrompt } = aiForm;
     saveAiConfig.mutate({
       instanceId: selectedInstanceId,
-      ...aiForm,
+      ...formWithoutPrompt,
       extraLinks: aiForm.extraLinks.filter((x) => x.label.trim() && x.url.trim()),
       ...awayForm,
       escalateKeywords: aiForm.escalateKeywords,
-      systemPrompt: aiForm.systemPrompt,
     });
   }
 
@@ -1036,13 +1039,14 @@ export default function PdvWhatsAppConfig() {
     setRefinePreview(null);
     setRefineWish("");
     setTrainingAdvancedOpen(true);
+    // Não envia systemPrompt — servidor regenera a partir dos campos + blocos atuais.
+    const { systemPrompt: _ignoredPrompt, ...mergedWithoutPrompt } = merged;
     saveAiConfig.mutate({
       instanceId: selectedInstanceId,
-      ...merged,
+      ...mergedWithoutPrompt,
       extraLinks: merged.extraLinks.filter((x) => x.label.trim() && x.url.trim()),
       ...awayForm,
       escalateKeywords: merged.escalateKeywords,
-      systemPrompt: merged.systemPrompt,
     });
   }
 
@@ -1927,28 +1931,64 @@ export default function PdvWhatsAppConfig() {
               </div>
 
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-3">
+                <div className="flex items-start gap-2 rounded-lg border border-emerald-700/40 bg-emerald-950/30 px-3 py-2.5 text-emerald-100/90 text-xs">
+                  <Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-emerald-400" />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-emerald-200">
+                      Este texto é gerado automaticamente a cada visualização
+                    </p>
+                    <p>
+                      Reflete <strong>em tempo real</strong> os campos acima
+                      (identidade, personalidade, base de conhecimento, links, escalação)
+                      somados às regras vivas do sistema (<em>tom cordial</em>, leitura de quantidades, prints).
+                      Qualquer melhoria global da IA aparece aqui imediatamente, sem precisar resalvar.
+                    </p>
+                  </div>
+                </div>
+                {(aiUiPayload as any)?.hasCustomSystemPrompt && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-700/40 bg-amber-950/30 px-3 py-2.5 text-amber-100/90 text-xs">
+                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
+                    <div className="space-y-1.5 flex-1">
+                      <p className="font-semibold text-amber-200">Existe uma customização manual salva</p>
+                      <p>
+                        Em algum momento alguém editou o prompt completo aqui dentro e salvou. Para a IA estar 100%
+                        em dia com as regras atuais do sistema, salve novamente — isso vai sobrescrever a
+                        customização pelo texto que aparece abaixo. Se ainda quiser a versão antiga, copie agora.
+                      </p>
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-amber-300 underline">
+                          Ver customização salva (gravada no banco)
+                        </summary>
+                        <Textarea
+                          value={(aiUiPayload as any)?.storedSystemPrompt ?? ""}
+                          readOnly
+                          className="mt-2 bg-amber-950/40 border-amber-800/40 text-amber-100 text-xs font-mono min-h-[120px] leading-relaxed"
+                        />
+                      </details>
+                    </div>
+                  </div>
+                )}
                 <Collapsible open={trainingAdvancedOpen} onOpenChange={setTrainingAdvancedOpen}>
                   <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-700 bg-gray-800/50 px-3 py-2.5 text-left hover:bg-gray-800">
                     <div>
-                      <h3 className="text-white font-semibold text-sm">Texto completo da IA (edição direta)</h3>
+                      <h3 className="text-white font-semibold text-sm">Prompt completo enviado ao modelo (preview)</h3>
                       <p className="text-gray-500 text-[11px] font-normal">
-                        Abaixo está o prompt completo enviado ao modelo. Está aberto por padrão para quem preferir
-                        ajustar linha a linha. Se esvaziar e salvar, o sistema regenera a partir dos blocos principais.
+                        Visualização do texto exato que a IA recebe agora. Apenas para conferência —
+                        para mudar o conteúdo, edite os campos acima.
                       </p>
                     </div>
                     <ChevronDown className={`w-5 h-5 shrink-0 text-gray-400 transition-transform ${trainingAdvancedOpen ? "rotate-180" : ""}`} />
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-3 space-y-2">
-                    <p className="text-gray-500 text-xs">
-                      Se limpar este campo e salvar, o sistema monta de novo o texto a partir de identidade, base e
-                      links.
-                    </p>
                     <Textarea
                       value={aiForm.systemPrompt}
-                      onChange={(e) => setAiForm((f) => ({ ...f, systemPrompt: e.target.value }))}
-                      placeholder="Deixe em branco ao salvar para regenerar a partir dos campos principais."
-                      className="bg-gray-800 border-gray-700 text-white text-xs font-mono min-h-[220px] leading-relaxed"
+                      readOnly
+                      className="bg-gray-950 border-gray-800 text-gray-300 text-xs font-mono min-h-[240px] leading-relaxed"
                     />
+                    <p className="text-gray-500 text-[11px]">
+                      Esse campo é somente leitura. Edite os campos da seção principal — o preview se atualiza
+                      automaticamente ao recarregar.
+                    </p>
                   </CollapsibleContent>
                 </Collapsible>
               </div>

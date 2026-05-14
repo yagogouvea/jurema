@@ -303,27 +303,33 @@ export async function generateAiResponse(
       aiContent = "Só um momento.";
     } else {
       // 7. Montar histórico e chamar invokeLLM
-      // O systemPrompt salvo no banco geralmente contém só regras de comportamento.
-      // Concatenamos a base de conhecimento (businessContext) e os links para
-      // garantir que a IA tenha tudo que precisa pra responder sem cair em
-      // "Só um momento." indevidamente.
-      const base = (cfg.systemPrompt && cfg.systemPrompt.trim().length > 0)
-        ? cfg.systemPrompt
-        : buildFallbackSystemPrompt(cfg);
-      const pieces: string[] = [base];
-      const businessText = (cfg.businessContext || "").trim();
-      if (businessText && !base.includes(businessText.substring(0, 80))) {
-        pieces.push(`\n\n===== BASE DE CONHECIMENTO =====\n${businessText}`);
+      // ARQUITETURA: o painel "Treinamento IA" é a fonte de verdade. Aqui regeramos
+      // SEMPRE o prompt a partir dos campos vivos (personality, businessContext,
+      // links, escalateKeywords) + blocos atuais do código (CORDIALITY, QTY, PRINTS).
+      // Assim qualquer melhoria nos blocos reflete IMEDIATAMENTE — sem precisar
+      // resalvar config. O `cfg.systemPrompt` salvo no banco vira só fallback
+      // defensivo se a regeneração falhar.
+      const { buildSystemPrompt } = await import("./waAiTrainingDefaults");
+      let systemPrompt: string;
+      try {
+        systemPrompt = buildSystemPrompt({
+          aiName: cfg.aiName ?? undefined,
+          personality: cfg.personality ?? undefined,
+          businessContext: cfg.businessContext ?? undefined,
+          catalogLink: cfg.catalogLink ?? undefined,
+          groupLink: cfg.groupLink ?? undefined,
+          instagramLink: cfg.instagramLink ?? undefined,
+          extraLinks: parseExtraLinks(cfg.extraLinks),
+          escalateKeywords,
+        });
+      } catch (e) {
+        console.warn("[ai] buildSystemPrompt falhou, usando fallback:", e);
+        systemPrompt =
+          (cfg.systemPrompt && cfg.systemPrompt.trim().length > 0)
+            ? cfg.systemPrompt
+            : buildFallbackSystemPrompt(cfg);
       }
-      const linkLines: string[] = [];
-      if (cfg.catalogLink && !base.includes(cfg.catalogLink)) linkLines.push(`CATÁLOGO: ${cfg.catalogLink}`);
-      if (cfg.groupLink && !base.includes(cfg.groupLink)) linkLines.push(`GRUPO WHATSAPP: ${cfg.groupLink}`);
-      if (cfg.instagramLink && !base.includes(cfg.instagramLink)) linkLines.push(`INSTAGRAM/SITES: ${cfg.instagramLink}`);
-      for (const e of parseExtraLinks(cfg.extraLinks)) {
-        if (e.url && !base.includes(e.url)) linkLines.push(`${e.label}: ${e.url}`);
-      }
-      if (linkLines.length > 0) pieces.push(`\n\n===== LINKS ÚTEIS =====\n${linkLines.join("\n")}`);
-      let systemPrompt = pieces.join("");
+      // Garantia defensiva (caso buildSystemPrompt mude no futuro).
       if (!systemPrompt.includes(CORDIALITY_MARKER)) {
         systemPrompt += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
       }

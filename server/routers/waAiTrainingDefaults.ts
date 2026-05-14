@@ -185,8 +185,12 @@ export type AiTrainingConfigPayload = {
   responseDelayMin: number;
   responseDelayMax: number;
   escalateKeywords: string[];
-  /** Texto efetivo mostrado no painel (gerado se o banco estiver vazio). */
+  /** Texto efetivo: SEMPRE regerado a partir dos campos vivos + blocos atuais do sistema. */
   systemPrompt: string;
+  /** Texto que está gravado em wa_ai_config.systemPrompt (pode estar desatualizado). */
+  storedSystemPrompt: string;
+  /** true quando o storedSystemPrompt difere do gerado — indica override manual antigo. */
+  hasCustomSystemPrompt: boolean;
 };
 
 export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | undefined, instanceId: number): AiTrainingConfigPayload {
@@ -206,19 +210,27 @@ export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | und
 
   const escalateKeywords = parseEscalateKeywords(rowVal(row, "escalateKeywords"));
 
+  // SEMPRE regenera o systemPrompt mostrado no painel a partir dos campos vivos +
+  // blocos atualizados do código (CORDIALITY, ORDER_QUANTITY, PRINTS).
+  // O texto que está no banco vira apenas `storedSystemPrompt` (informativo, pode ter
+  // override antigo do usuário).
   const storedPrompt = nz(rowVal(row, "systemPrompt"));
-  const systemPrompt =
-    storedPrompt ??
-    buildSystemPrompt({
-      aiName,
-      personality,
-      businessContext,
-      catalogLink: catalogLink || undefined,
-      groupLink: groupLink || undefined,
-      instagramLink: instagramLink || undefined,
-      extraLinks: extraLinks.length ? extraLinks : undefined,
-      escalateKeywords,
-    });
+  const generatedPrompt = buildSystemPrompt({
+    aiName,
+    personality,
+    businessContext,
+    catalogLink: catalogLink || undefined,
+    groupLink: groupLink || undefined,
+    instagramLink: instagramLink || undefined,
+    extraLinks: extraLinks.length ? extraLinks : undefined,
+    escalateKeywords,
+  });
+
+  // Se o usuário editou manualmente no banco e o texto não bate com o regenerado,
+  // marca como customizado para o painel oferecer a opção de "ver / restaurar".
+  const hasCustomOverride =
+    !!storedPrompt &&
+    storedPrompt.replace(/\s+/g, " ").trim() !== generatedPrompt.replace(/\s+/g, " ").trim();
 
   return {
     hasPersistedRow,
@@ -242,6 +254,8 @@ export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | und
     responseDelayMin: Number(rowVal(row, "responseDelayMin")) >= 0 ? Number(rowVal(row, "responseDelayMin")) : 3500,
     responseDelayMax: Number(rowVal(row, "responseDelayMax")) >= 0 ? Number(rowVal(row, "responseDelayMax")) : 9000,
     escalateKeywords,
-    systemPrompt,
+    systemPrompt: generatedPrompt,
+    storedSystemPrompt: storedPrompt ?? "",
+    hasCustomSystemPrompt: hasCustomOverride,
   };
 }
