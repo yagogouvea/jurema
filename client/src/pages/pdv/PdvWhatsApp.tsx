@@ -317,6 +317,99 @@ function waPanelMediaSrc(msg: any, mediaJwt?: string | null): string | null {
   return resolveWaMediaUrl(msg?.mediaUrl ?? msg?.media_url ?? msg?.MEDIAURL ?? null);
 }
 
+function AiAttemptsButton({ conversationId }: { conversationId: number }) {
+  const [open, setOpen] = useState(false);
+  const query = trpc.wa.lastAiAttempts.useQuery(
+    { conversationId, limit: 10 },
+    { enabled: open, staleTime: 10 * 1000, refetchInterval: open ? 5000 : false }
+  );
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all flex-shrink-0"
+        style={{ color: "#aaa", borderColor: "#2a2a2a" }}
+        title="Diagnóstico da IA — últimas tentativas"
+      >
+        <Bot size={13} />
+        Diagnóstico
+      </button>
+      {open && (
+        <div
+          className="fixed inset-0 z-[999] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.7)" }}
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="rounded-lg w-full max-w-2xl max-h-[80vh] overflow-auto"
+            style={{ background: "#121212", border: "1px solid #2a2a2a", color: "#ddd" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="flex items-center justify-between px-4 py-3 border-b"
+              style={{ borderColor: "#222", background: "#161616" }}
+            >
+              <span className="text-sm font-semibold">Diagnóstico da IA — últimas tentativas</span>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Fechar"
+                className="w-7 h-7 rounded flex items-center justify-center hover:bg-[#252525]"
+                style={{ color: "#888" }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="p-4 flex flex-col gap-2">
+              {query.isLoading && <p className="text-xs italic">carregando…</p>}
+              {query.error && (
+                <p className="text-xs" style={{ color: "#ef4444" }}>
+                  erro: {String(query.error.message)}
+                </p>
+              )}
+              {query.data && query.data.length === 0 && (
+                <p className="text-xs italic" style={{ color: "#777" }}>
+                  Sem registros ainda. Se uma mensagem nova entrar, vai aparecer aqui.
+                </p>
+              )}
+              {(query.data ?? []).map((row) => {
+                const time = row.createdAt
+                  ? new Date(row.createdAt as unknown as string).toLocaleString("pt-BR")
+                  : "";
+                const isError = row.action.startsWith("ai_skipped:") || row.action === "ai_exception";
+                return (
+                  <div
+                    key={row.id}
+                    className="rounded p-3 text-xs"
+                    style={{
+                      background: "#0d0d0d",
+                      border: `1px solid ${isError ? "#7f1d1d55" : "#1f3a2655"}`,
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold" style={{ color: isError ? "#fca5a5" : "#86efac" }}>
+                        {row.action}
+                      </span>
+                      <span style={{ color: "#666" }}>{time}</span>
+                    </div>
+                    {row.details && (
+                      <pre className="whitespace-pre-wrap break-all" style={{ color: "#aaa" }}>
+                        {row.details}
+                      </pre>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ImageLightbox({
   src,
   alt,
@@ -718,36 +811,22 @@ export default function PdvWhatsApp() {
     });
   }, [messages, mediaUrlResolveQuery.data?.results]);
 
-  const mediaMessageIdsForJwt = useMemo(() => {
-    const types = new Set(["image", "video", "audio", "document", "sticker"]);
-    const ids = displayMessages
-      .filter((m) => {
-        if (!types.has(String(m.type))) return false;
-        // Sempre emitir JWT quando há blob ou alguma URL/chave — qualquer caso passa pelo proxy.
-        const u = String(m.mediaUrl ?? "").trim();
-        const k = String(m.mediaStorageKey ?? "").trim();
-        return m.hasBlob === true || !!u || !!k;
-      })
-      .map((m) => waMessageNumericId(m))
-      .filter((id) => Number.isFinite(id) && id > 0);
-    return Array.from(new Set(ids)).slice(0, 100);
-  }, [displayMessages]);
-
-  const mediaTokensQuery = trpc.wa.getMediaViewTokens.useQuery(
-    { messageIds: mediaMessageIdsForJwt },
-    {
-      enabled: selectedConvId !== null && mediaMessageIdsForJwt.length > 0,
-      staleTime: 15 * 60 * 1000,
+  // pdv_token (mesma JWT do login, 8h). Embute no ?t= das URLs de mídia para que
+  // <img>/<audio> autentiquem mesmo quando o cookie httpOnly não acompanha a request.
+  const readPdvAccessToken = (): string | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      return localStorage.getItem("pdv_token")?.trim() || null;
+    } catch {
+      return null;
     }
-  );
-
-  const mediaJwtByMessageId = useMemo(() => {
-    const m = new Map<number, string>();
-    for (const row of mediaTokensQuery.data?.tokens ?? []) {
-      if (Number.isFinite(row.messageId) && row.token) m.set(row.messageId, row.token);
-    }
-    return m;
-  }, [mediaTokensQuery.data?.tokens]);
+  };
+  const [pdvAccessToken, setPdvAccessToken] = useState<string | null>(() => readPdvAccessToken());
+  useEffect(() => {
+    const onStorage = () => setPdvAccessToken(readPdvAccessToken());
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
 
@@ -1226,6 +1305,8 @@ export default function PdvWhatsApp() {
                   {selectedConv.aiEnabled ? "IA Ativa" : "IA Off"}
                 </button>
 
+                <AiAttemptsButton conversationId={selectedConv.id} />
+
                 {/* Botão de detalhes */}
                 <button
                   onClick={() => setShowDetails(v => !v)}
@@ -1318,7 +1399,7 @@ export default function PdvWhatsApp() {
                             )}
                             <MessageContent
                               msg={msg}
-                              mediaAccessToken={mediaJwtByMessageId.get(waMessageNumericId(msg)) ?? undefined}
+                              mediaAccessToken={pdvAccessToken ?? undefined}
                             />
                             <div className="text-[10px] mt-1 text-right" style={{ color: "#555" }}>
                               {formatMsgTime(msg.timestamp)}

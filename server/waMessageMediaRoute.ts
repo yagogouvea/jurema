@@ -41,9 +41,12 @@ type MediaAuthOk = { ok: true };
 type MediaAuth = MediaAuthOk | MediaAuthFail;
 
 async function authorizeWaMediaRequest(req: Request, messageId: number): Promise<MediaAuth> {
+  // 1. Cookie pdv_token (httpOnly) — caminho normal de navegação.
   const cookieUser = await verifyPdvToken(req).catch(() => null);
   if (cookieUser) return { ok: true };
 
+  // 2. Query string ?t=<token> — tags <img>/<audio> não enviam Authorization.
+  //    Aceita tanto o pdv_token (mesmo JWT_SECRET, 8h) quanto o JWT efêmero wa_media.
   const raw = req.query?.t;
   const token = typeof raw === "string" ? raw : Array.isArray(raw) ? (raw[0] ?? "") : "";
   if (!String(token).trim()) return { ok: false, status: 401, text: "Não autenticado" };
@@ -53,14 +56,20 @@ async function authorizeWaMediaRequest(req: Request, messageId: number): Promise
     const secret = new TextEncoder().encode(process.env.JWT_SECRET || "pdv_jwt_secret_fallback");
     const { payload } = await jwtVerify(String(token).trim(), secret);
     const p = payload as Record<string, unknown>;
-    if (p.p !== "wa_media") return { ok: false, status: 403, text: "Token inválido" };
-    const mid = Number(p.mid);
-    if (!Number.isFinite(mid) || mid !== messageId) {
+
+    // pdv_token (login PDV) — tem sellerId, autoriza qualquer mídia.
+    if (typeof p.sellerId === "number" || (typeof p.sellerId === "string" && p.sellerId)) {
+      return { ok: true };
+    }
+    // Legacy: JWT efêmero wa_media (purpose="wa_media", mid=messageId).
+    if (p.p === "wa_media") {
+      const mid = Number(p.mid);
+      if (Number.isFinite(mid) && mid === messageId) return { ok: true };
       return { ok: false, status: 403, text: "Token não corresponde à mensagem" };
     }
-    return { ok: true };
+    return { ok: false, status: 403, text: "Token inválido" };
   } catch {
-    return { ok: false, status: 401, text: "Sessão de mídia inválida ou expirada" };
+    return { ok: false, status: 401, text: "Sessão inválida ou expirada" };
   }
 }
 

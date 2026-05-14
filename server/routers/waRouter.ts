@@ -116,13 +116,31 @@ function getCustomerSequenceQuietMs(): number {
   return 6_000;
 }
 
+async function logAiAttempt(
+  db: mysql.Connection,
+  conversationId: number,
+  action: string,
+  details: unknown
+): Promise<void> {
+  try {
+    await db.execute(
+      "INSERT INTO wa_ai_logs (conversationId, action, performedBy, details) VALUES (?,?,?,?)",
+      [conversationId, action, "ai", typeof details === "string" ? details : JSON.stringify(details).slice(0, 1500)]
+    );
+  } catch (e) {
+    console.warn("[logAiAttempt] falha ao registrar:", e);
+  }
+}
+
 function scheduleIaReplyAfterCustomerSequence(params: { conversationId: number; instanceId: number }): void {
   const { conversationId, instanceId } = params;
   const prev = iaSequenceTimers.get(conversationId);
   if (prev !== undefined) clearTimeout(prev);
   const quietMs = getCustomerSequenceQuietMs();
+  console.log(`[ai-debounce] agendada conv=${conversationId} em ${quietMs}ms`);
   const tid = setTimeout(() => {
     iaSequenceTimers.delete(conversationId);
+    console.log(`[ai-debounce] disparando conv=${conversationId}`);
     void (async () => {
       const asyncDb = await getDb();
       try {
@@ -132,13 +150,23 @@ function scheduleIaReplyAfterCustomerSequence(params: { conversationId: number; 
         );
         if (result.ok) {
           console.log(
-            `[webhook] IA respondeu conversa ${conversationId}${result.escalated ? " (escalada)" : ""}: ${result.content.substring(0, 80)}`
+            `[ai] OK conv=${conversationId}${result.escalated ? " (escalated)" : ""}: ${result.content.substring(0, 100)}`
           );
-        } else if (result.skipped !== "last_message_was_us" && result.skipped !== "ai_disabled_after_delay") {
-          console.log(`[webhook] IA pulou conversa ${conversationId}: ${result.skipped}`);
+          await logAiAttempt(asyncDb as any, conversationId, "ai_replied", {
+            content: result.content.substring(0, 200),
+            escalated: result.escalated,
+          });
+        } else {
+          console.log(`[ai] SKIP conv=${conversationId} reason=${result.skipped}${"error" in result && result.error ? ` err=${result.error}` : ""}`);
+          await logAiAttempt(asyncDb as any, conversationId, `ai_skipped:${result.skipped}`, {
+            error: "error" in result ? result.error : null,
+          });
         }
       } catch (e) {
-        console.error("[webhook] Erro ao gerar resposta IA (após espera de sequência):", e);
+        console.error("[ai] erro inesperado:", e);
+        try {
+          await logAiAttempt(asyncDb as any, conversationId, "ai_exception", String(e instanceof Error ? e.message : e));
+        } catch { /* ignore */ }
       } finally {
         await asyncDb.end();
       }
@@ -541,6 +569,36 @@ export const waRouter = router({
           }
         }
         return { results };
+      } finally {
+        await db.end();
+      }
+    }),
+
+  /**
+   * Diagnóstico: últimas tentativas da IA para essa conversa.
+   * Inclui o tipo da ação (ai_replied / ai_skipped:<reason> / ai_exception) e o detalhe.
+   */
+  lastAiAttempts: publicProcedure
+    .input(z.object({ conversationId: z.number().int().positive(), limit: z.number().int().min(1).max(20).default(8) }))
+    .query(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const db = await getDb();
+      try {
+        const [rows] = (await db.execute(
+          `SELECT id, action, performedBy, details, createdAt
+             FROM wa_ai_logs
+             WHERE conversationId = ?
+             ORDER BY id DESC
+             LIMIT ${Math.max(1, Math.min(20, Math.floor(input.limit)))}`,
+          [input.conversationId]
+        )) as any;
+        return (rows as any[]).map((r) => ({
+          id: Number(r.id),
+          action: String(r.action),
+          performedBy: r.performedBy == null ? null : String(r.performedBy),
+          details: r.details == null ? null : String(r.details).slice(0, 1000),
+          createdAt: r.createdAt,
+        }));
       } finally {
         await db.end();
       }
