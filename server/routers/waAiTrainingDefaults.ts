@@ -13,6 +13,7 @@ import {
   DEFAULT_PERSONALITY,
   ORDER_QUANTITY_RULES_BLOCK,
   PRINTS_ORDER_CONTEXT_BLOCK,
+  CORDIALITY_AND_KINDNESS_BLOCK,
 } from "../../shared/waAiDefaultStrings";
 
 export {
@@ -24,6 +25,7 @@ export {
   DEFAULT_PERSONALITY,
   ORDER_QUANTITY_RULES_BLOCK,
   PRINTS_ORDER_CONTEXT_BLOCK,
+  CORDIALITY_AND_KINDNESS_BLOCK,
 } from "../../shared/waAiDefaultStrings";
 
 function rowVal(row: Record<string, unknown> | null | undefined, camelKey: string): unknown {
@@ -153,6 +155,7 @@ REGRAS GERAIS:
     )}, responda primeiro com "Só um momento." e não continue argumentando.`;
   }
 
+  prompt += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
   prompt += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
   prompt += `\n\n${PRINTS_ORDER_CONTEXT_BLOCK}`;
   return prompt;

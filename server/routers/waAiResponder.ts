@@ -20,7 +20,11 @@
  */
 
 import mysql from "mysql2/promise";
-import { ORDER_QUANTITY_RULES_BLOCK, PRINTS_ORDER_CONTEXT_BLOCK } from "@shared/waAiDefaultStrings";
+import {
+  ORDER_QUANTITY_RULES_BLOCK,
+  PRINTS_ORDER_CONTEXT_BLOCK,
+  CORDIALITY_AND_KINDNESS_BLOCK,
+} from "@shared/waAiDefaultStrings";
 import {
   buildOrderQuantitySystemHint,
   collectTrailingCustomerTextParts,
@@ -32,6 +36,7 @@ import { parseExtraLinks } from "./waAiTrainingDefaults";
 
 const QTY_RULES_MARKER = "MULTILINHA E QUANTIDADES NO PEDIDO";
 const PRINTS_CONTEXT_MARKER = "PRINTS, IMAGENS E CONTEXTO DO PEDIDO";
+const CORDIALITY_MARKER = "TOM CORDIAL E GENTIL";
 
 const SO_UM_MOMENTO_PREFIX = ["só um momento", "so um momento"];
 
@@ -103,7 +108,7 @@ type MsgRow = {
 
 function buildFallbackSystemPrompt(cfg: AiCfgRow): string {
   const name = cfg.aiName || "Ju";
-  const personality = cfg.personality || "Atendente educada e direta, sem se apresentar como IA.";
+  const personality = cfg.personality || "Atendente cordial, gentil, paciente e atenciosa, sem se apresentar como IA.";
   const business = cfg.businessContext || "Loja Jurema Sport — camisas de times e seleções (atacado e varejo).";
   let p = `Você é ${name}, atendente da Jurema Sport.
 
@@ -116,14 +121,17 @@ ${business}
 REGRAS:
 - Responda sempre em português brasileiro.
 - Nunca revele que é uma IA.
-- Se não souber, responda exatamente: "Só um momento." e aguarde um humano.
-- Respostas curtas e diretas, sem repetir o que o cliente disse.`;
+- Se não souber, responda exatamente: "Só um momento." e aguarde um humano — mas mantenha o tom gentil.
+- Tom CORDIAL e GENTIL em TODA mensagem (saudação no primeiro contato, agradecimento, paciência com cliente confuso, nunca tom seco ou impaciente).`;
   if (cfg.catalogLink) p += `\n\nCATÁLOGO: ${cfg.catalogLink}`;
   if (cfg.groupLink) p += `\nGRUPO: ${cfg.groupLink}`;
   if (cfg.instagramLink) p += `\nINSTAGRAM: ${cfg.instagramLink}`;
   const extras = parseExtraLinks(cfg.extraLinks);
   for (const e of extras) {
     if (e.url) p += `\n${e.label}: ${e.url}`;
+  }
+  if (!p.includes(CORDIALITY_MARKER)) {
+    p += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
   }
   if (!p.includes(QTY_RULES_MARKER)) {
     p += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
@@ -316,6 +324,9 @@ export async function generateAiResponse(
       }
       if (linkLines.length > 0) pieces.push(`\n\n===== LINKS ÚTEIS =====\n${linkLines.join("\n")}`);
       let systemPrompt = pieces.join("");
+      if (!systemPrompt.includes(CORDIALITY_MARKER)) {
+        systemPrompt += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
+      }
       if (!systemPrompt.includes(QTY_RULES_MARKER)) {
         systemPrompt += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
       }
