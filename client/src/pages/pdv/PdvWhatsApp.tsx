@@ -15,7 +15,7 @@ import {
   MessageCircle, Circle, CheckCircle2, Clock, Tag, Ban,
   ChevronDown, AlertCircle, Settings, Unlock, Info, ArrowLeft,
   Phone, User, Mic, Image, Video, FileText, MapPin, Smile,
-  Play, Pause, Volume2, Loader2, RefreshCw, X, Download,
+  Play, Pause, Volume2, Loader2, RefreshCw, X, Download, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "wouter";
@@ -176,6 +176,21 @@ function AiStatusChip({ aiStatus }: { aiStatus?: string | null }) {
     >
       <Bot size={9} />
       {text}
+    </span>
+  );
+}
+
+function ReferralChip({ source, setBy }: { source?: string | null; setBy?: string | null }) {
+  const text = (source ?? "").trim();
+  if (!text) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap"
+      style={{ color: "#fbbf24", background: "rgba(251,191,36,0.10)", border: "1px solid rgba(251,191,36,0.30)" }}
+      title={setBy === "human" ? "Indicação definida manualmente" : "Indicação detectada pela IA"}
+    >
+      <Sparkles size={9} />
+      Indic. {text}
     </span>
   );
 }
@@ -383,6 +398,78 @@ function waPanelMediaSrc(msg: any, mediaJwt?: string | null): string | null {
     return direct;
   }
   return resolveWaMediaUrl(msg?.mediaUrl ?? msg?.media_url ?? msg?.MEDIAURL ?? null);
+}
+
+function ReferralEditor({
+  conversationId,
+  currentSource,
+  setBy,
+}: {
+  conversationId: number;
+  currentSource?: string | null;
+  setBy?: string | null;
+}) {
+  const utils = trpc.useUtils();
+  const { data: options = [] } = trpc.wa.listInfluencerOptions.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+  });
+  const setRef = trpc.wa.setReferralSource.useMutation({
+    onSuccess: () => {
+      toast.success("Indicação atualizada");
+      utils.wa.listConversations.invalidate();
+    },
+    onError: (e) => toast.error(`Falha: ${e.message}`),
+  });
+
+  const handlePick = (val: string | null) => {
+    setRef.mutate({ conversationId, source: val });
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all flex-shrink-0"
+          style={
+            currentSource
+              ? { color: "#fbbf24", borderColor: "#fbbf24", background: "#fbbf2414" }
+              : { color: "#666", borderColor: "#2a2a2a" }
+          }
+          title={
+            currentSource
+              ? `Cliente indicado por ${currentSource}${setBy === "human" ? " (manual)" : " (detectado pela IA)"}`
+              : "Marcar indicação de influenciador"
+          }
+        >
+          <Sparkles size={13} />
+          {currentSource ? `Indic. ${currentSource}` : "Sem indicação"}
+          <ChevronDown size={11} style={{ opacity: 0.7 }} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48 bg-[#1a1a1a] border-[#2a2a2a] p-1">
+        <DropdownMenuItem
+          onClick={() => handlePick(null)}
+          className="cursor-pointer rounded hover:bg-[#252525] focus:bg-[#252525] p-1.5"
+        >
+          <span className="text-[11px]" style={{ color: "#999" }}>
+            — Sem indicação
+          </span>
+        </DropdownMenuItem>
+        {options.map((opt) => (
+          <DropdownMenuItem
+            key={opt}
+            onClick={() => handlePick(opt)}
+            className="cursor-pointer rounded hover:bg-[#252525] focus:bg-[#252525] p-1.5"
+          >
+            <span className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: "#fbbf24" }}>
+              <Sparkles size={10} /> {opt}
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function ReopenConversationButton({
@@ -1356,6 +1443,7 @@ export default function PdvWhatsApp() {
                     <div className="flex items-center gap-1 flex-wrap">
                       <StatusBadge status={conv.status as ConvStatus} byAi={conv.statusSetBy === "ai"} presets={statusPresets} />
                       <AiStatusChip aiStatus={conv.aiStatus} />
+                      <ReferralChip source={conv.referralSource} setBy={conv.referralSetBy} />
                     </div>
                   </div>
                 </div>
@@ -1423,6 +1511,12 @@ export default function PdvWhatsApp() {
                 />
 
                 <AiStatusChip aiStatus={selectedConv.aiStatus} />
+
+                <ReferralEditor
+                  conversationId={selectedConv.id}
+                  currentSource={selectedConv.referralSource}
+                  setBy={selectedConv.referralSetBy}
+                />
 
                 {/* Toggle IA */}
                 <button
@@ -1705,6 +1799,14 @@ export default function PdvWhatsApp() {
                       <AiStatusChip aiStatus={selectedConv.aiStatus} />
                     </div>
                   )}
+                  <div className="flex justify-between items-center gap-2">
+                    <span style={{ color: "#555" }}>Indicação</span>
+                    <ReferralEditor
+                      conversationId={selectedConv.id}
+                      currentSource={selectedConv.referralSource}
+                      setBy={selectedConv.referralSetBy}
+                    />
+                  </div>
                   <div className="flex justify-between items-center">
                     <span style={{ color: "#555" }}>IA</span>
                     <span

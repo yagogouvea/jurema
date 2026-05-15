@@ -27,6 +27,14 @@ const REQUIRED_COL_DEFS: Array<{ name: string; ddl: string }> = [
     name: "statusLockedUntil",
     ddl: "ALTER TABLE `wa_conversations` ADD COLUMN `statusLockedUntil` TIMESTAMP NULL AFTER `statusSetBy`",
   },
+  {
+    name: "referralSource",
+    ddl: "ALTER TABLE `wa_conversations` ADD COLUMN `referralSource` VARCHAR(60) NULL AFTER `statusLockedUntil`",
+  },
+  {
+    name: "referralSetBy",
+    ddl: "ALTER TABLE `wa_conversations` ADD COLUMN `referralSetBy` ENUM('ai','human') NULL AFTER `referralSource`",
+  },
 ];
 
 const PRESETS_TABLE_DDL = `

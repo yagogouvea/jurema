@@ -484,6 +484,38 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
+  // ── Indicação de Influenciador ────────────────────────────────────────────
+  listInfluencerOptions: publicProcedure.query(async ({ ctx }) => {
+    await requireWaAccess(ctx);
+    const { INFLUENCER_CANONICALS } = await import("@shared/waInfluencerReferral");
+    return INFLUENCER_CANONICALS;
+  }),
+
+  /** Define ou limpa manualmente a indicação de influenciador da conversa. */
+  setReferralSource: publicProcedure
+    .input(z.object({
+      conversationId: z.number().int().positive(),
+      source: z.string().min(1).max(60).nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const db = await getDb();
+      try {
+        const { INFLUENCER_CANONICALS } = await import("@shared/waInfluencerReferral");
+        const trimmed = input.source == null ? null : input.source.trim();
+        // Aceita valor canonical OU qualquer string (caso a loja queira "Outro").
+        const final =
+          trimmed == null || trimmed === ""
+            ? null
+            : INFLUENCER_CANONICALS.find((c) => c.toLowerCase() === trimmed.toLowerCase()) ?? trimmed;
+        await db.execute(
+          "UPDATE wa_conversations SET referralSource = ?, referralSetBy = ? WHERE id = ?",
+          [final, final ? "human" : null, input.conversationId]
+        );
+        return { success: true, referralSource: final };
+      } finally { await db.end(); }
+    }),
+
   // Libera o lock manual e devolve o controle de status para a IA
   unlockAiStatus: publicProcedure
     .input(z.object({ id: z.number() }))
@@ -1136,11 +1168,38 @@ export const waRouter = router({
         const capturedRemoteJid = input.remoteJid;
         const capturedInstanceId = input.instanceId;
         const capturedFromMe = input.fromMe;
+        const capturedContent = input.content ?? "";
         // Retornar imediatamente e processar de forma assíncrona com nova conexão
         setImmediate(async () => {
           if (capturedFromMe) return;
           const asyncDb = await getDb();
           try {
+            // Detecção de indicação de influenciador (rapido, antes da IA).
+            // Só sobrescreve se ainda não estiver setado (lock contra flapping).
+            try {
+              const { detectInfluencerReferral } = await import("@shared/waInfluencerReferral");
+              const match = detectInfluencerReferral(capturedContent);
+              if (match) {
+                const [refRows] = (await asyncDb.execute(
+                  "SELECT referralSource, referralSetBy FROM wa_conversations WHERE id = ? LIMIT 1",
+                  [capturedConvId]
+                )) as any;
+                const cur = (refRows as any[])[0];
+                const lockedByHuman = cur && cur.referralSetBy === "human";
+                if (!lockedByHuman && (!cur?.referralSource || cur.referralSource !== match.source)) {
+                  await asyncDb.execute(
+                    "UPDATE wa_conversations SET referralSource = ?, referralSetBy = 'ai' WHERE id = ?",
+                    [match.source, capturedConvId]
+                  );
+                  console.log(
+                    `[webhook] Indicação detectada conv=${capturedConvId} source=${match.source} matchedAs="${match.matchedAs}"`
+                  );
+                }
+              }
+            } catch (e) {
+              console.warn("[webhook] Erro ao detectar indicação:", e);
+            }
+
             const { applyAiStatus, checkAwayMessage } = await import("./waStatusClassifier");
             const awayMsg = await checkAwayMessage(asyncDb as any, capturedConvId, capturedInstanceId).catch(() => null);
             let awaySent = false;
