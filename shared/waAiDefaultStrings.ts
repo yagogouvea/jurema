@@ -71,6 +71,40 @@ export const DEFAULT_GREETING_MESSAGE = "Olá! Aqui é a Jurema Sport. Em que po
 export const DEFAULT_AWAY_MESSAGE =
   "No momento estamos fora do horário de atendimento. Assim que retornarmos respondemos por aqui. Obrigada pela compreensão.";
 
+/**
+ * Heurística leve: detecta se a última mensagem do cliente pede para ver o que a loja tem.
+ * Usado pelo waAiResponder para injetar um lembrete forte no system prompt.
+ */
+const CATALOG_INTENT_PATTERNS: RegExp[] = [
+  // "quais modelos", "que modelos", "quais times", "qual time", "quais opções", "quais cores"
+  /\b(quais|que|qual)\s+(modelos?|times?|sele[cç][aã]o(?:es)?|op[cç][aã]o(?:es)?|cores?|estilos?|tipos?|variedades?|produtos?|conjuntos?|kits?|uniformes?|camisas?|tamanhos?|numera[cç][aã]o(?:es)?)\b/i,
+  // "tem do real?", "tem o brasil?", "tem alguma do barcelona", "tem em vermelho"
+  /\btem\s+(?:(?:algum[ao]?|um[ao]?|o|a|do|da|de|em)\s+)+/i,
+  // "vc tem ...?", "voce tem ...?", "vocês têm ..."
+  /\bvoc[eê]s?\s+t[eê]m?\s+/i,
+  // "me mostra", "me manda fotos", "me passa opções", "manda umas fotos"
+  /\b(me\s+)?(mostra|manda|envia|passa|enviar)\s+(?:umas?\s+|algum[ao]s?\s+|as\s+|os\s+)?(?:fotos?|imagens?|modelos?|op[cç][aã]o(?:es)?|cat[aá]logo|cores?|times?|produtos?|kits?|conjuntos?)/i,
+  // "quero ver"
+  /\b(quero|gostaria|pode)\s+(?:de\s+)?(?:ver|conhecer|saber|olhar)\b/i,
+  // "tem catalogo", "manda catalogo"
+  /\bcat[aá]logo\b/i,
+  // "tem do <nome>?" no fim
+  /\btem\s+\w+\s*\?+\s*$/i,
+  // "me manda fotos das camisas"
+  /\b(?:fotos?|imagens?|prints?)\b/i,
+  // "quais produtos vendem"
+  /\b(?:vendem|trabalha[mr]?|t[eê]m?)\s+(?:o\s+que|algum|qual)/i,
+  // "tem opção?"
+  /\bop[cç][aã]o(?:es)?\b/i,
+];
+
+export function detectCatalogIntent(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const t = String(text).trim();
+  if (!t) return false;
+  return CATALOG_INTENT_PATTERNS.some((re) => re.test(t));
+}
+
 export const DEFAULT_ESCALATE_KEYWORDS = [
   "reclamação",
   "reclamacao",
@@ -101,6 +135,38 @@ export const ORDER_QUANTITY_RULES_BLOCK = `===== MULTILINHA E QUANTIDADES NO PED
  * Regras sobre prints/imagens vs. linhas de pedido (sem análise visual da foto).
  * Injetado no system prompt quando ainda não está presente.
  */
+/**
+ * INTENÇÃO DE CATÁLOGO — anexado ao prompt e usado por heurística de runtime.
+ * O cliente raramente pede "catálogo" com essa palavra; quase sempre usa variações como
+ * "quais modelos têm", "que cores tem", "tem o do real?", "me manda umas opções".
+ */
+export const CATALOG_INTENT_BLOCK = `===== ENVIO DO CATÁLOGO (obrigatório) =====
+Sempre que o cliente sinalizar QUERER VER O QUE A LOJA TEM, envie o link do catálogo já na próxima resposta — mesmo que ele não use a palavra "catálogo". A intenção é reconhecida por exemplos como:
+
+- "Quais modelos vocês têm?"
+- "Tem do Real Madrid?", "Tem do Brasil?", "Tem do meu time?"
+- "Quais times vocês têm?"
+- "Quais cores tem?", "Tem em vermelho?"
+- "Me mostra alguns?", "Me manda umas fotos?", "Quero ver as opções"
+- "Quais variedades?", "Quais produtos vocês vendem?"
+- "Tem o conjunto X?", "Tem o uniforme Y?"
+- "Que tamanhos tem?", "Que numerações existem?"
+- "É bom?", "Vale a pena?" — quando vem após pergunta sobre um modelo, é hora de mostrar o catálogo para o cliente comparar
+- "Quanto custa?" SEM especificar produto — não invente preço, envie o catálogo (lá está a tabela atual)
+- "Tem promoção?", "Tem oferta?" — mande o grupo de ofertas OU o catálogo (o que estiver configurado)
+
+Como responder:
+1. Reconheça com cordialidade ("Claro!", "Com prazer!", "Tenho sim, olha só:").
+2. ENVIE O LINK DO CATÁLOGO (campo CATÁLOGO/PRODUTOS configurado mais acima). Use o link na íntegra, sem cortar.
+3. Convide a continuar ("Dá uma olhada e me diz qual te interessou", "Quando achar o que gostou, me chama pelo nome ou número do modelo").
+4. Se a loja também tem grupo de ofertas ou Linktree, pode mencionar como complemento — mas o catálogo é a resposta principal.
+
+NÃO faça:
+- Listar modelos de cabeça inventando o que tem em estoque.
+- Responder "Só um momento." quando o cliente quer ver opções — o catálogo já é a resposta, não precisa de humano.
+- Pedir mais informação ("qual time?") antes de mandar o catálogo — mande primeiro, o cliente vai se localizar lá. Só pergunte se ele AINDA assim precisar de orientação.
+- Ignorar o pedido com uma resposta genérica.`;
+
 /**
  * Tom CORDIAL e GENTIL — anexado a todas as respostas (mesmo em configs antigas no banco)
  * via waAiResponder quando este marcador ainda não está presente. Marcador estável para

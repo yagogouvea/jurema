@@ -14,6 +14,7 @@ import {
   ORDER_QUANTITY_RULES_BLOCK,
   PRINTS_ORDER_CONTEXT_BLOCK,
   CORDIALITY_AND_KINDNESS_BLOCK,
+  CATALOG_INTENT_BLOCK,
 } from "../../shared/waAiDefaultStrings";
 
 export {
@@ -26,6 +27,7 @@ export {
   ORDER_QUANTITY_RULES_BLOCK,
   PRINTS_ORDER_CONTEXT_BLOCK,
   CORDIALITY_AND_KINDNESS_BLOCK,
+  CATALOG_INTENT_BLOCK,
 } from "../../shared/waAiDefaultStrings";
 
 function rowVal(row: Record<string, unknown> | null | undefined, camelKey: string): unknown {
@@ -156,6 +158,7 @@ REGRAS GERAIS:
   }
 
   prompt += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
+  prompt += `\n\n${CATALOG_INTENT_BLOCK}`;
   prompt += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
   prompt += `\n\n${PRINTS_ORDER_CONTEXT_BLOCK}`;
   return prompt;

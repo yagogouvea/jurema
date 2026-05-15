@@ -24,6 +24,8 @@ import {
   ORDER_QUANTITY_RULES_BLOCK,
   PRINTS_ORDER_CONTEXT_BLOCK,
   CORDIALITY_AND_KINDNESS_BLOCK,
+  CATALOG_INTENT_BLOCK,
+  detectCatalogIntent,
 } from "@shared/waAiDefaultStrings";
 import {
   buildOrderQuantitySystemHint,
@@ -37,6 +39,7 @@ import { parseExtraLinks } from "./waAiTrainingDefaults";
 const QTY_RULES_MARKER = "MULTILINHA E QUANTIDADES NO PEDIDO";
 const PRINTS_CONTEXT_MARKER = "PRINTS, IMAGENS E CONTEXTO DO PEDIDO";
 const CORDIALITY_MARKER = "TOM CORDIAL E GENTIL";
+const CATALOG_MARKER = "ENVIO DO CATÁLOGO";
 
 const SO_UM_MOMENTO_PREFIX = ["só um momento", "so um momento"];
 
@@ -132,6 +135,9 @@ REGRAS:
   }
   if (!p.includes(CORDIALITY_MARKER)) {
     p += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
+  }
+  if (!p.includes(CATALOG_MARKER)) {
+    p += `\n\n${CATALOG_INTENT_BLOCK}`;
   }
   if (!p.includes(QTY_RULES_MARKER)) {
     p += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
@@ -333,11 +339,30 @@ export async function generateAiResponse(
       if (!systemPrompt.includes(CORDIALITY_MARKER)) {
         systemPrompt += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
       }
+      if (!systemPrompt.includes(CATALOG_MARKER)) {
+        systemPrompt += `\n\n${CATALOG_INTENT_BLOCK}`;
+      }
       if (!systemPrompt.includes(QTY_RULES_MARKER)) {
         systemPrompt += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
       }
       if (!systemPrompt.includes(PRINTS_CONTEXT_MARKER)) {
         systemPrompt += `\n\n${PRINTS_ORDER_CONTEXT_BLOCK}`;
+      }
+
+      // HEURÍSTICA: se a última mensagem do cliente sugere intenção de catálogo,
+      // reforce com prioridade máxima — IA não inventa lista, manda o link.
+      const customerLastText = msgs
+        .filter((m) => !m.fromMe && (m.content ?? "").trim().length > 0)
+        .map((m) => String(m.content ?? "").trim())
+        .pop() ?? "";
+      const catalogIntent = detectCatalogIntent(customerLastText);
+      const hasCatalogLink = !!(cfg.catalogLink && String(cfg.catalogLink).trim());
+      if (catalogIntent && hasCatalogLink) {
+        systemPrompt += `\n\n===== ALERTA DE INTENÇÃO (PRIORIDADE MÁXIMA) =====
+A última mensagem do cliente foi detectada como pedido para VER OPÇÕES/MODELOS/CORES/TIMES disponíveis na loja. Inclua o LINK DO CATÁLOGO (campo CATÁLOGO / PRODUTOS) NA RESPOSTA ABAIXO, com cordialidade. Não invente lista de produtos; mande o link e convide o cliente a olhar e voltar com o número/nome do item escolhido. Mensagem do cliente: "${customerLastText.slice(0, 200)}".`;
+        console.log(`[ai] catalog-intent detectado conv=${conversationId}: "${customerLastText.slice(0, 80)}"`);
+      } else if (catalogIntent && !hasCatalogLink) {
+        console.warn(`[ai] catalog-intent detectado conv=${conversationId} mas catalogLink VAZIO — configure em Treinamento IA.`);
       }
 
       const customerImageCount = msgs.filter((m) => !m.fromMe && m.type === "image").length;
