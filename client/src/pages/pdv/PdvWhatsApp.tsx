@@ -1286,6 +1286,13 @@ export default function PdvWhatsApp() {
               const instColor = getInstColor(instIdx >= 0 ? instIdx : 0);
               const isSel = selectedConvId === conv.id;
               const displayName = getDisplayName(conv);
+              const convPreset = statusPresets.find((p) => p.key === conv.status);
+              const needsHuman = convPreset?.blocksAi === true;
+              const leftBorder = isSel
+                ? "3px solid #25D366"
+                : needsHuman
+                  ? `3px solid ${convPreset?.color ?? "#fb923c"}`
+                  : "3px solid transparent";
 
               return (
                 <div
@@ -1294,11 +1301,15 @@ export default function PdvWhatsApp() {
                   className="flex items-start gap-3 px-3 py-3 cursor-pointer border-b transition-colors"
                   style={{
                     borderColor: "#161616",
-                    background: isSel ? "#1c2a1e" : undefined,
-                    borderLeft: isSel ? "3px solid #25D366" : "3px solid transparent",
+                    background: isSel
+                      ? "#1c2a1e"
+                      : needsHuman
+                        ? hexWithAlpha(convPreset?.color ?? "#fb923c", 0.06)
+                        : undefined,
+                    borderLeft: leftBorder,
                   }}
-                  onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = "#161616"; }}
-                  onMouseLeave={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = ""; }}
+                  onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = needsHuman ? hexWithAlpha(convPreset?.color ?? "#fb923c", 0.12) : "#161616"; }}
+                  onMouseLeave={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = needsHuman ? hexWithAlpha(convPreset?.color ?? "#fb923c", 0.06) : ""; }}
                 >
                   <Avatar
                     name={displayName}
@@ -1309,9 +1320,20 @@ export default function PdvWhatsApp() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1 mb-0.5">
-                      <span className="text-[13px] font-semibold truncate" style={{ color: isSel ? "#fff" : "#d0d0d0" }}>
-                        {displayName}
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {needsHuman && (
+                          <span
+                            title="Conversa precisa de intervenção humana"
+                            className="inline-flex items-center justify-center w-4 h-4 rounded-full flex-shrink-0"
+                            style={{ background: convPreset?.color ?? "#fb923c", color: "#000" }}
+                          >
+                            <AlertCircle size={10} strokeWidth={3} />
+                          </span>
+                        )}
+                        <span className="text-[13px] font-semibold truncate" style={{ color: isSel ? "#fff" : needsHuman ? (convPreset?.color ?? "#fb923c") : "#d0d0d0" }}>
+                          {displayName}
+                        </span>
+                      </div>
                       <span className="text-[10px] flex-shrink-0" style={{ color: "#444" }}>
                         {formatTime(conv.lastMessageAt)}
                       </span>

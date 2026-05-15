@@ -455,20 +455,53 @@ export async function generateAiResponse(
       ).catch(() => undefined);
     }
 
-    // 11. Se IA escalou para humano ("Só um momento."), desligar aiEnabled na conversa
+    // 11. Se IA escalou para humano ("Só um momento."), marca status como
+    //     INTERVENÇÃO e desliga aiEnabled — vendedor é alertado no painel.
     const escalated = SO_UM_MOMENTO_PREFIX.some((p) => normalize(aiContent).startsWith(p));
     if (escalated) {
+      // Resolve a key do preset bloqueante usado para sinalizar intervenção.
+      // Padrão: "intervencao" (system preset). Se a loja inativou esse preset,
+      // pega o primeiro preset com blocksAi=true; se nada, mantém "intervencao".
+      let interventionKey = "intervencao";
+      try {
+        const [presetRows] = (await db.execute<any[]>(
+          `SELECT \`key\` FROM wa_status_presets
+             WHERE isActive = 1
+             ORDER BY (\`key\` = 'intervencao') DESC, (blocksAi = 1) DESC, sortOrder ASC
+             LIMIT 1`
+        )) as any;
+        const found = (presetRows as any[])[0]?.key;
+        if (found) interventionKey = String(found);
+      } catch {
+        /* fallback: 'intervencao' */
+      }
+
+      const escalationReason = matchedKeyword
+        ? `Escalado por palavra-chave: ${matchedKeyword}`
+        : "Escalado pela IA: não soube responder com segurança — intervenção humana necessária";
+
       await db.execute(
         `UPDATE wa_conversations
-            SET aiEnabled = false, aiDisabledBy = ?, aiDisabledAt = ?
+            SET aiEnabled = false,
+                aiDisabledBy = ?,
+                aiDisabledAt = ?,
+                status = ?,
+                statusSetBy = 'ai',
+                aiStatus = ?,
+                aiStatusUpdatedAt = ?
           WHERE id = ?`,
-        [`ai_escalation${matchedKeyword ? `:${matchedKeyword}` : ""}`, now, conversationId]
+        [
+          `ai_escalation${matchedKeyword ? `:${matchedKeyword}` : ""}`,
+          now,
+          interventionKey,
+          "Precisa atendente humano",
+          now,
+          conversationId,
+        ]
       );
       await db.execute(
         `INSERT INTO wa_ai_logs (conversationId, action, performedBy, details) VALUES (?,?,?,?)`,
-        [conversationId, "escalated_to_human", aiName, matchedKeyword
-          ? `Escalado por palavra-chave: ${matchedKeyword}`
-          : "Escalado pela IA (resposta indica necessidade de humano)"]
+        [conversationId, "escalated_to_human", aiName, escalationReason]
       );
     } else {
       await db.execute(
