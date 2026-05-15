@@ -26,6 +26,8 @@ import {
   CORDIALITY_AND_KINDNESS_BLOCK,
   CATALOG_INTENT_BLOCK,
   detectCatalogIntent,
+  detectEscalationIntent,
+  ESCALATION_SOFT_PHRASE,
 } from "@shared/waAiDefaultStrings";
 import {
   buildOrderQuantitySystemHint,
@@ -41,7 +43,10 @@ const PRINTS_CONTEXT_MARKER = "PRINTS, IMAGENS E CONTEXTO DO PEDIDO";
 const CORDIALITY_MARKER = "TOM CORDIAL E GENTIL";
 const CATALOG_MARKER = "ENVIO DO CATÁLOGO";
 
-const SO_UM_MOMENTO_PREFIX = ["só um momento", "so um momento"];
+/** Frases de escalação aceitas — qualquer uma na resposta sinaliza que humano deve assumir. */
+function isEscalationResponse(content: string): boolean {
+  return detectEscalationIntent(content);
+}
 
 function normalize(text: string): string {
   return (text || "")
@@ -306,7 +311,11 @@ export async function generateAiResponse(
     let aiContent: string;
 
     if (matchedKeyword) {
-      aiContent = "Só um momento.";
+      // Escalação por palavra-chave: frase suave + catálogo (se configurado).
+      const link = (cfg.catalogLink ?? "").trim();
+      aiContent = link
+        ? `${ESCALATION_SOFT_PHRASE} Por enquanto, dá uma olhada no nosso catálogo: ${link}`
+        : ESCALATION_SOFT_PHRASE;
     } else {
       // 7. Montar histórico e chamar invokeLLM
       // ARQUITETURA: o painel "Treinamento IA" é a fonte de verdade. Aqui regeramos
@@ -359,17 +368,30 @@ export async function generateAiResponse(
       const hasCatalogLink = !!(cfg.catalogLink && String(cfg.catalogLink).trim());
       if (catalogIntent && hasCatalogLink) {
         const linkExact = String(cfg.catalogLink).trim();
-        systemPrompt += `\n\n===== ALERTA DE INTENÇÃO DE CATÁLOGO (PRIORIDADE MÁXIMA) =====
-A última mensagem do cliente foi detectada como pedido para VER OPÇÕES/MODELOS/CORES/TIMES disponíveis. Responda APENAS sobre o catálogo, com mensagem CURTA e FOCADA — NÃO misture com respostas a outras perguntas pendentes (frete, pagamento, prazos, modelo específico). Se outras dúvidas existirem, deixe-as para a próxima resposta.
+        // Conta perguntas/tópicos na última mensagem do cliente para decidir entre
+        // resposta curta (1 pergunta) ou resposta organizada (várias).
+        const questionMarks = (customerLastText.match(/\?/g) ?? []).length;
+        const tokensSeparator = (customerLastText.match(/\b(e|também|tambem|além|alem)\b/gi) ?? []).length;
+        const looksMultiQuestion = questionMarks >= 2 || (questionMarks >= 1 && tokensSeparator >= 1) || customerLastText.length > 140;
 
-Formato OBRIGATÓRIO:
+        if (looksMultiQuestion) {
+          systemPrompt += `\n\n===== ALERTA: VÁRIAS PERGUNTAS COM PEDIDO DE CATÁLOGO =====
+A última mensagem do cliente tem MAIS DE UMA pergunta, e uma delas é para ver os modelos/produtos disponíveis. Faça:
+1) Responda cada pergunta que você TIVER CERTEZA com base no contexto da loja (frete, pagamento, atacado, horário, etc.), curtas, organizadas em tópicos com travessão.
+2) Para a parte de "ver modelos" inclua o LINK DO CATÁLOGO EXATO (sem modificar, sem markdown):
+   ${linkExact}
+3) Se houver alguma pergunta cuja resposta você NÃO SABE com certeza, use a frase: "Só um momentinho que já te passo" para esse item específico. NÃO invente dado. Você PODE complementar com "Por enquanto, dá uma olhada no nosso catálogo" no mesmo item para o cliente seguir engajado.
+Mensagem do cliente: "${customerLastText.slice(0, 250)}".`;
+        } else {
+          systemPrompt += `\n\n===== ALERTA DE INTENÇÃO DE CATÁLOGO (PRIORIDADE MÁXIMA) =====
+A última mensagem do cliente foi detectada como pedido para VER OPÇÕES/MODELOS/CORES/TIMES disponíveis e é uma pergunta única. Responda APENAS sobre o catálogo, mensagem CURTA e FOCADA — não misture com outros assuntos. Formato:
 1) Linha curta de cordialidade ("Claro!", "Com prazer 😊", "Tenho sim, olha:").
 2) Quebra de linha + o link EXATO abaixo (não modifique, não encurte, não envolva em markdown):
    ${linkExact}
 3) Convite curto ("Dá uma olhada e me diz qual gostou", "Quando achar o que te interessou, me chama").
-
-Mensagem do cliente que disparou: "${customerLastText.slice(0, 200)}".`;
-        console.log(`[ai] catalog-intent detectado conv=${conversationId}: "${customerLastText.slice(0, 80)}"`);
+Mensagem do cliente: "${customerLastText.slice(0, 200)}".`;
+        }
+        console.log(`[ai] catalog-intent (${looksMultiQuestion ? "multi" : "single"}) conv=${conversationId}: "${customerLastText.slice(0, 80)}"`);
       } else if (catalogIntent && !hasCatalogLink) {
         console.warn(`[ai] catalog-intent detectado conv=${conversationId} mas catalogLink VAZIO — configure em Treinamento IA.`);
       }
@@ -489,9 +511,9 @@ Mensagem do cliente que disparou: "${customerLastText.slice(0, 200)}".`;
       ).catch(() => undefined);
     }
 
-    // 11. Se IA escalou para humano ("Só um momento."), marca status como
-    //     INTERVENÇÃO e desliga aiEnabled — vendedor é alertado no painel.
-    const escalated = SO_UM_MOMENTO_PREFIX.some((p) => normalize(aiContent).startsWith(p));
+    // 11. Se IA escalou para humano (qualquer variação de "só um momentinho", "já te passo"),
+    //     marca status como INTERVENÇÃO e desliga aiEnabled — vendedor é alertado no painel.
+    const escalated = isEscalationResponse(aiContent);
     if (escalated) {
       // Resolve a key do preset bloqueante usado para sinalizar intervenção.
       // Padrão: "intervencao" (system preset). Se a loja inativou esse preset,
