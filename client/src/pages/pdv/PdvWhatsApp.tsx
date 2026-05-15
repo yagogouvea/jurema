@@ -410,12 +410,12 @@ function ReferralEditor({
   setBy?: string | null;
 }) {
   const utils = trpc.useUtils();
-  const { data: options = [] } = trpc.wa.listInfluencerOptions.useQuery(undefined, {
+  const optionsQuery = trpc.wa.listInfluencerOptions.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
   });
   const setRef = trpc.wa.setReferralSource.useMutation({
     onSuccess: () => {
-      toast.success("Indicação atualizada");
+      toast.success("Origem atualizada");
       utils.wa.listConversations.invalidate();
     },
     onError: (e) => toast.error(`Falha: ${e.message}`),
@@ -424,6 +424,8 @@ function ReferralEditor({
   const handlePick = (val: string | null) => {
     setRef.mutate({ conversationId, source: val });
   };
+
+  const groups = optionsQuery.data?.groups ?? [];
 
   return (
     <DropdownMenu>
@@ -438,34 +440,41 @@ function ReferralEditor({
           }
           title={
             currentSource
-              ? `Cliente indicado por ${currentSource}${setBy === "human" ? " (manual)" : " (detectado pela IA)"}`
-              : "Marcar indicação de influenciador"
+              ? `Origem: ${currentSource}${setBy === "human" ? " (manual)" : " (detectada pela IA)"}`
+              : "Marcar origem da lead (influencer / Facebook / Instagram / ...)"
           }
         >
           <Sparkles size={13} />
-          {currentSource ? `Indic. ${currentSource}` : "Sem indicação"}
+          {currentSource ? `Indic. ${currentSource}` : "Sem origem"}
           <ChevronDown size={11} style={{ opacity: 0.7 }} />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48 bg-[#1a1a1a] border-[#2a2a2a] p-1">
+      <DropdownMenuContent align="end" className="w-56 bg-[#1a1a1a] border-[#2a2a2a] p-1 max-h-96 overflow-y-auto">
         <DropdownMenuItem
           onClick={() => handlePick(null)}
           className="cursor-pointer rounded hover:bg-[#252525] focus:bg-[#252525] p-1.5"
         >
           <span className="text-[11px]" style={{ color: "#999" }}>
-            — Sem indicação
+            — Sem origem
           </span>
         </DropdownMenuItem>
-        {options.map((opt) => (
-          <DropdownMenuItem
-            key={opt}
-            onClick={() => handlePick(opt)}
-            className="cursor-pointer rounded hover:bg-[#252525] focus:bg-[#252525] p-1.5"
-          >
-            <span className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: "#fbbf24" }}>
-              <Sparkles size={10} /> {opt}
-            </span>
-          </DropdownMenuItem>
+        {groups.map((group) => (
+          <div key={group.group}>
+            <div className="px-1.5 pt-2 pb-1 text-[9px] uppercase tracking-wide font-bold" style={{ color: "#555" }}>
+              {group.group}
+            </div>
+            {group.options.map((opt) => (
+              <DropdownMenuItem
+                key={opt}
+                onClick={() => handlePick(opt)}
+                className="cursor-pointer rounded hover:bg-[#252525] focus:bg-[#252525] p-1.5"
+              >
+                <span className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: "#fbbf24" }}>
+                  <Sparkles size={10} /> {opt}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </div>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

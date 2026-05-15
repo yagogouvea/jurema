@@ -484,14 +484,18 @@ export const waRouter = router({
       } finally { await db.end(); }
     }),
 
-  // ── Indicação de Influenciador ────────────────────────────────────────────
+  // ── Indicação de Influenciador / Canal de aquisição ───────────────────────
+  /** Devolve opções agrupadas (Influenciadores, Canais digitais, Outros). */
   listInfluencerOptions: publicProcedure.query(async ({ ctx }) => {
     await requireWaAccess(ctx);
-    const { INFLUENCER_CANONICALS } = await import("@shared/waInfluencerReferral");
-    return INFLUENCER_CANONICALS;
+    const mod = await import("@shared/waInfluencerReferral");
+    return {
+      groups: mod.REFERRAL_OPTION_GROUPS,
+      flat: [...mod.INFLUENCER_CANONICALS, ...mod.CHANNEL_CANONICALS, ...mod.GENERIC_CANONICALS],
+    };
   }),
 
-  /** Define ou limpa manualmente a indicação de influenciador da conversa. */
+  /** Define ou limpa manualmente a origem da lead. Aceita qualquer string. */
   setReferralSource: publicProcedure
     .input(z.object({
       conversationId: z.number().int().positive(),
@@ -501,13 +505,13 @@ export const waRouter = router({
       await requireWaAccess(ctx);
       const db = await getDb();
       try {
-        const { INFLUENCER_CANONICALS } = await import("@shared/waInfluencerReferral");
+        const mod = await import("@shared/waInfluencerReferral");
+        const all = [...mod.INFLUENCER_CANONICALS, ...mod.CHANNEL_CANONICALS, ...mod.GENERIC_CANONICALS];
         const trimmed = input.source == null ? null : input.source.trim();
-        // Aceita valor canonical OU qualquer string (caso a loja queira "Outro").
         const final =
           trimmed == null || trimmed === ""
             ? null
-            : INFLUENCER_CANONICALS.find((c) => c.toLowerCase() === trimmed.toLowerCase()) ?? trimmed;
+            : all.find((c) => c.toLowerCase() === trimmed.toLowerCase()) ?? trimmed;
         await db.execute(
           "UPDATE wa_conversations SET referralSource = ?, referralSetBy = ? WHERE id = ?",
           [final, final ? "human" : null, input.conversationId]
