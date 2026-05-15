@@ -358,8 +358,17 @@ export async function generateAiResponse(
       const catalogIntent = detectCatalogIntent(customerLastText);
       const hasCatalogLink = !!(cfg.catalogLink && String(cfg.catalogLink).trim());
       if (catalogIntent && hasCatalogLink) {
-        systemPrompt += `\n\n===== ALERTA DE INTENÇÃO (PRIORIDADE MÁXIMA) =====
-A última mensagem do cliente foi detectada como pedido para VER OPÇÕES/MODELOS/CORES/TIMES disponíveis na loja. Inclua o LINK DO CATÁLOGO (campo CATÁLOGO / PRODUTOS) NA RESPOSTA ABAIXO, com cordialidade. Não invente lista de produtos; mande o link e convide o cliente a olhar e voltar com o número/nome do item escolhido. Mensagem do cliente: "${customerLastText.slice(0, 200)}".`;
+        const linkExact = String(cfg.catalogLink).trim();
+        systemPrompt += `\n\n===== ALERTA DE INTENÇÃO DE CATÁLOGO (PRIORIDADE MÁXIMA) =====
+A última mensagem do cliente foi detectada como pedido para VER OPÇÕES/MODELOS/CORES/TIMES disponíveis. Responda APENAS sobre o catálogo, com mensagem CURTA e FOCADA — NÃO misture com respostas a outras perguntas pendentes (frete, pagamento, prazos, modelo específico). Se outras dúvidas existirem, deixe-as para a próxima resposta.
+
+Formato OBRIGATÓRIO:
+1) Linha curta de cordialidade ("Claro!", "Com prazer 😊", "Tenho sim, olha:").
+2) Quebra de linha + o link EXATO abaixo (não modifique, não encurte, não envolva em markdown):
+   ${linkExact}
+3) Convite curto ("Dá uma olhada e me diz qual gostou", "Quando achar o que te interessou, me chama").
+
+Mensagem do cliente que disparou: "${customerLastText.slice(0, 200)}".`;
         console.log(`[ai] catalog-intent detectado conv=${conversationId}: "${customerLastText.slice(0, 80)}"`);
       } else if (catalogIntent && !hasCatalogLink) {
         console.warn(`[ai] catalog-intent detectado conv=${conversationId} mas catalogLink VAZIO — configure em Treinamento IA.`);
