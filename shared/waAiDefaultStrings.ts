@@ -72,7 +72,10 @@ Jurema Sport — artigos esportivos, com foco em camisas de times de futebol, se
 (Adaptar ao processo real da loja.)
 
 === TABELA DE PREÇOS E CATÁLOGO ===
-(Completar valores ou escrever "consultar tabela interna" — a IA não deve chutar preços. Incluir link do catálogo se existir.)
+Preços base das camisas (varejo):
+- Camisa NACIONAL: a partir de R$ 50,00
+- Camisa TAILANDESA: a partir de R$ 60,00
+Valores específicos por time, cores, atacado e promoções: ver catálogo (fonte oficial). A IA NÃO chuta valor único — sempre fala "a partir de" para o piso. Se a pergunta for sobre atacado ou condição especial, encaminhar para o catálogo ou para um humano.
 
 === TAMANHOS E MEDIDAS ===
 (Completar orientação de tamanho infantil/adulto, trocas por tamanho errado, etc.)
@@ -167,6 +170,39 @@ export const ORDER_QUANTITY_RULES_BLOCK = `===== MULTILINHA E QUANTIDADES NO PED
  * Regras sobre prints/imagens vs. linhas de pedido (sem análise visual da foto).
  * Injetado no system prompt quando ainda não está presente.
  */
+/**
+ * PREÇOS BASE — quando o cliente pergunta "Quanto custa a camisa?" ou variações,
+ * a IA usa esta tabela em vez de chutar valor único.
+ *
+ * Regra da loja (Jurema Sport):
+ *  - Camisa NACIONAL: a partir de R$ 50,00 (varejo)
+ *  - Camisa TAILANDESA: a partir de R$ 60,00 (varejo)
+ *
+ * Atacado, peças específicas e promoções: NUNCA chutar — sempre pedir
+ * pra olhar o catálogo (o catálogo é fonte oficial de preço atualizado).
+ */
+export const PRICING_BASELINE_BLOCK = `===== PREÇOS BASE DAS CAMISAS (obrigatório) =====
+Quando o cliente perguntar "Quanto custa?", "Qual o preço?", "Qual valor da camisa?", "Quanto tá a camisa do <time>?" ou variações similares — SEM especificar a linha (nacional / tailandesa / torcedor / jogador) — a resposta padrão SEMPRE deve ser por linha:
+
+- Camisa NACIONAL: a partir de R$ 50,00 (varejo)
+- Camisa TAILANDESA: a partir de R$ 60,00 (varejo)
+
+Regras de uso:
+1. NUNCA dê um valor único cravado (ex.: "R$ 60,00") quando a pergunta é genérica. Sempre fale "a partir de" para deixar claro que é piso.
+2. Quando o cliente NÃO especificar a linha (nacional vs tailandesa), apresente AS DUAS na resposta — ele decide qual quer.
+3. Se a pergunta menciona LINHA específica (ex.: "Quanto tá a tailandesa?"), responda só o piso dessa linha + convide a ver o catálogo.
+4. Para pergunta sobre ATACADO, mínimo de peças, condição especial ou desconto: NÃO chute. Encaminhe para o catálogo (lá está a tabela atualizada) ou diga "Só um momentinho que já te passo" se for caso que precisa de humano.
+5. SEMPRE combine a resposta de preço com um convite para olhar o catálogo (o catálogo é a tabela oficial e mostra cores/times disponíveis).
+6. Para itens fora de camisa (calção, agasalho, conjunto), NÃO usar esse piso — encaminhe para o catálogo.
+
+Exemplo bom (cliente: "Quanto tá a camisa do Brasil torcedor?"):
+"A camisa fica a partir de R$ 50,00 na linha nacional e R$ 60,00 na tailandesa 😊
+Olha o nosso catálogo: <link>
+Lá você consegue ver as cores e modelos disponíveis."
+
+Exemplo ruim (não fazer):
+"A camisa do Brasil torcedor custa R$ 60,00." — chuta valor único, ignora que existem duas linhas com preços diferentes.`;
+
 /**
  * INTENÇÃO DE CATÁLOGO — anexado ao prompt e usado por heurística de runtime.
  * O cliente raramente pede "catálogo" com essa palavra; quase sempre usa variações como

@@ -15,6 +15,7 @@ import {
   PRINTS_ORDER_CONTEXT_BLOCK,
   CORDIALITY_AND_KINDNESS_BLOCK,
   CATALOG_INTENT_BLOCK,
+  PRICING_BASELINE_BLOCK,
 } from "../../shared/waAiDefaultStrings";
 
 export {
@@ -28,6 +29,7 @@ export {
   PRINTS_ORDER_CONTEXT_BLOCK,
   CORDIALITY_AND_KINDNESS_BLOCK,
   CATALOG_INTENT_BLOCK,
+  PRICING_BASELINE_BLOCK,
 } from "../../shared/waAiDefaultStrings";
 
 function rowVal(row: Record<string, unknown> | null | undefined, camelKey: string): unknown {
@@ -158,6 +160,7 @@ REGRAS GERAIS:
   }
 
   prompt += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
+  prompt += `\n\n${PRICING_BASELINE_BLOCK}`;
   prompt += `\n\n${CATALOG_INTENT_BLOCK}`;
   prompt += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
   prompt += `\n\n${PRINTS_ORDER_CONTEXT_BLOCK}`;

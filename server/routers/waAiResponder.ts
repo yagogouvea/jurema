@@ -25,6 +25,7 @@ import {
   PRINTS_ORDER_CONTEXT_BLOCK,
   CORDIALITY_AND_KINDNESS_BLOCK,
   CATALOG_INTENT_BLOCK,
+  PRICING_BASELINE_BLOCK,
   detectCatalogIntent,
   detectEscalationIntent,
   ESCALATION_SOFT_PHRASE,
@@ -42,6 +43,7 @@ const QTY_RULES_MARKER = "MULTILINHA E QUANTIDADES NO PEDIDO";
 const PRINTS_CONTEXT_MARKER = "PRINTS, IMAGENS E CONTEXTO DO PEDIDO";
 const CORDIALITY_MARKER = "TOM CORDIAL E GENTIL";
 const CATALOG_MARKER = "ENVIO DO CATÁLOGO";
+const PRICING_MARKER = "PREÇOS BASE DAS CAMISAS";
 
 /** Frases de escalação aceitas — qualquer uma na resposta sinaliza que humano deve assumir. */
 function isEscalationResponse(content: string): boolean {
@@ -140,6 +142,9 @@ REGRAS:
   }
   if (!p.includes(CORDIALITY_MARKER)) {
     p += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
+  }
+  if (!p.includes(PRICING_MARKER)) {
+    p += `\n\n${PRICING_BASELINE_BLOCK}`;
   }
   if (!p.includes(CATALOG_MARKER)) {
     p += `\n\n${CATALOG_INTENT_BLOCK}`;
@@ -347,6 +352,9 @@ export async function generateAiResponse(
       // Garantia defensiva (caso buildSystemPrompt mude no futuro).
       if (!systemPrompt.includes(CORDIALITY_MARKER)) {
         systemPrompt += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
+      }
+      if (!systemPrompt.includes(PRICING_MARKER)) {
+        systemPrompt += `\n\n${PRICING_BASELINE_BLOCK}`;
       }
       if (!systemPrompt.includes(CATALOG_MARKER)) {
         systemPrompt += `\n\n${CATALOG_INTENT_BLOCK}`;
