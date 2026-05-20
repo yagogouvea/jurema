@@ -705,7 +705,15 @@ export default function PdvCheckout({
                   type="text"
                   value={newServiceDescricao}
                   onChange={(e) => setNewServiceDescricao(e.target.value)}
-                  placeholder="Descrição (opcional)"
+                  placeholder={
+                    newServiceTipo === "CARRETO"
+                      ? "Trecho ou observação (ex: Cantagalo, urgente, taxa extra...)"
+                      : newServiceTipo === "CAIXINHA"
+                        ? "Observação (opcional)"
+                        : newServiceTipo === "OUTRO"
+                          ? "Descrição do serviço *"
+                          : "Observação (opcional)"
+                  }
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-3 md:py-3.5 text-white text-sm md:text-base focus:outline-none focus:border-green-600"
                 />
                 {newServiceTipo === "CORREIO" && (() => {

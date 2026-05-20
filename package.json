@@ -18,7 +18,8 @@
     "wa:apply-media-key-column": "node --import dotenv/config scripts/apply-wa-media-storage-key-column.mjs",
     "wa:db-media-setup": "node --import dotenv/config scripts/apply-wa-media-storage-key-column.mjs && node --import dotenv/config scripts/backfill-wa-media-storage-key.mjs",
     "wa:media-stats": "node --import dotenv/config scripts/wa-messages-media-stats.mjs",
-    "wa:reset-conversation": "node --import dotenv/config scripts/reset-wa-conversation-by-name.mjs"
+    "wa:reset-conversation": "node --import dotenv/config scripts/reset-wa-conversation-by-name.mjs",
+    "diag:carreto": "node --import dotenv/config scripts/diag-carreto-descricao.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

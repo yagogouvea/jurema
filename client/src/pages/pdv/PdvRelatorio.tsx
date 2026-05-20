@@ -807,7 +807,9 @@ function ServicoSection({
                 <td style={tdStyle}>{it.clienteTelefone || "—"}</td>
                 <td style={tdStyleCenter}>{it.canal || "—"}</td>
                 {showCep && <td style={tdStyleCenter}>{it.cep || "—"}</td>}
-                <td style={tdStyle}>{it.descricao || "—"}</td>
+                <td style={tdStyle}>
+                  {it.descricao && it.descricao.trim() ? it.descricao : tipo}
+                </td>
                 <td style={tdStyleCenter}>
                   {it.somenteServico ? (
                     <span style={{ color: "#7c2d12", background: "#fed7aa", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600 }}>
