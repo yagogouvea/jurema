@@ -6,6 +6,10 @@
 
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
+import {
+  detectBusinessContextRegression,
+  looksLikePricingOnlySnippet,
+} from "./waAiTrainingGuard";
 import type { WaExtraLink } from "./waAiTrainingDefaults";
 
 /** Patches: string vazio = sem alteração nesse campo. escalateKeywords / extraLinks: JSON ou "__KEEP__". */
@@ -27,6 +31,7 @@ const REFINE_SCHEMA = {
       patch_aiName: { type: "string" },
       patch_personality: { type: "string" },
       patch_businessContext: { type: "string" },
+      patch_pricingRules: { type: "string" },
       patch_greetingMessage: { type: "string" },
       patch_systemPrompt: { type: "string" },
       patch_catalogLink: { type: "string" },
@@ -45,6 +50,7 @@ const REFINE_SCHEMA = {
       "patch_aiName",
       "patch_personality",
       "patch_businessContext",
+      "patch_pricingRules",
       "patch_greetingMessage",
       "patch_systemPrompt",
       "patch_catalogLink",
@@ -75,6 +81,7 @@ export const refineTrainingInputSchema = z.object({
     aiName: z.string(),
     personality: z.string(),
     businessContext: z.string(),
+    pricingRules: z.string().optional().default(""),
     greetingMessage: z.string(),
     systemPrompt: z.string(),
     catalogLink: z.string().optional(),
@@ -92,6 +99,7 @@ export type RefineTrainingUpdates = {
   aiName: string | null;
   personality: string | null;
   businessContext: string | null;
+  pricingRules: string | null;
   greetingMessage: string | null;
   systemPrompt: string | null;
   catalogLink: string | null;
@@ -160,6 +168,7 @@ function hasNonEmptyPatch(parsed: Record<string, string>): boolean {
     "patch_aiName",
     "patch_personality",
     "patch_businessContext",
+    "patch_pricingRules",
     "patch_greetingMessage",
     "patch_systemPrompt",
     "patch_catalogLink",
@@ -199,6 +208,7 @@ function patchesToUpdates(parsed: Record<string, string>): RefineTrainingUpdates
     aiName: pickStr(parsed.patch_aiName),
     personality: pickStr(parsed.patch_personality),
     businessContext: pickStr(parsed.patch_businessContext),
+    pricingRules: pickStr(parsed.patch_pricingRules),
     greetingMessage: pickStr(parsed.patch_greetingMessage),
     systemPrompt: pickStr(parsed.patch_systemPrompt),
     catalogLink: pickStr(parsed.patch_catalogLink),
@@ -221,6 +231,7 @@ export async function refineAiTrainingFromNaturalLanguage(
     aiName: clip(current.aiName, 120),
     personality: clip(current.personality, 12_000),
     businessContext: clip(current.businessContext, 24_000),
+    pricingRules: clip(current.pricingRules ?? "", 6_000),
     greetingMessage: clip(current.greetingMessage, 500),
     systemPrompt: clip(current.systemPrompt, 24_000),
     catalogLink: current.catalogLink ?? "",
@@ -244,7 +255,10 @@ FORMATO DA RESPOSTA (JSON obrigatório):
 Campos de texto (patch):
 - patch_aiName: nome da atendente (curto).
 - patch_personality: tom de voz e comportamento (substitui o bloco inteiro se preenchido).
-- patch_businessContext: base de conhecimento / manual da loja.
+- patch_businessContext: base de conhecimento / manual da loja (endereços, horários, pagamento, frete, trocas, catálogo interno). NUNCA substitua este campo inteiro só para mudar preço — isso apaga endereço e loja física.
+- patch_pricingRules: REGRAS DE PREÇO (texto livre, autoritativo). Use SEMPRE este campo — e não o businessContext — quando o lojista pedir mudança de preço (varejo, atacado, mínimo, "a partir de", linha nacional/tailandesa, condição especial). Escreva em formato de lista clara, por linha, ex.:
+   "- Camisa NACIONAL: varejo a partir de R$ 50,00; atacado (mín. 10 peças) a partir de R$ 20,00\\n- Camisa TAILANDESA: varejo a partir de R$ 60,00"
+  Esse texto SUBSTITUI completamente o bloco default de preços que vai pro modelo. Quando vazio, o sistema usa o default. Se o lojista informar só uma linha, preserve as outras na nova versão (não apague o que já existia em pricingRules atual).
 - patch_greetingMessage: mensagem de boas-vindas.
 - patch_systemPrompt: texto completo enviado ao modelo (edição avançada). Só altere se fizer sentido com o pedido.
 - patch_catalogLink, patch_groupLink, patch_instagramLink: URLs públicas (uma por campo).
@@ -307,7 +321,28 @@ Se o pedido for ambíguo ("melhore tudo") sem detalhe, outcome=reject, rejectCod
     };
   }
 
-  const updates = patchesToUpdates(parsed);
+  let updates = patchesToUpdates(parsed);
+
+  // Evita que refinamento de preço apague endereço/loja física da base completa.
+  if (updates.businessContext && current.businessContext) {
+    const regression = detectBusinessContextRegression(
+      current.businessContext,
+      updates.businessContext
+    );
+    if (regression && looksLikePricingOnlySnippet(updates.businessContext)) {
+      updates = {
+        ...updates,
+        pricingRules: updates.pricingRules ?? updates.businessContext,
+        businessContext: null,
+      };
+    } else if (regression) {
+      return {
+        outcome: "reject",
+        messageForUser: `${regression} Reformule o pedido (ex.: "atualize só as regras de preço") ou edite manualmente no formulário.`,
+        rejectCode: "unclear",
+      };
+    }
+  }
 
   if (!hasNonEmptyPatch(parsed)) {
     return {

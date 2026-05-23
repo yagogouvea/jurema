@@ -109,22 +109,30 @@ async function fetchRelatorioData(db: Connection, startDate: string, endDate: st
       [startDate, endDate]
     );
 
-    // Lista detalhada de pedidos Sofia (com fotoUrl) para galeria do relatório.
+    // Lista detalhada de pedidos Sofia — fotoUrl ou blob em pdv_order_photos.
     const [pedidoRows] = await db.execute(
       `SELECT
          o.pedidoId,
          o.sellerName,
          o.status,
          o.clienteNome,
-         o.fotoUrl,
+         CASE
+           WHEN p.pedidoId IS NOT NULL AND COALESCE(p.sizeBytes, 0) >= 256
+             AND o.fotoUrl IS NOT NULL AND TRIM(o.fotoUrl) <> '' THEN o.fotoUrl
+           WHEN p.pedidoId IS NOT NULL AND COALESCE(p.sizeBytes, 0) >= 256
+             THEN CONCAT('/api/pdv/sofia/foto/', o.pedidoId)
+           ELSE NULL
+         END AS fotoUrl,
+         COALESCE(p.sizeBytes, 0) AS photoSizeBytes,
          ${orderDayDateExpr("o")} AS dia,
          COALESCE(SUM(oi.quantidade), 0) AS pecasSofia,
          COALESCE(SUM(oi.totalItem), 0) AS valorSofia
        FROM pdv_orders o
        JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId AND oi.isSofia = 1
+       LEFT JOIN pdv_order_photos p ON p.pedidoId = o.pedidoId
        WHERE o.status != 'CANCELADO'
          AND ${orderDayDateExpr("o")} >= ? AND ${orderDayDateExpr("o")} <= ?
-       GROUP BY o.id, o.pedidoId, o.sellerName, o.status, o.clienteNome, o.fotoUrl
+       GROUP BY o.id, o.pedidoId, o.sellerName, o.status, o.clienteNome, o.fotoUrl, p.pedidoId, p.sizeBytes
        ORDER BY o.createdAt ASC`,
       [startDate, endDate]
     );
@@ -146,8 +154,12 @@ async function fetchRelatorioData(db: Connection, startDate: string, endDate: st
       pecasSofia: parseInt(r.pecasSofia) || 0,
       valorSofia: parseFloat(r.valorSofia) || 0,
       fotoUrl: r.fotoUrl ? String(r.fotoUrl) : null,
+      photoSizeBytes: parseInt(r.photoSizeBytes) || 0,
+      fotoInvalida:
+        (parseInt(r.photoSizeBytes) || 0) > 0 && (parseInt(r.photoSizeBytes) || 0) < 256,
     }));
     const totalComFoto = pedidos.filter((p) => !!p.fotoUrl).length;
+    const totalFotoInvalida = pedidos.filter((p) => p.fotoInvalida).length;
 
     result.sofia = {
       comissaoLoja: comissaoLojaPadrao,
@@ -171,7 +183,8 @@ async function fetchRelatorioData(db: Connection, startDate: string, endDate: st
       }),
       pedidos,
       totalComFoto,
-      totalSemFoto: pedidos.length - totalComFoto,
+      totalSemFoto: pedidos.length - totalComFoto - totalFotoInvalida,
+      totalFotoInvalida,
     };
   }
 

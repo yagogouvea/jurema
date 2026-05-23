@@ -209,21 +209,27 @@ export default function PdvCheckout({
   const previewMaquininha = !isNaN(previewVal) ? previewVal + previewTaxa : 0;
 
   const createOrderMutation = trpc.pdvOrders.create.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       void utils.pdvDashboard.summary.invalidate();
       void utils.pdvDashboard.getMyProgress.invalidate();
       void utils.pdvDashboard.getMyHistory.invalidate();
       void utils.pdvDashboard.sellerPanel.invalidate();
       void utils.pdvComissoes.ranking.invalidate();
       void utils.pdvOrders.list.invalidate();
-      // Se há imagem Sofia, fazer upload após criar o pedido
       if (hasSofiaItems && sofiaImageBase64 && data?.pedidoId) {
         setUploadingSofiaImage(true);
-        uploadFotoCheckoutMutation.mutate({
-          pedidoId: data.pedidoId,
-          base64: sofiaImageBase64,
-          mimeType: sofiaImageMimeType,
-        });
+        try {
+          await uploadFotoCheckoutMutation.mutateAsync({
+            pedidoId: data.pedidoId,
+            base64: sofiaImageBase64,
+            mimeType: sofiaImageMimeType,
+          });
+        } catch {
+          // toast no onError da mutation; não fecha o checkout para o vendedor tentar de novo
+          return;
+        } finally {
+          setUploadingSofiaImage(false);
+        }
       }
       onSuccess();
     },

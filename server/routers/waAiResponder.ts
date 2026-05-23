@@ -92,6 +92,7 @@ type AiCfgRow = {
   systemPrompt: string | null;
   personality: string | null;
   businessContext: string | null;
+  pricingRules: string | null;
   catalogLink: string | null;
   groupLink: string | null;
   instagramLink: string | null;
@@ -144,7 +145,12 @@ REGRAS:
     p += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
   }
   if (!p.includes(PRICING_MARKER)) {
-    p += `\n\n${PRICING_BASELINE_BLOCK}`;
+    const txt = (cfg.pricingRules ?? "").trim();
+    if (txt) {
+      p += `\n\n===== PREÇOS BASE DAS CAMISAS (obrigatório) =====\n${txt}`;
+    } else {
+      p += `\n\n${PRICING_BASELINE_BLOCK}`;
+    }
   }
   if (!p.includes(CATALOG_MARKER)) {
     p += `\n\n${CATALOG_INTENT_BLOCK}`;
@@ -187,7 +193,7 @@ export async function generateAiResponse(
   try {
     // 1+2+3. Buscar config da IA da instância e dados da conversa
     const [cfgRows] = await db.execute<any[]>(
-      `SELECT enabled, aiName, systemPrompt, personality, businessContext,
+      `SELECT enabled, aiName, systemPrompt, personality, businessContext, pricingRules,
               catalogLink, groupLink, instagramLink, extraLinks,
               awayEnabled, awayStart, awayEnd, awaySchedule,
               maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords
@@ -329,13 +335,16 @@ export async function generateAiResponse(
       // Assim qualquer melhoria nos blocos reflete IMEDIATAMENTE — sem precisar
       // resalvar config. O `cfg.systemPrompt` salvo no banco vira só fallback
       // defensivo se a regeneração falhar.
-      const { buildSystemPrompt } = await import("./waAiTrainingDefaults");
+      const { buildSystemPrompt, buildPricingBaselineBlock: buildPricingBlockLocal } = await import(
+        "./waAiTrainingDefaults"
+      );
       let systemPrompt: string;
       try {
         systemPrompt = buildSystemPrompt({
           aiName: cfg.aiName ?? undefined,
           personality: cfg.personality ?? undefined,
           businessContext: cfg.businessContext ?? undefined,
+          pricingRules: cfg.pricingRules ?? undefined,
           catalogLink: cfg.catalogLink ?? undefined,
           groupLink: cfg.groupLink ?? undefined,
           instagramLink: cfg.instagramLink ?? undefined,
@@ -354,7 +363,7 @@ export async function generateAiResponse(
         systemPrompt += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
       }
       if (!systemPrompt.includes(PRICING_MARKER)) {
-        systemPrompt += `\n\n${PRICING_BASELINE_BLOCK}`;
+        systemPrompt += `\n\n${buildPricingBlockLocal(cfg.pricingRules ?? null)}`;
       }
       if (!systemPrompt.includes(CATALOG_MARKER)) {
         systemPrompt += `\n\n${CATALOG_INTENT_BLOCK}`;

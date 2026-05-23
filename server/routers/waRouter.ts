@@ -11,6 +11,7 @@ import mysql from "mysql2/promise";
 import type { Request } from "express";
 import { verifyPdvToken } from "./pdvAuth";
 import { buildSystemPrompt, mergeDbRowWithDefaults } from "./waAiTrainingDefaults";
+import { detectBusinessContextRegression } from "./waAiTrainingGuard";
 import { refineAiTrainingFromNaturalLanguage, refineTrainingInputSchema } from "./waAiTrainingRefine";
 import { manusStoragePublicPath, resolveStoredMediaToViewUrl } from "../waMediaResolve";
 
@@ -1282,6 +1283,8 @@ export const waRouter = router({
       aiName: z.string().optional(),
       personality: z.string().optional(),
       businessContext: z.string().optional(),
+      /** Regras de preço editáveis (texto livre). Quando preenchido substitui o bloco default. */
+      pricingRules: z.string().optional(),
       greetingMessage: z.string().optional(),
       awayMessage: z.string().optional(),
       awayEnabled: z.boolean().optional(),
@@ -1315,6 +1318,18 @@ export const waRouter = router({
           ...dataRaw
         } = input;
 
+        if (input.businessContext !== undefined) {
+          const [prevRows] = (await db.execute(
+            "SELECT businessContext FROM wa_ai_config WHERE instanceId=? LIMIT 1",
+            [instanceId]
+          )) as any;
+          const prevBc = String(prevRows[0]?.businessContext ?? "");
+          const regression = detectBusinessContextRegression(prevBc, String(input.businessContext ?? ""));
+          if (regression) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: regression });
+          }
+        }
+
         const systemPromptFinal =
           systemPromptInput !== undefined && String(systemPromptInput).trim().length > 0
             ? String(systemPromptInput).trim()
@@ -1322,6 +1337,7 @@ export const waRouter = router({
                 aiName: input.aiName,
                 personality: input.personality,
                 businessContext: input.businessContext,
+                pricingRules: input.pricingRules,
                 catalogLink: input.catalogLink,
                 groupLink: input.groupLink,
                 instagramLink: input.instagramLink,
@@ -1353,13 +1369,14 @@ export const waRouter = router({
         } else {
           const d = data as any;
           await db.execute(
-            "INSERT INTO wa_ai_config (instanceId, enabled, aiName, personality, businessContext, greetingMessage, awayMessage, awayEnabled, awayStart, awayEnd, awaySchedule, catalogLink, groupLink, instagramLink, extraLinks, maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords, systemPrompt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO wa_ai_config (instanceId, enabled, aiName, personality, businessContext, pricingRules, greetingMessage, awayMessage, awayEnabled, awayStart, awayEnd, awaySchedule, catalogLink, groupLink, instagramLink, extraLinks, maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords, systemPrompt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
               instanceId,
               d.enabled ?? false,
               d.aiName ?? "Ju",
               d.personality ?? null,
               d.businessContext ?? null,
+              d.pricingRules ?? null,
               d.greetingMessage ?? null,
               d.awayMessage ?? null,
               d.awayEnabled ?? false,

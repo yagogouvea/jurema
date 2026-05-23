@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createPdvMysqlConnection } from "./pdvMysql";
+import { isValidSofiaPhotoBuffer } from "./pdvSofiaPhotoValidate";
 
 /**
  * Rota pública GET /api/pdv/sofia/foto/:pedidoId
@@ -39,6 +40,10 @@ export function registerPdvSofiaPhotoRoute(app: Express): void {
       }
       const mimeType = String(row.mimeType || "image/jpeg");
       const buf: Buffer = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
+      if (!isValidSofiaPhotoBuffer(buf)) {
+        res.status(404).type("text/plain").send("Foto corrompida ou inválida — reenvie pelo Painel Sofia");
+        return;
+      }
       res.setHeader("Content-Type", mimeType);
       res.setHeader("Content-Length", String(buf.length));
       // Cache imutável: mudanças vêm pela query string `?v=<timestamp>` no fotoUrl.

@@ -174,14 +174,14 @@ export const ORDER_QUANTITY_RULES_BLOCK = `===== MULTILINHA E QUANTIDADES NO PED
  * PREÇOS BASE — quando o cliente pergunta "Quanto custa a camisa?" ou variações,
  * a IA usa esta tabela em vez de chutar valor único.
  *
- * Regra da loja (Jurema Sport):
- *  - Camisa NACIONAL: a partir de R$ 50,00 (varejo)
- *  - Camisa TAILANDESA: a partir de R$ 60,00 (varejo)
+ * IMPORTANTE: os valores aqui são DEFAULT — o cliente pode sobrescrever no painel
+ * "Treinamento IA" → campo "Regras de preço (pricingRules)". Quando o campo está
+ * preenchido, ele substitui completamente o bloco abaixo. Quando vazio,
+ * o bloco default abaixo é injetado.
  *
- * Atacado, peças específicas e promoções: NUNCA chutar — sempre pedir
- * pra olhar o catálogo (o catálogo é fonte oficial de preço atualizado).
+ * Use `buildPricingBaselineBlock(customRules)` para obter o bloco final.
  */
-export const PRICING_BASELINE_BLOCK = `===== PREÇOS BASE DAS CAMISAS (obrigatório) =====
+export const DEFAULT_PRICING_BASELINE_BLOCK = `===== PREÇOS BASE DAS CAMISAS (obrigatório) =====
 Quando o cliente perguntar "Quanto custa?", "Qual o preço?", "Qual valor da camisa?", "Quanto tá a camisa do <time>?" ou variações similares — SEM especificar a linha (nacional / tailandesa / torcedor / jogador) — a resposta padrão SEMPRE deve ser por linha:
 
 - Camisa NACIONAL: a partir de R$ 50,00 (varejo)
@@ -202,6 +202,45 @@ Lá você consegue ver as cores e modelos disponíveis."
 
 Exemplo ruim (não fazer):
 "A camisa do Brasil torcedor custa R$ 60,00." — chuta valor único, ignora que existem duas linhas com preços diferentes.`;
+
+/**
+ * Alias mantido por compatibilidade com imports antigos. Equivale ao default.
+ * @deprecated use `buildPricingBaselineBlock` (lê config editável da loja).
+ */
+export const PRICING_BASELINE_BLOCK = DEFAULT_PRICING_BASELINE_BLOCK;
+
+/**
+ * Marcador estável usado em runtime (waAiResponder) para detectar se o bloco já
+ * está no system prompt — evita injeção duplicada. Tanto o default quanto qualquer
+ * versão customizada precisam carregar este marcador.
+ */
+export const PRICING_BASELINE_MARKER = "===== PREÇOS BASE DAS CAMISAS";
+
+/**
+ * Constrói o bloco final de preços a ser injetado no system prompt.
+ *
+ * Estratégia:
+ *  - Se `customRules` (do campo `pricingRules` em `wa_ai_config`) está preenchido,
+ *    envolvemos o texto do cliente em um cabeçalho com marcador estável e o
+ *    tratamos como AUTORITATIVO — substitui o default.
+ *  - Se vazio/null, devolvemos o bloco default.
+ *
+ * Isso permite à dona da loja mudar preços via painel sem alterar código.
+ */
+export function buildPricingBaselineBlock(customRules?: string | null): string {
+  const txt = typeof customRules === "string" ? customRules.trim() : "";
+  if (!txt) return DEFAULT_PRICING_BASELINE_BLOCK;
+  if (txt.includes(PRICING_BASELINE_MARKER)) return txt;
+  return `===== PREÇOS BASE DAS CAMISAS (obrigatório) =====
+Estas são as regras OFICIAIS de preço definidas pela loja. NUNCA contradiga ou substitua por valores antigos. Em caso de dúvida, prefira o catálogo (tabela atualizada).
+
+${txt}
+
+Lembretes gerais:
+- Sempre fale "a partir de" quando for piso (não cravado).
+- Para atacado, condição especial, desconto ou item fora do escopo acima, encaminhe para o catálogo.
+- Itens fora de camisa (calção, agasalho, conjunto) → catálogo.`;
+}
 
 /**
  * INTENÇÃO DE CATÁLOGO — anexado ao prompt e usado por heurística de runtime.

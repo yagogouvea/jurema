@@ -596,6 +596,8 @@ export default function PdvWhatsAppConfig() {
     aiName: "Ju",
     personality: "",
     businessContext: "",
+    /** Regras de preço editáveis (texto livre). Vazio = usa default do código. */
+    pricingRules: "",
     greetingMessage: "",
     systemPrompt: "",
     catalogLink: "",
@@ -695,6 +697,7 @@ export default function PdvWhatsAppConfig() {
         aiName: DEFAULT_AI_NAME,
         personality: DEFAULT_PERSONALITY,
         businessContext: DEFAULT_BUSINESS_CONTEXT,
+        pricingRules: "",
         greetingMessage: DEFAULT_GREETING_MESSAGE,
         systemPrompt: "",
         catalogLink: "",
@@ -730,6 +733,10 @@ export default function PdvWhatsAppConfig() {
       aiName: pickStr(cfg.aiName, d?.aiName, DEFAULT_AI_NAME),
       personality: pickStr(cfg.personality, d?.personality, DEFAULT_PERSONALITY),
       businessContext: pickStr(cfg.businessContext, d?.businessContext, DEFAULT_BUSINESS_CONTEXT),
+      pricingRules:
+        typeof (cfg as { pricingRules?: unknown }).pricingRules === "string"
+          ? String((cfg as { pricingRules?: unknown }).pricingRules)
+          : "",
       greetingMessage: pickStr(cfg.greetingMessage, d?.greetingMessage, DEFAULT_GREETING_MESSAGE),
       systemPrompt: cfg.systemPrompt,
       catalogLink: cfg.catalogLink,
@@ -885,6 +892,10 @@ export default function PdvWhatsAppConfig() {
       aiName: d.aiName,
       personality: d.personality,
       businessContext: d.businessContext,
+      pricingRules:
+        typeof (d as { pricingRules?: unknown }).pricingRules === "string"
+          ? String((d as { pricingRules?: unknown }).pricingRules)
+          : "",
       greetingMessage: d.greetingMessage,
       systemPrompt: d.systemPrompt,
       catalogLink: d.catalogLink,
@@ -930,6 +941,7 @@ export default function PdvWhatsAppConfig() {
     aiName?: string | null;
     personality?: string | null;
     businessContext?: string | null;
+    pricingRules?: string | null;
     greetingMessage?: string | null;
     systemPrompt?: string | null;
     catalogLink?: string | null;
@@ -961,6 +973,7 @@ export default function PdvWhatsAppConfig() {
       aiName: pick(u.aiName ?? undefined, base.aiName),
       personality: pick(u.personality ?? undefined, base.personality),
       businessContext: pick(u.businessContext ?? undefined, base.businessContext),
+      pricingRules: pick(u.pricingRules ?? undefined, base.pricingRules),
       greetingMessage: pick(u.greetingMessage ?? undefined, base.greetingMessage),
       systemPrompt: pick(u.systemPrompt ?? undefined, base.systemPrompt),
       catalogLink: pick(u.catalogLink ?? undefined, base.catalogLink),
@@ -982,6 +995,7 @@ export default function PdvWhatsAppConfig() {
     if (u.aiName != null && String(u.aiName).trim()) out.push("nome da atendente");
     if (u.personality != null && String(u.personality).trim()) out.push("comportamento");
     if (u.businessContext != null && String(u.businessContext).trim()) out.push("base de conhecimento");
+    if (u.pricingRules != null && String(u.pricingRules).trim()) out.push("regras de preço");
     if (u.greetingMessage != null && String(u.greetingMessage).trim()) out.push("saudação");
     if (u.systemPrompt != null && String(u.systemPrompt).trim()) out.push("texto completo (system)");
     if (u.catalogLink != null && String(u.catalogLink).trim()) out.push("link catálogo");
@@ -1006,6 +1020,7 @@ export default function PdvWhatsAppConfig() {
         aiName: aiForm.aiName,
         personality: aiForm.personality,
         businessContext: aiForm.businessContext,
+        pricingRules: aiForm.pricingRules,
         greetingMessage: aiForm.greetingMessage,
         systemPrompt: aiForm.systemPrompt,
         catalogLink: aiForm.catalogLink,
@@ -1696,6 +1711,36 @@ export default function PdvWhatsAppConfig() {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* Regras de Preço (editáveis) */}
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-3">
+                <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-amber-400" /> Regras de Preço (camisas)
+                </h3>
+                <div className="bg-amber-950/30 border border-amber-900/40 rounded-lg p-3 text-xs text-amber-200 leading-relaxed">
+                  Este campo é <strong>autoritativo</strong> sobre preços. Quando preenchido, substitui o bloco
+                  padrão de preços no system prompt da IA. Use uma linha por categoria. Exemplos:
+                  <pre className="mt-2 whitespace-pre-wrap bg-black/30 rounded p-2 text-amber-100/90 text-[11px]">{`- Camisa NACIONAL: varejo a partir de R$ 50,00; atacado (mín. 10 peças) a partir de R$ 20,00
+- Camisa TAILANDESA: varejo a partir de R$ 60,00; atacado a partir de R$ 35,00
+- Para condição especial, sempre encaminhar ao catálogo.`}</pre>
+                  Se deixar VAZIO, o sistema usa o bloco padrão atual (Nacional R$ 50, Tailandesa R$ 60 — varejo).
+                </div>
+                <Textarea
+                  value={aiForm.pricingRules}
+                  onChange={(e) => setAiForm((f) => ({ ...f, pricingRules: e.target.value }))}
+                  placeholder="Ex.: - Camisa NACIONAL: varejo a partir de R$ 50,00; atacado a partir de R$ 20,00..."
+                  className="bg-gray-800 border-gray-700 text-white text-sm min-h-[140px] leading-relaxed font-mono text-xs"
+                />
+                {aiForm.pricingRules.trim() ? (
+                  <p className="text-emerald-400 text-xs">
+                    ✓ Regras de preço personalizadas ativas — vão substituir o bloco default na próxima resposta da IA.
+                  </p>
+                ) : (
+                  <p className="text-gray-500 text-xs">
+                    Bloco padrão em uso (Nacional R$ 50 / Tailandesa R$ 60 — varejo).
+                  </p>
+                )}
               </div>
 
               {/* Links */}

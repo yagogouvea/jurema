@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
 import { createPdvMysqlConnection, orderDayDateExpr, orderDayYmdExpr } from "../pdvMysql";
+import { detectSofiaImageMime, invalidSofiaPhotoMessage } from "../pdvSofiaPhotoValidate";
 
 async function getDb() {
   return createPdvMysqlConnection();
@@ -234,13 +235,12 @@ export const pdvSofiaRouter = router({
       mimeType: z.string().default("image/jpeg"),
     }))
     .mutation(async ({ input, ctx }) => {
-      await requirePdvAdmin(ctx);
+      // Vendedores registram pedidos Sofia no checkout — precisam poder anexar foto.
+      await requirePdvAuth(ctx);
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       try {
-        const allowedMime = new Set(["image/jpeg", "image/png", "image/webp"]);
-        const mimeType = allowedMime.has(input.mimeType) ? input.mimeType : "image/jpeg";
-        const base64Data = input.base64.replace(/^data:[^;]+;base64,/, "");
+        const base64Data = input.base64.replace(/^data:[^;]+;base64,/, "").trim();
         const buffer = Buffer.from(base64Data, "base64");
         const MAX = 5 * 1024 * 1024;
         if (buffer.length === 0 || buffer.length > MAX) {
@@ -250,6 +250,15 @@ export const pdvSofiaRouter = router({
             message: `Imagem inválida (tamanho ${buffer.length} bytes; máx ${MAX}).`,
           });
         }
+        const detectedMime = detectSofiaImageMime(buffer);
+        if (!detectedMime) {
+          await db.end();
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: invalidSofiaPhotoMessage(buffer.length),
+          });
+        }
+        const mimeType = detectedMime;
         // Garante que o pedido existe para evitar fotos órfãs
         const [orderRows] = await db.execute(
           "SELECT pedidoId FROM pdv_orders WHERE pedidoId = ? LIMIT 1",

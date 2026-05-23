@@ -37,6 +37,13 @@ const REQUIRED_COL_DEFS: Array<{ name: string; ddl: string }> = [
   },
 ];
 
+const AI_CONFIG_COL_DEFS: Array<{ name: string; ddl: string }> = [
+  {
+    name: "pricingRules",
+    ddl: "ALTER TABLE `wa_ai_config` ADD COLUMN `pricingRules` TEXT NULL AFTER `businessContext`",
+  },
+];
+
 const PRESETS_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS \`wa_status_presets\` (
   \`id\` INT AUTO_INCREMENT PRIMARY KEY,
@@ -106,6 +113,26 @@ export async function runWaStatusPresetsMigration(): Promise<void> {
         const msg = String(e?.message ?? e ?? "");
         if (/duplicate|already exists/i.test(msg)) continue;
         console.error(`[wa-status-presets migration] Falha ao adicionar ${col.name}:`, e);
+      }
+    }
+
+    // wa_ai_config: novos campos editáveis (pricingRules etc.).
+    const [aiTableRows] = await conn.execute("SHOW TABLES LIKE 'wa_ai_config'");
+    if ((aiTableRows as any[]).length) {
+      const [aiColsRaw] = await conn.execute("SHOW COLUMNS FROM `wa_ai_config`");
+      const aiExisting = new Set(
+        (aiColsRaw as any[]).map((c) => String(c.Field ?? c.field ?? "").toLowerCase())
+      );
+      for (const col of AI_CONFIG_COL_DEFS) {
+        if (aiExisting.has(col.name.toLowerCase())) continue;
+        try {
+          await conn.execute(col.ddl);
+          console.log(`[wa-status-presets migration] Coluna ${col.name} criada em wa_ai_config.`);
+        } catch (e: any) {
+          const msg = String(e?.message ?? e ?? "");
+          if (/duplicate|already exists/i.test(msg)) continue;
+          console.error(`[wa-status-presets migration] Falha ao adicionar ${col.name} em wa_ai_config:`, e);
+        }
       }
     }
 

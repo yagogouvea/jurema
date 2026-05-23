@@ -15,7 +15,8 @@ import {
   PRINTS_ORDER_CONTEXT_BLOCK,
   CORDIALITY_AND_KINDNESS_BLOCK,
   CATALOG_INTENT_BLOCK,
-  PRICING_BASELINE_BLOCK,
+  DEFAULT_PRICING_BASELINE_BLOCK,
+  buildPricingBaselineBlock,
 } from "../../shared/waAiDefaultStrings";
 
 export {
@@ -29,8 +30,12 @@ export {
   PRINTS_ORDER_CONTEXT_BLOCK,
   CORDIALITY_AND_KINDNESS_BLOCK,
   CATALOG_INTENT_BLOCK,
-  PRICING_BASELINE_BLOCK,
+  DEFAULT_PRICING_BASELINE_BLOCK,
+  buildPricingBaselineBlock,
 } from "../../shared/waAiDefaultStrings";
+
+/** Retro-compat: alguns imports antigos ainda usam `PRICING_BASELINE_BLOCK`. */
+export { DEFAULT_PRICING_BASELINE_BLOCK as PRICING_BASELINE_BLOCK } from "../../shared/waAiDefaultStrings";
 
 function rowVal(row: Record<string, unknown> | null | undefined, camelKey: string): unknown {
   if (!row) return undefined;
@@ -110,6 +115,8 @@ export function buildSystemPrompt(config: {
   aiName?: string;
   personality?: string;
   businessContext?: string;
+  /** Texto editável que substitui o `DEFAULT_PRICING_BASELINE_BLOCK`. Quando vazio cai no default. */
+  pricingRules?: string | null;
   catalogLink?: string;
   groupLink?: string;
   instagramLink?: string;
@@ -119,6 +126,7 @@ export function buildSystemPrompt(config: {
   const name = nz(config.aiName) ?? DEFAULT_AI_NAME;
   const personality = nz(config.personality) ?? DEFAULT_PERSONALITY;
   const business = nz(config.businessContext) ?? DEFAULT_BUSINESS_CONTEXT;
+  const pricingBlock = buildPricingBaselineBlock(config.pricingRules);
   const kw = config.escalateKeywords?.length ? config.escalateKeywords : [...DEFAULT_ESCALATE_KEYWORDS];
 
   let prompt = `Você é ${name}, atendente da Jurema Sport no WhatsApp.
@@ -160,7 +168,7 @@ REGRAS GERAIS:
   }
 
   prompt += `\n\n${CORDIALITY_AND_KINDNESS_BLOCK}`;
-  prompt += `\n\n${PRICING_BASELINE_BLOCK}`;
+  prompt += `\n\n${pricingBlock}`;
   prompt += `\n\n${CATALOG_INTENT_BLOCK}`;
   prompt += `\n\n${ORDER_QUANTITY_RULES_BLOCK}`;
   prompt += `\n\n${PRINTS_ORDER_CONTEXT_BLOCK}`;
@@ -176,6 +184,8 @@ export type AiTrainingConfigPayload = {
   aiName: string;
   personality: string;
   businessContext: string;
+  /** Texto livre com regras de preço — quando preenchido, substitui o bloco default no system prompt. */
+  pricingRules: string;
   greetingMessage: string;
   awayMessage: string;
   awayEnabled: boolean;
@@ -207,6 +217,7 @@ export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | und
   const aiName = nz(rowVal(row, "aiName")) ?? DEFAULT_AI_NAME;
   const personality = nz(rowVal(row, "personality")) ?? DEFAULT_PERSONALITY;
   const businessContext = nz(rowVal(row, "businessContext")) ?? DEFAULT_BUSINESS_CONTEXT;
+  const pricingRules = nz(rowVal(row, "pricingRules")) ?? "";
   const greetingMessage = nz(rowVal(row, "greetingMessage")) ?? DEFAULT_GREETING_MESSAGE;
   const awayMessage = nz(rowVal(row, "awayMessage")) ?? DEFAULT_AWAY_MESSAGE;
   const catalogLink = nz(rowVal(row, "catalogLink")) ?? "";
@@ -225,6 +236,7 @@ export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | und
     aiName,
     personality,
     businessContext,
+    pricingRules: pricingRules || undefined,
     catalogLink: catalogLink || undefined,
     groupLink: groupLink || undefined,
     instagramLink: instagramLink || undefined,
@@ -246,6 +258,7 @@ export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | und
     aiName,
     personality,
     businessContext,
+    pricingRules,
     greetingMessage,
     awayMessage,
     awayEnabled: Boolean(rowVal(row, "awayEnabled")),

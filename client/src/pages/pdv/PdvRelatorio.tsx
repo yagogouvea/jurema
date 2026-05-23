@@ -496,7 +496,11 @@ function ReportContent({ data, startDate, endDate, includeSofiaPhotos }: {
           {includeSofiaPhotos && Array.isArray(data.sofia.pedidos) && data.sofia.pedidos.length > 0 && (
             <div style={{ marginTop: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#6b21a8", marginBottom: 8 }}>
-                Comprovantes Sofia ({data.sofia.totalComFoto || 0} com foto · {data.sofia.totalSemFoto || 0} sem foto)
+                Comprovantes Sofia ({data.sofia.totalComFoto || 0} com foto
+                {(data.sofia.totalFotoInvalida || 0) > 0
+                  ? ` · ${data.sofia.totalFotoInvalida} inválida(s)`
+                  : ""}
+                {" · "}{data.sofia.totalSemFoto || 0} sem foto)
               </div>
               <div className="sofia-gallery" style={{
                 display: "grid",
@@ -505,6 +509,7 @@ function ReportContent({ data, startDate, endDate, includeSofiaPhotos }: {
               }}>
                 {data.sofia.pedidos.map((p: any) => {
                   const url = absoluteUrl(p.fotoUrl);
+                  const invalid = !!p.fotoInvalida;
                   return (
                     <div key={p.pedidoId} className="sofia-card" style={{
                       border: "1px solid #e9d5ff",
@@ -513,11 +518,28 @@ function ReportContent({ data, startDate, endDate, includeSofiaPhotos }: {
                       background: "#faf5ff",
                       pageBreakInside: "avoid",
                     }}>
-                      {url ? (
+                      {invalid ? (
+                        <div style={{
+                          width: "100%",
+                          height: 140,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          textAlign: "center",
+                          padding: 8,
+                          borderRadius: 6,
+                          background: "#fee2e2",
+                          color: "#991b1b",
+                          fontSize: 10,
+                          fontWeight: 600,
+                          border: "1px dashed #f87171",
+                        }}>
+                          Foto corrompida — reenvie no Painel Sofia
+                        </div>
+                      ) : url ? (
                         <img
                           src={url}
                           alt={`Pedido ${p.pedidoId}`}
-                          crossOrigin="anonymous"
                           style={{
                             display: "block",
                             width: "100%",
