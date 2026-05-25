@@ -117,6 +117,7 @@ export function buildSystemPrompt(config: {
   businessContext?: string;
   /** Texto editável que substitui o `DEFAULT_PRICING_BASELINE_BLOCK`. Quando vazio cai no default. */
   pricingRules?: string | null;
+  greetingMessage?: string | null;
   catalogLink?: string;
   groupLink?: string;
   instagramLink?: string;
@@ -127,12 +128,16 @@ export function buildSystemPrompt(config: {
   const personality = nz(config.personality) ?? DEFAULT_PERSONALITY;
   const business = nz(config.businessContext) ?? DEFAULT_BUSINESS_CONTEXT;
   const pricingBlock = buildPricingBaselineBlock(config.pricingRules);
+  const greeting = nz(config.greetingMessage) ?? DEFAULT_GREETING_MESSAGE;
   const kw = config.escalateKeywords?.length ? config.escalateKeywords : [...DEFAULT_ESCALATE_KEYWORDS];
 
   let prompt = `Você é ${name}, atendente da Jurema Sport no WhatsApp.
 
 PERSONALIDADE E FORMA DE FALAR:
 ${personality}
+
+SAUDAÇÃO (primeiro contato do dia ou conversa nova — use este texto ou adapte mantendo o mesmo tom e o nome ${name}):
+"${greeting}"
 
 CONHECIMENTO SOBRE A LOJA (use como base; se algo não estiver escrito aqui, não invente — diga "Só um momento."):
 ${business}
@@ -237,6 +242,7 @@ export function mergeDbRowWithDefaults(row: Record<string, unknown> | null | und
     personality,
     businessContext,
     pricingRules: pricingRules || undefined,
+    greetingMessage,
     catalogLink: catalogLink || undefined,
     groupLink: groupLink || undefined,
     instagramLink: instagramLink || undefined,

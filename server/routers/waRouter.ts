@@ -1338,6 +1338,7 @@ export const waRouter = router({
                 personality: input.personality,
                 businessContext: input.businessContext,
                 pricingRules: input.pricingRules,
+                greetingMessage: input.greetingMessage,
                 catalogLink: input.catalogLink,
                 groupLink: input.groupLink,
                 instagramLink: input.instagramLink,

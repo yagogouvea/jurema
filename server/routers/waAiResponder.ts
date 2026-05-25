@@ -93,6 +93,7 @@ type AiCfgRow = {
   personality: string | null;
   businessContext: string | null;
   pricingRules: string | null;
+  greetingMessage: string | null;
   catalogLink: string | null;
   groupLink: string | null;
   instagramLink: string | null;
@@ -193,7 +194,7 @@ export async function generateAiResponse(
   try {
     // 1+2+3. Buscar config da IA da instância e dados da conversa
     const [cfgRows] = await db.execute<any[]>(
-      `SELECT enabled, aiName, systemPrompt, personality, businessContext, pricingRules,
+      `SELECT enabled, aiName, systemPrompt, personality, businessContext, pricingRules, greetingMessage,
               catalogLink, groupLink, instagramLink, extraLinks,
               awayEnabled, awayStart, awayEnd, awaySchedule,
               maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords
@@ -345,6 +346,7 @@ export async function generateAiResponse(
           personality: cfg.personality ?? undefined,
           businessContext: cfg.businessContext ?? undefined,
           pricingRules: cfg.pricingRules ?? undefined,
+          greetingMessage: cfg.greetingMessage ?? undefined,
           catalogLink: cfg.catalogLink ?? undefined,
           groupLink: cfg.groupLink ?? undefined,
           instagramLink: cfg.instagramLink ?? undefined,

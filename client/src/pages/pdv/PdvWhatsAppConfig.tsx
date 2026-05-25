@@ -593,7 +593,7 @@ export default function PdvWhatsAppConfig() {
   // ── Config IA ───────────────────────────────────────────────────────────────
   const [aiForm, setAiForm] = useState({
     enabled: false,
-    aiName: "Ju",
+    aiName: DEFAULT_AI_NAME,
     personality: "",
     businessContext: "",
     /** Regras de preço editáveis (texto livre). Vazio = usa default do código. */
@@ -1641,7 +1641,7 @@ export default function PdvWhatsAppConfig() {
                     <Input
                       value={aiForm.aiName}
                       onChange={e => setAiForm(f => ({ ...f, aiName: e.target.value }))}
-                      placeholder="ex: Ju"
+                      placeholder="ex: Vinícius"
                       className="bg-gray-800 border-gray-700 text-white text-sm"
                     />
                     <p className="text-gray-500 text-xs">O nome so sera revelado se o cliente perguntar diretamente.</p>
@@ -1651,7 +1651,7 @@ export default function PdvWhatsAppConfig() {
                     <Input
                       value={aiForm.greetingMessage}
                       onChange={e => setAiForm(f => ({ ...f, greetingMessage: e.target.value }))}
-                      placeholder="ex: Ola, tudo bem?"
+                      placeholder="Meu nome é Vinícius, estou à disposição para o que precisar."
                       className="bg-gray-800 border-gray-700 text-white text-sm"
                     />
                     <p className="text-gray-500 text-xs">Enviada apenas na primeira mensagem de cada conversa.</p>

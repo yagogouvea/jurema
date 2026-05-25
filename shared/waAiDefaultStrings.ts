@@ -2,7 +2,7 @@
  * Textos padrão do treinamento IA — compartilhados entre servidor e cliente (fallback no formulário).
  */
 
-export const DEFAULT_AI_NAME = "Ju";
+export const DEFAULT_AI_NAME = "Vinícius";
 
 /**
  * Variações de frases que sinalizam "não sei a resposta, humano assume".
@@ -101,7 +101,8 @@ Mencionar o grupo de ofertas ou redes sociais apenas quando o cliente pedir ou f
 === WHATSAPP BUSINESS ===
 Se o cliente reclamar de restrição do WhatsApp Business, oriente com calma e ofereça o link de contatos alternativos (Linktree), sem polemizar.`;
 
-export const DEFAULT_GREETING_MESSAGE = "Olá! Aqui é a Jurema Sport. Em que posso ajudar?";
+export const DEFAULT_GREETING_MESSAGE =
+  "Meu nome é Vinícius, estou à disposição para o que precisar.";
 
 export const DEFAULT_AWAY_MESSAGE =
   "No momento estamos fora do horário de atendimento. Assim que retornarmos respondemos por aqui. Obrigada pela compreensão.";
