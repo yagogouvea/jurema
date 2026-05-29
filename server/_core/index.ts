@@ -97,6 +97,21 @@ async function startServer() {
       res.status(500).json({ ok: false, error: err.message });
     }
   });
+
+  // Diagnóstico do escritor de planilha (PDV → planilha). Mostra se o
+  // service account está presente, se o JSON parseia e se o token é gerado.
+  // Use ?write=1 para também testar a ESCRITA real (grava e limpa a célula R1).
+  // Não expõe a chave privada — apenas client_email/project_id e o status.
+  app.get("/api/diag/sheets-writer", async (req, res) => {
+    try {
+      const { diagnoseSheetsWriter } = await import("../routers/pdvSheetsWriter");
+      const doWrite = String(req.query.write ?? "") === "1";
+      const result = await diagnoseSheetsWriter(doWrite);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err?.message ?? String(err) });
+    }
+  });
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

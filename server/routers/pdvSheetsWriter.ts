@@ -24,15 +24,64 @@ export async function getServiceAccountTokenForSync(): Promise<string | null> {
   return getServiceAccountToken();
 }
 
-async function getServiceAccountToken(): Promise<string | null> {
+/**
+ * Faz o parse do GOOGLE_SERVICE_ACCOUNT_JSON de forma tolerante e normaliza a
+ * chave privada. Cobre os casos comuns de corrupção ao colar a variável em
+ * painéis como o da Railway:
+ *  - JSON envolto em aspas simples/duplas extras
+ *  - private_key com "\n" literais (escapados) em vez de quebras de linha reais
+ *  - private_key com quebras de linha reais (multi-linha) que invalidam o JSON
+ *  - espaços/CR (\r) acidentais no corpo da chave
+ */
+function parseServiceAccount(rawInput: string): { client_email: string; private_key: string; project_id?: string } {
+  let raw = rawInput.trim();
+  // Remove aspas externas acidentais
+  if ((raw.startsWith("'") && raw.endsWith("'")) || (raw.startsWith('"') && raw.endsWith('"'))) {
+    // só remove se não quebrar o JSON (heurística: começa com aspas + {)
+    const inner = raw.slice(1, -1);
+    if (inner.trim().startsWith('{')) raw = inner;
+  }
+
+  let sa: any;
+  try {
+    sa = JSON.parse(raw);
+  } catch {
+    // Tentativa de recuperação: alguns painéis salvam a chave com quebras de
+    // linha REAIS dentro da string JSON (inválido). Escapamos as quebras de
+    // linha que estão dentro de valores entre aspas.
+    const repaired = raw.replace(/("private_key"\s*:\s*")([\s\S]*?)(")/, (_m, p1, body, p3) => {
+      const escaped = body.replace(/\r/g, '').replace(/\n/g, '\\n');
+      return p1 + escaped + p3;
+    });
+    sa = JSON.parse(repaired);
+  }
+
+  let pk: string = sa.private_key || '';
+  // Normaliza: "\n" literais → quebras reais; remove CR
+  pk = pk.replace(/\\r/g, '').replace(/\\n/g, '\n').replace(/\r/g, '');
+  sa.private_key = pk;
+  return sa;
+}
+
+async function getServiceAccountTokenDetailed(): Promise<{ token: string | null; error: string | null; clientEmail: string | null; projectId: string | null }> {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!raw) return null;
+  if (!raw) {
+    return { token: null, error: 'GOOGLE_SERVICE_ACCOUNT_JSON ausente no ambiente', clientEmail: null, projectId: null };
+  }
+
+  let sa: { client_email: string; private_key: string; project_id?: string };
+  try {
+    sa = parseServiceAccount(raw);
+  } catch (e: any) {
+    return { token: null, error: 'Falha ao fazer parse do JSON do service account: ' + (e?.message ?? e), clientEmail: null, projectId: null };
+  }
+
+  if (!sa.client_email || !sa.private_key) {
+    return { token: null, error: 'JSON sem client_email ou private_key', clientEmail: sa.client_email ?? null, projectId: sa.project_id ?? null };
+  }
 
   try {
-    const sa = JSON.parse(raw);
     const now = Math.floor(Date.now() / 1000);
-    
-    // Build JWT header + payload
     const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
     const payload = Buffer.from(JSON.stringify({
       iss: sa.client_email,
@@ -41,18 +90,21 @@ async function getServiceAccountToken(): Promise<string | null> {
       exp: now + 3600,
       iat: now,
     })).toString('base64url');
-    
+
     const signingInput = `${header}.${payload}`;
-    
-    // Sign with private key using Node.js crypto
+
     const { createSign } = await import('crypto');
     const sign = createSign('RSA-SHA256');
     sign.update(signingInput);
-    const signature = sign.sign(sa.private_key, 'base64url');
-    
+    let signature: string;
+    try {
+      signature = sign.sign(sa.private_key, 'base64url');
+    } catch (signErr: any) {
+      return { token: null, error: 'Falha ao assinar JWT (chave privada inválida/corrompida): ' + (signErr?.message ?? signErr), clientEmail: sa.client_email, projectId: sa.project_id ?? null };
+    }
+
     const jwt = `${signingInput}.${signature}`;
-    
-    // Exchange JWT for access token
+
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -61,13 +113,63 @@ async function getServiceAccountToken(): Promise<string | null> {
         assertion: jwt,
       }),
     });
-    
+
     const tokenData = await tokenRes.json() as any;
-    return tokenData.access_token || null;
-  } catch (err) {
-    console.error('[SheetsWriter] Failed to get service account token:', err);
-    return null;
+    if (!tokenData.access_token) {
+      const detail = tokenData.error_description || tokenData.error || JSON.stringify(tokenData);
+      return { token: null, error: 'Google recusou o JWT: ' + detail, clientEmail: sa.client_email, projectId: sa.project_id ?? null };
+    }
+    return { token: tokenData.access_token, error: null, clientEmail: sa.client_email, projectId: sa.project_id ?? null };
+  } catch (err: any) {
+    return { token: null, error: 'Erro inesperado ao obter token: ' + (err?.message ?? err), clientEmail: sa.client_email ?? null, projectId: sa.project_id ?? null };
   }
+}
+
+async function getServiceAccountToken(): Promise<string | null> {
+  const r = await getServiceAccountTokenDetailed();
+  if (!r.token) {
+    console.error('[SheetsWriter] Service account token indisponível:', r.error);
+  }
+  return r.token;
+}
+
+/**
+ * Diagnóstico do escritor de planilha — usado pelo endpoint /api/diag/sheets-writer.
+ * Nunca lança; retorna um objeto seguro (sem expor a chave privada).
+ */
+export async function diagnoseSheetsWriter(doWriteTest: boolean): Promise<any> {
+  const hasEnv = !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  const hasApiKey = !!process.env.GOOGLE_SHEETS_API_KEY;
+  const detail = await getServiceAccountTokenDetailed();
+  const out: any = {
+    hasServiceAccountEnv: hasEnv,
+    hasApiKey,
+    parsedClientEmail: detail.clientEmail,
+    parsedProjectId: detail.projectId,
+    tokenOk: !!detail.token,
+    tokenError: detail.error,
+  };
+
+  if (doWriteTest && detail.token) {
+    try {
+      const testRange = 'PRODUTOS!R1';
+      const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(testRange)}?valueInputOption=RAW`;
+      const putRes = await fetch(putUrl, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${detail.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [[`diag ${new Date().toISOString()}`]] }),
+      });
+      out.writeTestOk = putRes.ok;
+      if (!putRes.ok) out.writeTestError = await putRes.text();
+      // Limpa a célula de teste
+      const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(testRange)}:clear`;
+      await fetch(clearUrl, { method: 'POST', headers: { 'Authorization': `Bearer ${detail.token}` } });
+    } catch (e: any) {
+      out.writeTestOk = false;
+      out.writeTestError = e?.message ?? String(e);
+    }
+  }
+  return out;
 }
 
 // ─── Leitura da planilha (API key pública) ───────────────────────────────────
