@@ -1,7 +1,7 @@
 /**
  * ============================================================
  *  JUMERA SPORT PDV — Google Apps Script
- *  Versão: 4.0 (geração automática de código + debounce + reconciliação)
+ *  Versão: 5.0 (envio direto sem debounce + colunas reais + pontos)
  * ============================================================
  *
  *  COMO INSTALAR / ATUALIZAR:
@@ -47,8 +47,6 @@ var COL_NAMES = {
   0: 'CODIGO', 1: 'LINHA', 2: 'MODELO', 3: 'TIME', 4: 'DESCRIÇÃO',
   5: 'TAM', 6: 'TIPO', 7: 'QTD', 8: 'ATC', 9: 'VAR', 10: 'CUSTO', 11: 'ATIVO'
 };
-
-var DEBOUNCE_SECONDS = 10;
 
 // ─── GERAÇÃO AUTOMÁTICA DE CÓDIGO ────────────────────────────────────────────
 
@@ -129,6 +127,9 @@ function gerarCodigo(linha, modelo, time, desc, tamanho) {
 }
 
 // ─── GATILHO PRINCIPAL (EDIÇÃO) ─────────────────────────────────────────────
+// Envia DIRETO ao servidor, sem criar gatilhos temporários (sem debounce).
+// Isso elimina o acúmulo de gatilhos 'processDebounced' que estourava a cota
+// do Google (~20 por usuário) e travava o sync planilha → PDV.
 
 function onSheetEdit(e) {
   try {
@@ -138,67 +139,10 @@ function onSheetEdit(e) {
     var editedRow = e.range.getRow();
     if (editedRow <= 1) return;
 
-    var props = PropertiesService.getScriptProperties();
-    var key = 'pending_row_' + editedRow;
-    props.setProperty(key, new Date().getTime().toString());
-
-    scheduleDebounce(editedRow);
-    Logger.log('[onSheetEdit] Linha ' + editedRow + ' editada — debounce agendado (' + DEBOUNCE_SECONDS + 's)');
+    processRow(editedRow);
+    Logger.log('[onSheetEdit] Linha ' + editedRow + ' processada e enviada');
   } catch (err) {
     Logger.log('[onSheetEdit] Erro: ' + err.message);
-  }
-}
-
-// ─── DEBOUNCE ────────────────────────────────────────────────────────────────
-
-function scheduleDebounce(rowNumber) {
-  var props = PropertiesService.getScriptProperties();
-  var triggerKey = 'trigger_row_' + rowNumber;
-
-  var existingTriggerId = props.getProperty(triggerKey);
-  if (existingTriggerId) {
-    var triggers = ScriptApp.getProjectTriggers();
-    for (var i = 0; i < triggers.length; i++) {
-      if (triggers[i].getUniqueId() === existingTriggerId) {
-        ScriptApp.deleteTrigger(triggers[i]);
-        break;
-      }
-    }
-  }
-
-  var trigger = ScriptApp.newTrigger('processDebounced')
-    .timeBased()
-    .after(DEBOUNCE_SECONDS * 1000)
-    .create();
-
-  props.setProperty(triggerKey, trigger.getUniqueId());
-  props.setProperty('row_for_trigger_' + trigger.getUniqueId(), rowNumber.toString());
-}
-
-function processDebounced(e) {
-  try {
-    var props = PropertiesService.getScriptProperties();
-    var triggerId = e ? e.triggerUid : null;
-    if (!triggerId) {
-      Logger.log('[processDebounced] Sem triggerUid — ignorando');
-      return;
-    }
-
-    var rowStr = props.getProperty('row_for_trigger_' + triggerId);
-    if (!rowStr) {
-      Logger.log('[processDebounced] Linha não encontrada para trigger ' + triggerId);
-      return;
-    }
-
-    var rowNumber = parseInt(rowStr);
-
-    props.deleteProperty('row_for_trigger_' + triggerId);
-    props.deleteProperty('trigger_row_' + rowNumber);
-    props.deleteProperty('pending_row_' + rowNumber);
-
-    processRow(rowNumber);
-  } catch (err) {
-    Logger.log('[processDebounced] Erro: ' + err.message);
   }
 }
 
