@@ -112,6 +112,44 @@ async function startServer() {
       res.status(500).json({ ok: false, error: err?.message ?? String(err) });
     }
   });
+
+  // Diagnóstico do sincronismo de um produto específico (PDV ↔ planilha).
+  // ?codigo=TA-JG-BRA-1-X            → mostra o estado no banco e na planilha
+  // &push=1&estoque=60               → executa o writeback real (PDV→planilha)
+  app.get("/api/diag/product-sync", async (req, res) => {
+    const codigo = String(req.query.codigo ?? "").trim();
+    if (!codigo) return res.status(400).json({ ok: false, error: "informe ?codigo=" });
+    const push = String(req.query.push ?? "") === "1";
+    const estoque = req.query.estoque !== undefined ? parseInt(String(req.query.estoque), 10) : undefined;
+
+    const out: any = { ok: true, codigo };
+    // Lado banco
+    try {
+      const mysql = (await import("mysql2/promise")).default;
+      const url = process.env.DATABASE_URL;
+      if (url) {
+        const db = await mysql.createConnection(url);
+        const [rows] = await db.execute(
+          "SELECT id, codigo, `time`, descricao, tamanho, estoque, precoAtacado, precoVarejo, isActive, updatedAt FROM pdv_products WHERE codigo = ? LIMIT 5",
+          [codigo]
+        );
+        out.banco = rows;
+        await db.end();
+      } else {
+        out.banco = "DATABASE_URL ausente";
+      }
+    } catch (e: any) {
+      out.bancoErro = e?.message ?? String(e);
+    }
+    // Lado planilha (+ writeback opcional)
+    try {
+      const { diagnoseProductWriteback } = await import("../routers/pdvSheetsWriter");
+      out.planilha = await diagnoseProductWriteback(codigo, push, estoque);
+    } catch (e: any) {
+      out.planilhaErro = e?.message ?? String(e);
+    }
+    res.json(out);
+  });
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

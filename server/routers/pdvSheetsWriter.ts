@@ -150,6 +150,8 @@ export async function diagnoseSheetsWriter(doWriteTest: boolean): Promise<any> {
     tokenError: detail.error,
   };
 
+  out.tokenSummary = detail.error ? detail.error : 'token OK';
+
   if (doWriteTest && detail.token) {
     try {
       const testRange = 'PRODUTOS!R1';
@@ -182,6 +184,43 @@ async function readSheet(range: string): Promise<any[][]> {
   const res = await fetch(url);
   const data = await res.json() as any;
   return data.values || [];
+}
+
+/**
+ * Diagnóstico do caminho REAL de writeback de um produto (PDV → planilha).
+ * Localiza o produto na planilha pelo código (igual ao updateProductRowInSheet),
+ * e — se `push` for true e `estoque` informado — grava de verdade e relê o valor.
+ * Não usa banco; foca no elo planilha. Retorna detalhes para depuração.
+ */
+export async function diagnoseProductWriteback(codigo: string, push: boolean, estoque?: number): Promise<any> {
+  const out: any = { codigo };
+  try {
+    const rows = await readSheet('PRODUTOS!A2:P2000');
+    out.linhasLidas = rows.length;
+    const norm = (s: any) => (s ?? '').toString().trim();
+    const rowIndex = rows.findIndex(r => norm(r[0]) === codigo.trim());
+    out.encontradoNaPlanilha = rowIndex !== -1;
+    if (rowIndex === -1) {
+      // mostra alguns códigos próximos para ajudar a achar divergência
+      out.amostraCodigos = rows.slice(0, 60).map(r => norm(r[0])).filter(Boolean);
+      return out;
+    }
+    const sheetRow = rowIndex + 2;
+    out.linhaPlanilha = sheetRow;
+    out.estoqueAtualPlanilha = norm(rows[rowIndex][7]);
+    out.ativoPlanilha = norm(rows[rowIndex][11]);
+
+    if (push && estoque !== undefined) {
+      const ok = await updateProductRowInSheet({ codigo, estoque });
+      out.writebackOk = ok;
+      const verify = await readSheet(`PRODUTOS!H${sheetRow}`);
+      out.estoqueDepois = verify?.[0]?.[0] ?? null;
+    }
+    return out;
+  } catch (e: any) {
+    out.erro = e?.message ?? String(e);
+    return out;
+  }
 }
 
 // ─── Escrita na planilha (Service Account) ───────────────────────────────────
