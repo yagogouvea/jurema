@@ -453,24 +453,32 @@ export const pdvProductsRouter = router({
       // Buscar produto atualizado para sincronizar planilha e site
       const [rows] = await db.execute("SELECT * FROM pdv_products WHERE id = ?", [id]);
       const prod = (rows as any[])[0];
+      // Fecha a conexão antes de aguardar as escritas externas (planilha/site).
+      await db.end();
+
       if (prod) {
+        // IMPORTANTE: aguardar (await) a escrita na planilha. Em produção, um
+        // "fire-and-forget" depois da resposta era estrangulado pela plataforma
+        // e a planilha não era atualizada. Falha aqui não quebra a edição.
         if (syncSheet) {
-          // Sincronizar planilha de forma assíncrona
-          updateProductInSheetAsync(prod).catch(err =>
-            console.error('[PDV] Erro ao sincronizar produto na planilha:', err)
-          );
+          try {
+            await updateProductInSheetAsync(prod);
+          } catch (err) {
+            console.error('[PDV] Erro ao sincronizar produto na planilha:', err);
+          }
         }
         // Auto-sync para o site: atualizar preço/estoque no catálogo
         if (prod.codigo) {
           const parts = prod.codigo.split("-");
           const codigoBase = parts.length > 1 ? parts.slice(0, -1).join("-") : prod.codigo;
-          autoSyncProductToSite(codigoBase).catch(err =>
-            console.error('[PDV] Erro ao auto-sync site após update:', err)
-          );
+          try {
+            await autoSyncProductToSite(codigoBase);
+          } catch (err) {
+            console.error('[PDV] Erro ao auto-sync site após update:', err);
+          }
         }
       }
 
-      await db.end();
       return { success: true };
     }),
 
@@ -497,11 +505,13 @@ export const pdvProductsRouter = router({
       await db.execute("DELETE FROM pdv_products WHERE id = ?", [input.id]);
       await db.end();
 
-      // Deletar da planilha de forma assíncrona
+      // Deletar da planilha — aguardar (await) para garantir conclusão em produção.
       if (input.syncSheet && prod.codigo) {
-        deleteProductFromSheetAsync(prod.codigo).catch(err =>
-          console.error('[PDV] Erro ao deletar produto da planilha:', err)
-        );
+        try {
+          await deleteProductFromSheetAsync(prod.codigo);
+        } catch (err) {
+          console.error('[PDV] Erro ao deletar produto da planilha:', err);
+        }
       }
 
       // Auto-sync para o site: verificar se ainda há variantes do modelo
@@ -625,18 +635,23 @@ export const pdvProductsRouter = router({
 
         await db.end();
 
-        // Sincronizar com planilha (assíncrono, não bloqueia resposta)
+        // Sincronizar com planilha — aguardar (await) para garantir conclusão
+        // em produção (fire-and-forget era cortado após a resposta).
         if (input.syncSheet) {
-          appendProductsBatchToSheet(input, created).catch(err =>
-            console.error('[PDV] Erro ao sincronizar produtos com planilha:', err)
-          );
+          try {
+            await appendProductsBatchToSheet(input, created);
+          } catch (err) {
+            console.error('[PDV] Erro ao sincronizar produtos com planilha:', err);
+          }
         }
 
         // Auto-sync para o site: criar/atualizar produto no catálogo do site
         if (input.codigoBase) {
-          autoSyncProductToSite(input.codigoBase).catch(err =>
-            console.error('[PDV] Erro ao sincronizar produto com site:', err)
-          );
+          try {
+            await autoSyncProductToSite(input.codigoBase);
+          } catch (err) {
+            console.error('[PDV] Erro ao sincronizar produto com site:', err);
+          }
         }
 
         return { success: true, created };
