@@ -531,7 +531,7 @@ export const pdvSyncRouter = router({
              WHERE codigo=?`,
             [
               input.product.linha, input.product.modelo, input.product.time,
-              input.product.descricao, input.product.tamanho, input.product.estoque,
+              input.product.descricao, input.product.tamanho, clampEstoque(input.product.estoque),
               input.product.precoAtacado, input.product.precoVarejo,
               input.product.isActive ? 1 : 0, input.product.codigo
             ]
@@ -547,7 +547,7 @@ export const pdvSyncRouter = router({
             [
               input.product.codigo, input.product.linha, input.product.modelo,
               input.product.time, input.product.descricao, input.product.tamanho,
-              input.product.tipo, input.product.estoque, input.product.precoAtacado,
+              input.product.tipo, clampEstoque(input.product.estoque), input.product.precoAtacado,
               input.product.precoVarejo, input.product.isActive ? 1 : 0,
               input.product.ptAtacado ?? 0, input.product.ptVarejo ?? 0
             ]
@@ -598,11 +598,16 @@ export const pdvSyncRouter = router({
       
       const db = await getDb();
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
-      
+
+      // Estoque é INT — limita valores "infinitos" (1e11) para não estourar a coluna.
+      const valueToWrite = input.field === 'estoque'
+        ? clampEstoque(typeof input.value === 'number' ? input.value : parseInt(String(input.value), 10))
+        : input.value;
+
       try {
         await db.execute(
           `UPDATE pdv_products SET ${dbField}=?, updatedAt=NOW() WHERE codigo=?`,
-          [input.value, input.codigo]
+          [valueToWrite, input.codigo]
         );
         await db.end();
         return { success: true, codigo: input.codigo, field: input.field };
