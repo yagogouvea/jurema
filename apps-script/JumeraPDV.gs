@@ -36,18 +36,19 @@ var WEBHOOK_SECRET        = 'jurema-pdv-2024';
 var SHEET_NAME            = 'PRODUTOS';
 
 /**
- * Colunas obrigatórias para considerar a linha "completa":
+ * Layout REAL da aba PRODUTOS (confira o cabeçalho):
  * [0]CODIGO (opcional — gerado automaticamente) [1]LINHA [2]MODELO [3]TIME
- * [4]DESCRIÇÃO [5]TAM [6]TIPO [7]QTD [8]ATC [9]VAR [10]ATIVO
- * CODIGO não é mais obrigatório — será gerado se vazio.
+ * [4]DESCRIÇÃO [5]TAM [6]TIPO [7]QTD [8]ATC [9]VAR [10]CUSTO [11]ATIVO
+ * [12]FOTO [13]TEMPORADA [14]PT ATAC [15]PT VAR
+ * CODIGO e CUSTO NÃO são obrigatórios.
  */
-var REQUIRED_COLS = [1, 2, 3, 5, 6, 7, 8, 9, 10];
+var REQUIRED_COLS = [1, 2, 3, 5, 6, 7, 8, 9, 11];
 var COL_NAMES = {
   0: 'CODIGO', 1: 'LINHA', 2: 'MODELO', 3: 'TIME', 4: 'DESCRIÇÃO',
-  5: 'TAM', 6: 'TIPO', 7: 'QTD', 8: 'ATC', 9: 'VAR', 10: 'ATIVO'
+  5: 'TAM', 6: 'TIPO', 7: 'QTD', 8: 'ATC', 9: 'VAR', 10: 'CUSTO', 11: 'ATIVO'
 };
 
-var DEBOUNCE_SECONDS = 30;
+var DEBOUNCE_SECONDS = 10;
 
 // ─── GERAÇÃO AUTOMÁTICA DE CÓDIGO ────────────────────────────────────────────
 
@@ -265,6 +266,9 @@ function processRow(rowNumber) {
     var ativoRaw = values[11].toString().trim().toUpperCase();
     var isActive = (ativoRaw === 'SIM' || ativoRaw === '1' || ativoRaw === 'TRUE');
 
+    var ptAtc = parseFloat((values[14] || '').toString().replace(',', '.').trim());
+    var ptVar = parseFloat((values[15] || '').toString().replace(',', '.').trim());
+
     var product = {
       codigo:       codigo,
       linha:        linha,
@@ -276,7 +280,9 @@ function processRow(rowNumber) {
       estoque:      qtd,
       precoAtacado: precoAtacado,
       precoVarejo:  precoVarejo,
-      isActive:     isActive
+      isActive:     isActive,
+      ptAtacado:    isNaN(ptAtc) ? 0 : ptAtc,
+      ptVarejo:     isNaN(ptVar) ? 0 : ptVar
     };
 
     sendToWebhook(product);
@@ -462,6 +468,8 @@ function syncAllProducts() {
     }
 
     var ativoRaw = values[11].toString().trim().toUpperCase();
+    var ptAtc2 = parseFloat((values[14] || '').toString().replace(',', '.').trim());
+    var ptVar2 = parseFloat((values[15] || '').toString().replace(',', '.').trim());
     var product = {
       codigo:       codigo,
       linha:        linha,
@@ -473,7 +481,9 @@ function syncAllProducts() {
       estoque:      parseInt(values[7].toString().trim()) || 0,
       precoAtacado: precoAtacado,
       precoVarejo:  precoVarejo,
-      isActive:     (ativoRaw === 'SIM' || ativoRaw === '1' || ativoRaw === 'TRUE')
+      isActive:     (ativoRaw === 'SIM' || ativoRaw === '1' || ativoRaw === 'TRUE'),
+      ptAtacado:    isNaN(ptAtc2) ? 0 : ptAtc2,
+      ptVarejo:     isNaN(ptVar2) ? 0 : ptVar2
     };
 
     sendToWebhook(product);
