@@ -504,6 +504,8 @@ export async function appendProductToSheet(product: {
   custo?: number;
 }): Promise<boolean> {
   try {
+    // Coage para número (campos podem chegar como string do MySQL DECIMAL).
+    const money = (v: any): string => (Number(v) || 0).toFixed(2);
     const row = [
       product.codigo,                                    // A: CODIGO
       product.linha,                                     // B: LINHA
@@ -512,15 +514,15 @@ export async function appendProductToSheet(product: {
       product.descricao,                                 // E: DESCRICAO
       product.tamanho,                                   // F: TAM
       product.tipo,                                      // G: TIPO
-      product.estoque,                                   // H: QTD
-      product.precoAtacado.toFixed(2),                   // I: ATC
-      product.precoVarejo.toFixed(2),                    // J: VAR
-      (product.custo ?? 0).toFixed(2),                   // K: CUSTO
+      Math.trunc(Number(product.estoque) || 0),          // H: QTD
+      money(product.precoAtacado),                       // I: ATC
+      money(product.precoVarejo),                        // J: VAR
+      money(product.custo ?? 0),                         // K: CUSTO
       product.isActive ? 'SIM' : 'NAO',                  // L: ATIVO
       product.fotoUrl || '',                             // M: FOTO
       product.temporada || '',                           // N: TEMPORADA
-      (product.ptAtacado ?? 0).toFixed(2),               // O: PT ATAC
-      (product.ptVarejo ?? 0).toFixed(2),                // P: PT VAR
+      money(product.ptAtacado ?? 0),                     // O: PT ATAC
+      money(product.ptVarejo ?? 0),                      // P: PT VAR
     ];
     return await appendToSheet(`PRODUTOS!A:P`, [row]);
   } catch (err) {
@@ -617,7 +619,20 @@ export async function updateProductRowInSheet(product: {
       return false;
     }
 
-    // Monta o array completo da linha preservando valores existentes e substituindo os alterados
+    // Monta o array completo da linha preservando valores existentes e substituindo os alterados.
+    // IMPORTANTE: campos DECIMAL do MySQL chegam como string (ex: "60.00"); por isso
+    // coagimos tudo com Number() antes de .toFixed() — caso contrário lança
+    // "x.toFixed is not a function" e a escrita falha silenciosamente.
+    const toMoney = (v: any, fallback: any): number => {
+      if (v === undefined || v === null) return parseFloat(fallback || '0') || 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? parseFloat(n.toFixed(2)) : (parseFloat(fallback || '0') || 0);
+    };
+    const toInt = (v: any, fallback: any): number => {
+      if (v === undefined || v === null) return parseInt(fallback || '0', 10) || 0;
+      const n = Math.trunc(Number(v));
+      return Number.isFinite(n) ? n : (parseInt(fallback || '0', 10) || 0);
+    };
     const existing = rows[rowIndex];
     const updatedRow = [
       existing[0] ?? '',                                                          // A: CODIGO
@@ -627,15 +642,15 @@ export async function updateProductRowInSheet(product: {
       existing[4] ?? '',                                                          // E: DESCRICAO
       existing[5] ?? '',                                                          // F: TAM
       existing[6] ?? '',                                                          // G: TIPO
-      product.estoque !== undefined ? product.estoque : (parseInt(existing[7] || '0', 10)),  // H: QTD
-      product.precoAtacado !== undefined ? parseFloat(product.precoAtacado.toFixed(2)) : (parseFloat(existing[8] || '0')), // I: ATC
-      product.precoVarejo !== undefined ? parseFloat(product.precoVarejo.toFixed(2)) : (parseFloat(existing[9] || '0')),  // J: VAR
-      product.custo !== undefined ? parseFloat(product.custo.toFixed(2)) : (parseFloat(existing[10] || '0')),        // K: CUSTO
+      toInt(product.estoque, existing[7]),                                        // H: QTD
+      toMoney(product.precoAtacado, existing[8]),                                 // I: ATC
+      toMoney(product.precoVarejo, existing[9]),                                  // J: VAR
+      toMoney(product.custo, existing[10]),                                       // K: CUSTO
       product.isActive !== undefined ? (product.isActive ? 'SIM' : 'NAO') : (existing[11] ?? 'SIM'), // L: ATIVO
       existing[12] ?? '',                                                          // M: FOTO
       existing[13] ?? '',                                                          // N: TEMPORADA
-      product.ptAtacado !== undefined ? parseFloat(product.ptAtacado.toFixed(2)) : (parseFloat(existing[14] || '0')), // O: PT ATAC
-      product.ptVarejo !== undefined ? parseFloat(product.ptVarejo.toFixed(2)) : (parseFloat(existing[15] || '0')),  // P: PT VAR
+      toMoney(product.ptAtacado, existing[14]),                                   // O: PT ATAC
+      toMoney(product.ptVarejo, existing[15]),                                    // P: PT VAR
     ];
 
     const range = `PRODUTOS!A${sheetRow}:P${sheetRow}`;

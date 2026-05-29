@@ -15,14 +15,16 @@ async function deleteProductFromSheetAsync(codigo: string) {
 // Sincroniza um produto atualizado na planilha (assíncrono, não bloqueia a resposta)
 // Usa updateProductRowInSheet para ATUALIZAR a linha existente (não adicionar nova linha)
 async function updateProductInSheetAsync(prod: any) {
+  // Campos DECIMAL do MySQL chegam como string ("60.00"); normaliza p/ número.
+  const num = (v: any): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   await updateProductRowInSheet({
     codigo: prod.codigo,
-    estoque: prod.estoque ?? 0,
-    precoAtacado: prod.precoAtacado ?? 0,
-    precoVarejo: prod.precoVarejo ?? 0,
-    ptAtacado: prod.ptAtacado ?? 0,
-    ptVarejo: prod.ptVarejo ?? 0,
-    custo: prod.custo ?? 0,
+    estoque: Math.trunc(num(prod.estoque)),
+    precoAtacado: num(prod.precoAtacado),
+    precoVarejo: num(prod.precoVarejo),
+    ptAtacado: num(prod.ptAtacado),
+    ptVarejo: num(prod.ptVarejo),
+    custo: num(prod.custo),
     isActive: prod.isActive === 1 || prod.isActive === true,
   });
 }
