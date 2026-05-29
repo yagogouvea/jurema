@@ -153,12 +153,15 @@ export const pdvProductsRouter = router({
   create: publicProcedure
     .input(z.object({
       codigo: z.string().optional(),
-      linha: z.enum(["TAILANDESA", "NACIONAL", "TORCEDOR", "PECA"]),
-      modelo: z.enum(["TORCEDOR", "JOGADOR", "TAILANDESA", "VENDEDOR"]),
+      // linha/modelo/tipo são texto livre — a planilha usa muitos valores
+      // (RETRO, CONJ.ADULTO, CONJ.INFANTIL, BONE, TREINO, ...) e a coluna no
+      // banco é VARCHAR. Não usar z.enum aqui (quebrava a edição de produtos).
+      linha: z.string().min(1),
+      modelo: z.string().min(1),
       time: z.string().min(1),
       descricao: z.string().optional(),
       tamanho: z.string().min(1),
-      tipo: z.enum(["CAMISETA", "CONJUNTO", "OUTRO"]).default("CAMISETA"),
+      tipo: z.string().default("CAMISETA"),
       estoque: z.number().default(0),
       precoAtacado: z.number().default(0),
       precoVarejo: z.number().default(0),
@@ -183,12 +186,12 @@ export const pdvProductsRouter = router({
     .input(z.object({
       id: z.number(),
       codigo: z.string().optional(),
-      linha: z.enum(["TAILANDESA", "NACIONAL", "TORCEDOR", "PECA"]).optional(),
-      modelo: z.enum(["TORCEDOR", "JOGADOR", "TAILANDESA", "VENDEDOR"]).optional(),
+      linha: z.string().optional(),
+      modelo: z.string().optional(),
       time: z.string().optional(),
       descricao: z.string().optional(),
       tamanho: z.string().optional(),
-      tipo: z.enum(["CAMISETA", "CONJUNTO", "OUTRO"]).optional(),
+      tipo: z.string().optional(),
       estoque: z.number().optional(),
       precoAtacado: z.number().optional(),
       precoVarejo: z.number().optional(),
@@ -409,8 +412,8 @@ export const pdvProductsRouter = router({
   updateProduct: publicProcedure
     .input(z.object({
       id: z.number(),
-      linha: z.enum(["TAILANDESA", "NACIONAL", "TORCEDOR", "PECA"]).optional(),
-      modelo: z.enum(["TORCEDOR", "JOGADOR", "TAILANDESA", "VENDEDOR"]).optional(),
+      linha: z.string().optional(),
+      modelo: z.string().optional(),
       time: z.string().optional(),
       tamanho: z.string().optional(),
       estoque: z.number().int().min(0).optional(),

@@ -84,11 +84,13 @@ async function startServer() {
     })
   );
 
-  // Endpoint de sincronização automática (chamado por tarefa agendada Manus)
-  // Aceita qualquer usuário autenticado (role=user) — a tarefa agendada usa cookie de sessão
+  // Endpoint de sincronização da planilha de produtos.
+  // Por padrão faz sync COMPLETO (sobrescreve estoque). Para sync seletivo
+  // (preserva o estoque dos produtos existentes), use ?stock=keep.
   app.post("/api/scheduled/sync-products", async (req, res) => {
     try {
-      const result = await runAutoSync();
+      const skipStockOverwrite = String(req.query.stock ?? "").toLowerCase() === "keep";
+      const result = await runAutoSync({ skipStockOverwrite });
       res.json({ ok: true, ...result });
     } catch (err: any) {
       console.error("[AutoSync] Erro:", err);
@@ -117,7 +119,51 @@ async function startServer() {
       .then(() => runWaMediaBlobMigration())
       .then(() => runWaStatusPresetsMigration())
       .catch(err => console.error("[PDV] Setup error:", err));
+
+    // Agendador interno de sincronização da planilha → sistema.
+    // Substitui a antiga tarefa agendada externa (Manus) que parou após a
+    // migração para a Railway. Usa sync SELETIVO (preserva estoque).
+    startProductSyncScheduler();
   });
+}
+
+/**
+ * Roda runAutoSync periodicamente em modo seletivo (sem sobrescrever estoque).
+ * - Intervalo via PDV_SYNC_INTERVAL_MIN (padrão 15 min). 0 = desliga.
+ * - Lock simples para não sobrepor execuções.
+ */
+function startProductSyncScheduler() {
+  if (!process.env.GOOGLE_SHEETS_API_KEY) {
+    console.warn("[AutoSync] GOOGLE_SHEETS_API_KEY ausente — agendador desativado.");
+    return;
+  }
+  const intervalMin = parseInt(process.env.PDV_SYNC_INTERVAL_MIN || "15", 10);
+  if (!Number.isFinite(intervalMin) || intervalMin <= 0) {
+    console.log("[AutoSync] Agendador desativado (PDV_SYNC_INTERVAL_MIN <= 0).");
+    return;
+  }
+
+  let running = false;
+  const tick = async () => {
+    if (running) {
+      console.log("[AutoSync] Execução anterior ainda em andamento — pulando este ciclo.");
+      return;
+    }
+    running = true;
+    try {
+      const r = await runAutoSync({ skipStockOverwrite: true });
+      console.log(`[AutoSync] Ciclo agendado OK — novos: ${r.inseridos}, atualizados: ${r.atualizados}, ignorados: ${r.ignorados}.`);
+    } catch (err: any) {
+      console.error("[AutoSync] Ciclo agendado falhou:", err?.message ?? err);
+    } finally {
+      running = false;
+    }
+  };
+
+  // Primeira execução logo após o boot, depois no intervalo configurado.
+  setTimeout(tick, 30_000);
+  setInterval(tick, intervalMin * 60_000);
+  console.log(`[AutoSync] Agendador ativo — sync seletivo a cada ${intervalMin} min.`);
 }
 
 startServer().catch(console.error);

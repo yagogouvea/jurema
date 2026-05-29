@@ -1125,31 +1125,42 @@ export default function PdvCadastroProdutos() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-gray-400 text-xs font-medium uppercase tracking-wide">Linha</Label>
-                  <select
+                  <input
+                    list="pdv-linha-options"
                     value={editingRow.linha}
-                    onChange={e => setEditingRow(prev => prev ? { ...prev, linha: e.target.value } : null)}
+                    onChange={e => setEditingRow(prev => prev ? { ...prev, linha: e.target.value.toUpperCase() } : null)}
                     className="mt-1.5 w-full bg-[#1a1a1a] border border-[#2e2e2e] text-white rounded-lg px-3 h-10 text-sm focus:outline-none focus:border-green-600"
-                  >
-                    <option value="">-- Linha --</option>
-                    <option value="TAILANDESA">TAILANDESA</option>
-                    <option value="NACIONAL">NACIONAL</option>
-                    <option value="TORCEDOR">TORCEDOR</option>
-                    <option value="PECA">PECA</option>
-                  </select>
+                    placeholder="Ex: TAILANDESA, NACIONAL..."
+                  />
+                  <datalist id="pdv-linha-options">
+                    <option value="TAILANDESA" />
+                    <option value="NACIONAL" />
+                    <option value="TORCEDOR" />
+                    <option value="PECA" />
+                    <option value="BONE" />
+                    <option value="RETRO" />
+                  </datalist>
                 </div>
                 <div>
                   <Label className="text-gray-400 text-xs font-medium uppercase tracking-wide">Modelo</Label>
-                  <select
+                  <input
+                    list="pdv-modelo-options"
                     value={editingRow.modelo}
-                    onChange={e => setEditingRow(prev => prev ? { ...prev, modelo: e.target.value } : null)}
+                    onChange={e => setEditingRow(prev => prev ? { ...prev, modelo: e.target.value.toUpperCase() } : null)}
                     className="mt-1.5 w-full bg-[#1a1a1a] border border-[#2e2e2e] text-white rounded-lg px-3 h-10 text-sm focus:outline-none focus:border-green-600"
-                  >
-                    <option value="">-- Modelo --</option>
-                    <option value="TORCEDOR">TORCEDOR</option>
-                    <option value="JOGADOR">JOGADOR</option>
-                    <option value="TAILANDESA">TAILANDESA</option>
-                    <option value="VENDEDOR">VENDEDOR</option>
-                  </select>
+                    placeholder="Ex: TORCEDOR, RETRO..."
+                  />
+                  <datalist id="pdv-modelo-options">
+                    <option value="TORCEDOR" />
+                    <option value="JOGADOR" />
+                    <option value="TAILANDESA" />
+                    <option value="VENDEDOR" />
+                    <option value="RETRO" />
+                    <option value="CONJ.ADULTO" />
+                    <option value="CONJ.INFANTIL" />
+                    <option value="CAMISETA" />
+                    <option value="TREINO" />
+                  </datalist>
                 </div>
               </div>
 

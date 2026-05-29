@@ -51,8 +51,20 @@ var DEBOUNCE_SECONDS = 30;
 
 // ─── GERAÇÃO AUTOMÁTICA DE CÓDIGO ────────────────────────────────────────────
 
-var LINHA_MAP  = { 'TAILANDESA': 'CA', 'NACIONAL': 'NA', 'TORCEDOR': 'TO', 'PECA': 'PE' };
-var MODELO_MAP = { 'JOGADOR': 'JG', 'TORCEDOR': 'TO', 'TAILANDESA': 'CA', 'DRYFIT': 'DR', 'VENDEDOR': 'VE' };
+// IMPORTANTE: estes mapas DEVEM ser idênticos aos do servidor
+// (server/routers/pdvProductCode.ts). Antes 'TAILANDESA' gerava 'CA' aqui e 'TA'
+// no servidor, criando códigos divergentes para o mesmo produto.
+var LINHA_MAP  = { 'TAILANDESA': 'TA', 'NACIONAL': 'NA', 'TORCEDOR': 'TO', 'PECA': 'PE' };
+var MODELO_MAP = {
+  'JOGADOR': 'JG', 'TORCEDOR': 'TO', 'TAILANDESA': 'TA', 'DRYFIT': 'DR', 'VENDEDOR': 'VE',
+  'CONJ.ADULTO': 'CO', 'CONJ ADULTO': 'CO', 'CONJUNTO ADULTO': 'CO',
+  'CONJ.INFANTIL': 'CI', 'CONJ INFANTIL': 'CI', 'CONJUNTO INFANTIL': 'CI',
+  'FEMININO': 'FE', 'FEMI': 'FE', 'MASCULINO': 'MA', 'INFANTIL': 'IN',
+  'REGATA': 'RG', 'AGASALHO': 'AG', 'SHORTS': 'SH', 'CALCA': 'CL', 'CALÇA': 'CL',
+  'BERMUDA': 'BM', 'MOLETOM': 'ML', 'JAQUETA': 'JQ', 'BLUSA': 'BL', 'CAMISA': 'CM',
+  'CAMISETA': 'CT', 'POLO': 'PL', 'MEIAS': 'ME', 'BONE': 'BO', 'BONÉ': 'BO',
+  'MOCHILA': 'MO', 'CHUTEIRA': 'CH', 'RETRO': 'RE', 'RETRÔ': 'RE'
+};
 var STOPWORDS  = ['COM','DE','DA','DO','NO','NA','E','A','O','EM','AO','AS','OS','UM','UMA'];
 var DESC_OVERRIDE = {
   'FEMI-PRETA COM GOLA AMARELA RIO': 'FEMI-PRET-GOLA-AMAR',
