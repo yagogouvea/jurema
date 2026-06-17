@@ -302,20 +302,48 @@ export const waRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       await requireWaAdmin(ctx);
+      // Slot wa-bridge: somente 1, 2 ou 3 (evita entradas inválidas como "jurema 4").
+      let bridgeSlot: string | null = input.instanceId?.trim() || null;
+      if (bridgeSlot) {
+        if (!/^[1-3]$/.test(bridgeSlot)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "ID da instância wa-bridge deve ser 1, 2 ou 3.",
+          });
+        }
+      }
+      const phone = (input.phone || "").replace(/\D/g, "");
       const db = await getDb();
       try {
         if (input.id) {
           await db.execute(
             "UPDATE wa_instances SET name=?, phone=?, instanceId=?, apiKey=?, webhookUrl=?, active=? WHERE id=?",
-            [input.name, input.phone, input.instanceId ?? null, input.apiKey ?? null, input.webhookUrl ?? null, input.active ?? true, input.id]
+            [input.name, phone, bridgeSlot, input.apiKey ?? null, input.webhookUrl ?? null, input.active ?? true, input.id]
           );
           return { success: true };
         }
         const [result] = await db.execute(
           "INSERT INTO wa_instances (name, phone, instanceId, apiKey, webhookUrl, active, status) VALUES (?,?,?,?,?,?,?)",
-          [input.name, input.phone, input.instanceId ?? null, input.apiKey ?? null, input.webhookUrl ?? null, input.active ?? true, "disconnected"]
+          [input.name, phone, bridgeSlot, input.apiKey ?? null, input.webhookUrl ?? null, input.active ?? true, "disconnected"]
         ) as any;
         return { success: true, id: result.insertId };
+      } finally { await db.end(); }
+    }),
+
+  /** Remove um número cadastrado (ex.: entrada duplicada ou inválida). */
+  deleteInstance: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAdmin(ctx);
+      const db = await getDb();
+      try {
+        const [rows] = await db.execute("SELECT id, instanceId FROM wa_instances WHERE id = ?", [input.id]);
+        const row = (rows as any[])[0];
+        if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Instância não encontrada" });
+
+        await db.execute("DELETE FROM wa_ai_config WHERE instanceId = ?", [input.id]);
+        await db.execute("DELETE FROM wa_instances WHERE id = ?", [input.id]);
+        return { success: true };
       } finally { await db.end(); }
     }),
 

@@ -782,6 +782,11 @@ export default function PdvWhatsAppConfig() {
     onError: (e) => toast.error(e.message),
   });
 
+  const deleteInst = trpc.wa.deleteInstance.useMutation({
+    onSuccess: () => { toast.success("Número removido."); refetchInst(); setEditingInst(false); },
+    onError: (e) => toast.error(e.message),
+  });
+
   const updateStatus = trpc.wa.updateInstanceStatus.useMutation({
     onSuccess: () => { toast.success("Status atualizado!"); refetchInst(); },
     onError: (e) => toast.error(e.message),
@@ -1386,12 +1391,28 @@ export default function PdvWhatsAppConfig() {
                             className="text-gray-400 hover:text-white text-xs h-7">
                             Editar
                           </Button>
+                          <Button variant="ghost" size="sm"
+                            onClick={() => {
+                              if (confirm(`Remover "${inst.name}"? Esta ação não pode ser desfeita.`)) {
+                                deleteInst.mutate({ id: inst.id });
+                              }
+                            }}
+                            disabled={deleteInst.isPending}
+                            className="text-red-400 hover:text-red-300 text-xs h-7">
+                            Excluir
+                          </Button>
                         </div>
                       </div>
                       {!inst.instanceId && (
                         <div className="mt-3 flex items-center gap-2 text-xs text-orange-400 bg-orange-950/20 rounded-lg px-3 py-2">
                           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                           Defina o <strong>ID da instância wa-bridge</strong> (1, 2 ou 3) para vincular este número.
+                        </div>
+                      )}
+                      {inst.instanceId && !/^[1-3]$/.test(String(inst.instanceId)) && (
+                        <div className="mt-3 flex items-center gap-2 text-xs text-red-400 bg-red-950/20 rounded-lg px-3 py-2">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          ID inválido (<strong>{inst.instanceId}</strong>). Use apenas <strong>1</strong>, <strong>2</strong> ou <strong>3</strong> — exclua esta entrada e vincule o número na instância correta.
                         </div>
                       )}
                     </div>
