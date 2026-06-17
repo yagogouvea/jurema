@@ -150,6 +150,64 @@ async function startServer() {
     }
     res.json(out);
   });
+  // Diagnóstico da notificação de pedido por WhatsApp.
+  // ?send=1&to=5511981693476  → tenta enviar uma mensagem de teste real
+  app.get("/api/diag/wa-notify", async (req, res) => {
+    const out: any = {
+      ok: true,
+      hasBridgeUrl: !!process.env.WA_BRIDGE_URL,
+      hasBridgeKey: !!process.env.WA_BRIDGE_API_KEY,
+      bridgeUrl: process.env.WA_BRIDGE_URL ? `${process.env.WA_BRIDGE_URL.slice(0, 40)}...` : null,
+    };
+    try {
+      const mysql = (await import("mysql2/promise")).default;
+      const url = process.env.DATABASE_URL;
+      if (!url) { out.dbErro = "DATABASE_URL ausente"; return res.json(out); }
+      const db = await mysql.createConnection(url);
+      try {
+        const [insts] = await db.execute(
+          "SELECT id, name, phone, instanceId, status, active FROM wa_instances ORDER BY id ASC"
+        );
+        out.instancias = insts;
+        const [cfg] = await db.execute(
+          "SELECT value FROM pdv_config WHERE `key` = 'notif_pedido_telefone' LIMIT 1"
+        );
+        const cfgVal = (cfg as any[])[0];
+        out.telefoneConfig = cfgVal === undefined ? "(não definido → usa padrão 5511981693476)" : (cfgVal.value || "(vazio → DESATIVADO)");
+
+        const { resolveSenderInstanceSlot, sendWaBridgeText, phoneToJid } = await import("../waSend");
+        const slot = await resolveSenderInstanceSlot(db);
+        out.slotEscolhido = slot;
+
+        const doSend = String(req.query.send ?? "") === "1";
+        if (doSend) {
+          const to = String(req.query.to ?? "5511981693476").replace(/\D/g, "");
+          out.destino = to;
+          if (slot === null) {
+            out.envio = "FALHOU: nenhuma instância conectada/ativa";
+          } else {
+            try {
+              const okSend = await sendWaBridgeText(
+                slot,
+                phoneToJid(to),
+                `🔔 Teste de notificação de pedido — ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
+              );
+              out.envio = okSend ? "OK (bridge aceitou)" : "NÃO ENVIADO (WA_BRIDGE_URL ausente)";
+            } catch (e: any) {
+              out.envio = "ERRO: " + (e?.message ?? String(e));
+            }
+          }
+        }
+      } finally {
+        await db.end();
+      }
+    } catch (e: any) {
+      out.ok = false;
+      out.erro = e?.message ?? String(e);
+    }
+    res.json(out);
+  });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
