@@ -6,8 +6,10 @@ import { toast } from "sonner";
 import { firstOfMonthYmdSaoPaulo, todayYmdSaoPaulo } from "@shared/spCalendar";
 import {
   Search, ChevronDown, ChevronUp, X, Eye, Calendar,
-  ShoppingBag, DollarSign, User, Package, CreditCard, Wrench
+  ShoppingBag, DollarSign, User, Package, CreditCard, Wrench,
+  Printer, FileDown
 } from "lucide-react";
+import { printRecibo, downloadReciboPdf, type ReciboData } from "@/lib/recibo";
 
 const STATUS_COLORS: Record<string, string> = {
   PAGO: "bg-green-950/50 text-green-400 border-green-900/50",
@@ -60,6 +62,46 @@ export default function PdvHistorico() {
     { pedidoId: selectedOrder?.pedidoId },
     { enabled: !!selectedOrder?.pedidoId }
   );
+
+  const { data: cfgNomeLoja } = trpc.pdvConfig.get.useQuery({ key: "nome_loja" });
+  const { data: cfgWhatsapp } = trpc.pdvConfig.get.useQuery({ key: "whatsapp_recibo" });
+
+  function buildReciboData(): ReciboData | null {
+    if (!selectedOrder || !orderDetail) return null;
+    return {
+      storeName: cfgNomeLoja?.value || "Jurema Sport",
+      whatsapp: cfgWhatsapp?.value || undefined,
+      pedidoId: selectedOrder.pedidoId,
+      createdAt: selectedOrder.createdAt,
+      sellerName: selectedOrder.sellerName,
+      clienteNome: selectedOrder.clienteNome,
+      clienteTelefone: selectedOrder.clienteTelefone,
+      canal: selectedOrder.canal,
+      regime: selectedOrder.regime,
+      status: selectedOrder.status,
+      items: orderDetail.items || [],
+      services: orderDetail.services || [],
+      payments: orderDetail.payments || [],
+      totalPendente: selectedOrder.totalPendente,
+      justificativa: selectedOrder.justificativa,
+    };
+  }
+
+  function handlePrint() {
+    const d = buildReciboData();
+    if (!d) { toast.error("Aguarde os dados do pedido carregarem."); return; }
+    printRecibo(d);
+  }
+
+  function handleDownloadPdf() {
+    const d = buildReciboData();
+    if (!d) { toast.error("Aguarde os dados do pedido carregarem."); return; }
+    try {
+      downloadReciboPdf(d);
+    } catch (err: any) {
+      toast.error("Falha ao gerar PDF: " + (err?.message || err));
+    }
+  }
 
   const cancelMutation = trpc.pdvOrders.updateStatus.useMutation({
     onSuccess: () => {
@@ -468,6 +510,29 @@ export default function PdvHistorico() {
                   <div className="text-gray-300 text-sm">{selectedOrder.justificativa}</div>
                 </div>
               )}
+
+              {/* Recibo — imprimir / PDF (todos os usuários) */}
+              <div>
+                <h4 className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2">Recibo</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={handlePrint}
+                    disabled={!orderDetail}
+                    className="flex items-center justify-center gap-2 bg-green-700 hover:bg-green-600 text-white font-medium py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Imprimir
+                  </button>
+                  <button
+                    onClick={handleDownloadPdf}
+                    disabled={!orderDetail}
+                    className="flex items-center justify-center gap-2 border border-green-800/60 text-green-400 hover:bg-green-950/30 font-medium py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50"
+                  >
+                    <FileDown className="w-4 h-4" />
+                    Baixar PDF
+                  </button>
+                </div>
+              </div>
 
               {/* Botões de ação — apenas admin */}
               {isAdmin && selectedOrder.status !== "CANCELADO" && (
