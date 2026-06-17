@@ -6,9 +6,141 @@ import type { Request } from "express";
 import { createPdvMysqlConnection, spLocalDateTimeExpr } from "../pdvMysql";
 import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet, appendCashFlowToSheet, appendToLucroProdutos, updateOrderStatusInSheet, type LucroItem } from './pdvSheetsWriter';
 import { autoSyncProductToSite } from './pdvSiteSync';
+import { sendWaBridgeText, phoneToJid, resolveSenderInstanceSlot } from '../waSend';
 
 async function getDb() {
   return createPdvMysqlConnection();
+}
+
+// Número padrão de notificação de pedidos (usado quando a config nunca foi
+// definida). A cliente pode trocar/desativar em Configurações → Gerais.
+const DEFAULT_NOTIF_PEDIDO_PHONE = '5511981693476';
+
+const PAGAMENTO_LABELS: Record<string, string> = {
+  PIX: 'PIX',
+  DINHEIRO: 'Dinheiro',
+  DEBITO: 'Débito',
+  CREDITO: 'Crédito',
+  DESCONTO_FOLHA: 'Desconto em folha',
+};
+
+function fmtBRL(v: number): string {
+  return `R$ ${(Number(v) || 0).toFixed(2).replace('.', ',')}`;
+}
+
+/**
+ * Monta a mensagem de WhatsApp com todos os dados do pedido.
+ */
+function buildOrderNotificationMessage(params: {
+  pedidoId: string;
+  sellerName: string;
+  input: any;
+  totalAplicado: number;
+}): string {
+  const { pedidoId, sellerName, input, totalAplicado } = params;
+  const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+  const statusLabel = input.status === 'PAGO' ? '✅ PAGO'
+    : input.status === 'PENDENTE' ? '⏳ PENDENTE'
+    : '❌ CANCELADO';
+
+  const lines: string[] = [
+    `🛍️ *JUREMA SPORT — NOVO PEDIDO*`,
+    `*${pedidoId}*`,
+    ``,
+    `🗓️ ${dataHora}`,
+    `👤 *Vendedor:* ${sellerName}`,
+    `📲 *Canal:* ${input.canal}`,
+    `🏷️ *Regime:* ${input.regime}`,
+    `*Status:* ${statusLabel}`,
+  ];
+
+  if (input.clienteNome) {
+    lines.push(`🧑 *Cliente:* ${input.clienteNome}${input.clienteTelefone ? ` (${input.clienteTelefone})` : ''}`);
+  }
+
+  if (Array.isArray(input.items) && input.items.length > 0) {
+    lines.push(``, `*ITENS:*`);
+    for (const it of input.items) {
+      const nome = [it.time, it.descricao].filter(Boolean).join(' ');
+      const sofia = it.isSofia ? ' [Sofia]' : '';
+      const sub = (Number(it.precoUnitario) || 0) * (Number(it.quantidade) || 0);
+      lines.push(`• ${it.quantidade}x ${nome} (${it.tamanho})${sofia} — ${fmtBRL(sub)}`);
+    }
+  }
+
+  if (Array.isArray(input.services) && input.services.length > 0) {
+    lines.push(``, `*SERVIÇOS:*`);
+    for (const s of input.services) {
+      const extra = [s.descricao, s.cep ? `CEP ${s.cep}` : ''].filter(Boolean).join(' · ');
+      lines.push(`• ${s.tipo}${extra ? ` (${extra})` : ''} — ${fmtBRL(s.valor)}`);
+    }
+  }
+
+  lines.push(``, `💰 *TOTAL:* ${fmtBRL(totalAplicado)}`);
+
+  if (Array.isArray(input.payments) && input.payments.length > 0) {
+    lines.push(``, `*PAGAMENTO:*`);
+    for (const p of input.payments) {
+      const label = PAGAMENTO_LABELS[p.formaPagamento] || p.formaPagamento;
+      const taxa = Number(p.taxa) > 0 ? ` (taxa ${fmtBRL(p.taxa)})` : '';
+      const pix = p.nomePix ? ` — ${p.nomePix}` : '';
+      lines.push(`• ${label}: ${fmtBRL(p.valor)}${taxa}${pix}`);
+    }
+  }
+
+  if (Number(input.totalPendente) > 0) {
+    lines.push(``, `⚠️ *PENDENTE:* ${fmtBRL(input.totalPendente)}`);
+    if (input.justificativa) lines.push(`_${input.justificativa}_`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Envia a notificação de novo pedido por WhatsApp para o número configurado.
+ * Abre a própria conexão (chamada via setImmediate, fora do request principal)
+ * e nunca lança — apenas loga — para não afetar a criação do pedido.
+ */
+async function notifyOrderViaWhatsApp(params: {
+  pedidoId: string;
+  sellerName: string;
+  input: any;
+  totalAplicado: number;
+}): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    let telefone = '';
+    let slot: number | null = null;
+    try {
+      // Telefone de destino: config 'notif_pedido_telefone'. Se a linha nunca
+      // foi criada, usa o padrão. Se existir e estiver vazia, está DESATIVADO.
+      const [cfgRows] = await db.execute(
+        "SELECT `key`, value FROM pdv_config WHERE `key` = 'notif_pedido_telefone' LIMIT 1"
+      );
+      const cfg = (cfgRows as any[])[0];
+      telefone = cfg === undefined
+        ? DEFAULT_NOTIF_PEDIDO_PHONE
+        : (cfg.value || '').replace(/\D/g, '');
+      if (!telefone) return; // desativado pela cliente (campo vazio)
+
+      slot = await resolveSenderInstanceSlot(db);
+    } finally {
+      await db.end();
+    }
+
+    if (slot === null) {
+      console.warn('[notifyOrder] Nenhuma instância wa-bridge ativa/conectada — notificação não enviada.');
+      return;
+    }
+
+    const content = buildOrderNotificationMessage(params);
+    await sendWaBridgeText(slot, phoneToJid(telefone), content);
+    console.log(`[notifyOrder] Notificação de ${params.pedidoId} enviada para ${telefone} (instância ${slot}).`);
+  } catch (err) {
+    console.error('[notifyOrder] Falha ao enviar notificação de pedido:', err);
+  }
 }
 
 async function requirePdvAuth(ctx: any) {
@@ -204,6 +336,16 @@ export const pdvOrdersRouter = router({
         }
 
         await db.end();
+
+        // ── Notificação de novo pedido por WhatsApp (assíncrona, não bloqueia) ──
+        setImmediate(() => {
+          notifyOrderViaWhatsApp({
+            pedidoId,
+            sellerName: seller.name,
+            input,
+            totalAplicado: totalAplicadoGravacao,
+          }).catch(err => console.error('[PDV Orders] Erro na notificação de pedido:', err));
+        });
 
         // ── Auto-sync site: atualizar estoque no catálogo após venda (assíncrono) ──
         const codigosBaseVendidos = new Set<string>();

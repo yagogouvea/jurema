@@ -94,6 +94,9 @@ function TabGeral() {
     if (data) {
       const map: Record<string, string> = {};
       data.forEach((c: any) => { map[c.key] = c.value || ""; });
+      // Reflete o número padrão de notificação de pedidos quando ainda não foi
+      // salvo (o servidor já notifica esse número por padrão).
+      if (map.notif_pedido_telefone === undefined) map.notif_pedido_telefone = "5511981693476";
       setConfigs(map);
     }
   }, [data]);
@@ -111,6 +114,7 @@ function TabGeral() {
   const FIELD_CONFIG: Record<string, { label: string; icon: any; type: string; placeholder: string; hint?: string }> = {
     nome_loja: { label: "Nome da Loja", icon: Store, type: "text", placeholder: "Jurema Sport" },
     whatsapp_recibo: { label: "WhatsApp para Recibos", icon: Phone, type: "text", placeholder: "5511999999999", hint: "Número com DDI + DDD + número. Ex: 5511987654321" },
+    notif_pedido_telefone: { label: "WhatsApp para Notificação de Pedidos", icon: Phone, type: "text", placeholder: "5511981693476", hint: "Recebe uma mensagem automática com todos os dados a cada novo pedido. Deixe em branco para desativar." },
     taxa_debito: { label: "Taxa Débito (%)", icon: Percent, type: "number", placeholder: "3", hint: "Percentual aplicado em pagamentos no débito" },
     taxa_credito: { label: "Taxa Crédito (%)", icon: Percent, type: "number", placeholder: "5", hint: "Percentual aplicado em pagamentos no crédito" },
     min_atacado: { label: "Mínimo de Peças para Atacado", icon: ShoppingBag, type: "number", placeholder: "6", hint: "Quantidade mínima de itens para aplicar preço de atacado" },
