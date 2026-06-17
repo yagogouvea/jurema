@@ -59,14 +59,45 @@ export async function sendWaBridgeText(
 }
 
 /**
- * Descobre qual slot de instância usar para ENVIAR. Prioriza uma instância
- * conectada; cai para qualquer instância ativa com instanceId definido.
- * Retorna o número do slot (parseInt do wa_instances.instanceId) ou null.
+ * Consulta o status real do wa-bridge e retorna o slot de uma sessão conectada.
+ * Esta é a fonte de verdade (a tabela wa_instances costuma estar desatualizada
+ * ou mal configurada). Retorna o slot numérico conectado ou null.
+ */
+export async function resolveConnectedSlotFromBridge(): Promise<number | null> {
+  const bridgeUrl = process.env.WA_BRIDGE_URL;
+  const bridgeKey = process.env.WA_BRIDGE_API_KEY;
+  if (!bridgeUrl) return null;
+  try {
+    const res = await fetch(`${bridgeUrl}/status`, {
+      headers: { "x-wa-bridge-key": bridgeKey ?? "" },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { sessions?: any[] };
+    const sessions = data?.sessions ?? [];
+    const connected = sessions.find((s) => String(s?.status).toLowerCase() === "connected");
+    if (!connected) return null;
+    const slot = parseInt(`${connected.instanceId}`.trim(), 10);
+    return Number.isFinite(slot) ? slot : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Descobre qual slot de instância usar para ENVIAR.
+ * 1) Prioriza o status REAL do wa-bridge (sessão conectada).
+ * 2) Cai para a tabela wa_instances (apenas instanceId numérico).
+ * Retorna o número do slot ou null.
  */
 export async function resolveSenderInstanceSlot(db: Connection): Promise<number | null> {
+  const fromBridge = await resolveConnectedSlotFromBridge();
+  if (fromBridge !== null) return fromBridge;
+
+  // Fallback: tabela wa_instances (só aceita instanceId puramente numérico).
   const [rows] = await db.execute(
     `SELECT instanceId FROM wa_instances
-      WHERE active = 1 AND instanceId IS NOT NULL AND instanceId != ''
+      WHERE active = 1 AND instanceId REGEXP '^[0-9]+$'
       ORDER BY (status = 'connected') DESC, id ASC
       LIMIT 1`
   );

@@ -169,11 +169,32 @@ async function startServer() {
           "SELECT id, name, phone, instanceId, status, active FROM wa_instances ORDER BY id ASC"
         );
         out.instancias = insts;
-        const [cfg] = await db.execute(
-          "SELECT value FROM pdv_config WHERE `key` = 'notif_pedido_telefone' LIMIT 1"
+      const [cfg] = await db.execute(
+        "SELECT value FROM pdv_config WHERE `key` = 'notif_pedido_telefone' LIMIT 1"
         );
         const cfgVal = (cfg as any[])[0];
         out.telefoneConfig = cfgVal === undefined ? "(não definido → usa padrão 5511981693476)" : (cfgVal.value || "(vazio → DESATIVADO)");
+
+        // Status REAL da bridge (fonte de verdade da conexão)
+        try {
+          const bridgeUrl = process.env.WA_BRIDGE_URL;
+          const bridgeKey = process.env.WA_BRIDGE_API_KEY;
+          if (bridgeUrl) {
+            const sres = await fetch(`${bridgeUrl}/status`, {
+              headers: { "x-wa-bridge-key": bridgeKey ?? "" },
+              signal: AbortSignal.timeout(8_000),
+            });
+            out.bridgeStatusOk = sres.ok;
+            if (sres.ok) {
+              const sdata = await sres.json() as any;
+              out.bridgeSessions = (sdata?.sessions ?? []).map((s: any) => ({
+                instanceId: s.instanceId, status: s.status, phone: s.phone, hasQr: s.hasQr,
+              }));
+            }
+          }
+        } catch (e: any) {
+          out.bridgeStatusErro = e?.message ?? String(e);
+        }
 
         const { resolveSenderInstanceSlot, sendWaBridgeText, phoneToJid } = await import("../waSend");
         const slot = await resolveSenderInstanceSlot(db);
