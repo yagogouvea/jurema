@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   FileText, Download, Calendar, Filter, TrendingUp, Package, Wallet,
   Image as ImageIcon, Loader2, Truck, PiggyBank, Mail, Receipt, Search,
-  DollarSign, ShoppingBag, BarChart3
+  DollarSign, ShoppingBag, BarChart3, Share2
 } from "lucide-react";
 import PdvLayout from "./PdvLayout";
 import {
@@ -129,6 +129,58 @@ function periodoLabel(start: string, end: string): string {
   return `${fmt(start)} a ${fmt(end)}`;
 }
 
+/** Monta um resumo do pedido em texto, pronto para enviar pelo WhatsApp. */
+function buildOrderWhatsappText(order: any, storeName: string): string {
+  const items: any[] = order.items || [];
+  const services: any[] = order.services || [];
+  const payments: any[] = order.payments || [];
+
+  const subtotalItens = items.reduce((s, i) => s + toNum(i.totalItem), 0);
+  const totalServicos = services.reduce((s, sv) => s + toNum(sv.valor), 0);
+  const taxaTotal = payments.reduce((s, p) => s + toNum(p.taxa), 0);
+  const totalGeral = subtotalItens + totalServicos + taxaTotal;
+  const pendente = toNum(order.totalPendente);
+
+  const linhas: string[] = [];
+  linhas.push(`*${storeName || "Jurema Sport"}* — Pedido ${order.pedidoId}`);
+  linhas.push(`🗓 ${formatDateTime(order.createdAt)}`);
+  if (order.clienteNome) linhas.push(`Cliente: ${order.clienteNome}`);
+  linhas.push(`Status: ${order.status}`);
+  linhas.push("");
+
+  if (items.length > 0) {
+    linhas.push("*Itens:*");
+    for (const it of items) {
+      const nome = `${it.quantidade}x ${itemNome(it)}${it.tamanho ? ` (${it.tamanho})` : ""}`;
+      linhas.push(`• ${nome} — ${formatCurrency(toNum(it.totalItem))}`);
+    }
+  }
+
+  if (services.length > 0) {
+    linhas.push("*Serviços:*");
+    for (const sv of services) {
+      linhas.push(`• ${sv.tipo}${sv.descricao ? ` - ${sv.descricao}` : ""} — ${formatCurrency(toNum(sv.valor))}`);
+    }
+  }
+
+  linhas.push("");
+  if (taxaTotal > 0) linhas.push(`Taxa de cartão: ${formatCurrency(taxaTotal)}`);
+  linhas.push(`*Total: ${formatCurrency(totalGeral)}*`);
+  if (pendente > 0) linhas.push(`Pendente: ${formatCurrency(pendente)}`);
+
+  linhas.push("");
+  linhas.push("Obrigado pela preferência!");
+
+  return linhas.join("\n");
+}
+
+/** Normaliza um telefone brasileiro para uso no wa.me (com DDI 55). Retorna "" se inválido. */
+function phoneToWaTarget(phone: string | null | undefined): string {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length < 10) return "";
+  return digits.startsWith("55") ? digits : `55${digits}`;
+}
+
 export default function PdvRelatorio() {
   const { isAdmin } = usePdvAuth();
   const defaults = getDefaultDates();
@@ -244,6 +296,19 @@ export default function PdvRelatorio() {
     } finally {
       setPrintingOrder(false);
     }
+  };
+
+  const handleShareOrderWhatsApp = () => {
+    if (!orderData) {
+      toast.error("Gere o relatório do pedido primeiro");
+      return;
+    }
+    const texto = buildOrderWhatsappText(orderData, cfgNomeLoja?.value || "Jurema Sport");
+    const target = phoneToWaTarget(orderData.clienteTelefone);
+    const url = target
+      ? `https://wa.me/${target}?text=${encodeURIComponent(texto)}`
+      : `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   // ── Relatório de Vendas (admin) ────────────────────────────────────
@@ -666,6 +731,16 @@ export default function PdvRelatorio() {
               {printingOrder ? "Preparando PDF…" : "Imprimir / PDF"}
             </button>
           )}
+          {orderData && !orderLoading && (
+            <button
+              onClick={handleShareOrderWhatsApp}
+              title={orderData.clienteTelefone ? `Enviar para ${orderData.clienteTelefone}` : "Escolher contato no WhatsApp"}
+              className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+            >
+              <Share2 className="w-4 h-4" />
+              Compartilhar no WhatsApp
+            </button>
+          )}
         </div>
 
         {orderToFetch && orderIsError && (
@@ -679,16 +754,26 @@ export default function PdvRelatorio() {
 
       {orderData && !orderLoading && (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h2 className="text-white font-semibold text-sm">Preview — Pedido {orderData.pedidoId}</h2>
-            <button
-              onClick={handlePrintOrder}
-              disabled={printingOrder}
-              className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60"
-            >
-              {printingOrder ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-              {printingOrder ? "Preparando PDF…" : "Imprimir / PDF"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleShareOrderWhatsApp}
+                title={orderData.clienteTelefone ? `Enviar para ${orderData.clienteTelefone}` : "Escolher contato no WhatsApp"}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                WhatsApp
+              </button>
+              <button
+                onClick={handlePrintOrder}
+                disabled={printingOrder}
+                className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60"
+              >
+                {printingOrder ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                {printingOrder ? "Preparando PDF…" : "Imprimir / PDF"}
+              </button>
+            </div>
           </div>
 
           <div ref={orderPrintRef} className="bg-white rounded-xl p-6 text-gray-900">
