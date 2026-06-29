@@ -20,6 +20,7 @@ import {
   orderDayYmdExpr,
   spLocalDateTimeExpr,
 } from "../pdvMysql";
+import { notifyCashFlowViaWhatsApp } from "../pdvWaNotify";
 
 async function getDb() {
   return createPdvMysqlConnection();
@@ -388,6 +389,14 @@ export const pdvDashboardRouter = router({
         usuario: seller.name,
         createdAt: new Date(),
       }).catch(err => console.error('[CashFlow] Erro ao sincronizar com planilha:', err));
+
+      notifyCashFlowViaWhatsApp({
+        tipo: input.tipo,
+        descricao: input.descricao,
+        valor: input.valor,
+        usuario: seller.name,
+        origem: 'manual',
+      }).catch(err => console.error('[CashFlow] Erro na notificação WhatsApp:', err));
 
       return { success: true };
     }),

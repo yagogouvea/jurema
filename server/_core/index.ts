@@ -15,6 +15,8 @@ import { runPdvMigration, seedPdvData } from "../routers/pdvMigration";
 import { runWaMediaBlobMigration } from "../routers/waMediaBlobMigration";
 import { runWaStatusPresetsMigration } from "../routers/waStatusPresetsMigration";
 import { runAutoSync } from "../routers/pdvAutoSync";
+import { registerSocialAgentApi } from "../social/agentApi";
+import { runScheduledPublications, collectMetricsForPublished } from "../social/socialService";
 
 // `tsx watch` no Windows costuma não definir NODE_ENV; sem isso o Vite não sobe.
 const entry = process.argv[1] || "";
@@ -75,6 +77,8 @@ async function startServer() {
   // Foto Sofia armazenada em MySQL LONGBLOB (servida com cache forte e ?v= cache-buster)
   registerPdvSofiaPhotoRoute(app);
   registerWaMessageMediaRoute(app);
+  // API REST do agente Social (MCP) — protegida por SOCIAL_AGENT_KEY
+  registerSocialAgentApi(app);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -152,6 +156,8 @@ async function startServer() {
   });
   // Diagnóstico da notificação de pedido por WhatsApp.
   // ?send=1&to=5511981693476  → tenta enviar uma mensagem de teste real
+  // ?send=1&to=all            → envia para todos os números configurados
+  // ?tipo=suprimento|sangria   → formato de mensagem de caixa (padrão: pedido)
   app.get("/api/diag/wa-notify", async (req, res) => {
     const out: any = {
       ok: true,
@@ -173,7 +179,13 @@ async function startServer() {
         "SELECT value FROM pdv_config WHERE `key` = 'notif_pedido_telefone' LIMIT 1"
         );
         const cfgVal = (cfg as any[])[0];
-        out.telefoneConfig = cfgVal === undefined ? "(não definido → usa padrão 5511981693476)" : (cfgVal.value || "(vazio → DESATIVADO)");
+        const { getNotificationPhones, DEFAULT_NOTIF_PHONES } = await import("../pdvWaNotify");
+        const phones = await getNotificationPhones(db);
+        out.telefoneConfig = cfgVal === undefined
+          ? `(não definido → padrão ${DEFAULT_NOTIF_PHONES.join(", ")})`
+          : phones.length > 0
+            ? phones.join(", ")
+            : "(vazio → DESATIVADO)";
 
         // Status REAL da bridge (fonte de verdade da conexão)
         try {
@@ -202,21 +214,50 @@ async function startServer() {
 
         const doSend = String(req.query.send ?? "") === "1";
         if (doSend) {
-          const to = String(req.query.to ?? "5511981693476").replace(/\D/g, "");
-          out.destino = to;
+          const tipo = String(req.query.tipo ?? "pedido").toLowerCase();
+          const toRaw = String(req.query.to ?? "5511981693476");
+          const destinos = toRaw === "all"
+            ? phones.length > 0 ? phones : ["5511981693476", "5511992022928"]
+            : toRaw.split(/[,;\s]+/).map((p) => p.replace(/\D/g, "")).filter(Boolean);
+
+          out.destinos = destinos;
+          out.tipo = tipo;
           if (slot === null) {
             out.envio = "FALHOU: nenhuma instância conectada/ativa";
           } else {
-            try {
-              const okSend = await sendWaBridgeText(
-                slot,
-                phoneToJid(to),
-                `🔔 Teste de notificação de pedido — ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
-              );
-              out.envio = okSend ? "OK (bridge aceitou)" : "NÃO ENVIADO (WA_BRIDGE_URL ausente)";
-            } catch (e: any) {
-              out.envio = "ERRO: " + (e?.message ?? String(e));
+            const { buildCashFlowNotificationMessage } = await import("../pdvWaNotify");
+            const contentParam = req.query.content ? String(req.query.content) : "";
+            const agora = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+            const content = contentParam
+              ? Buffer.from(contentParam, "base64").toString("utf8")
+              : tipo === "suprimento"
+                ? buildCashFlowNotificationMessage({
+                    tipo: "SUPRIMENTO",
+                    descricao: "[TESTE] Entrada de caixa — troco e fundo de operação",
+                    valor: 350,
+                    usuario: "Sistema (teste)",
+                    origem: "manual",
+                  })
+                : tipo === "sangria"
+                  ? buildCashFlowNotificationMessage({
+                      tipo: "SANGRIA",
+                      descricao: "[TESTE] Retirada para depósito bancário",
+                      valor: 200,
+                      usuario: "Sistema (teste)",
+                      origem: "manual",
+                    })
+                  : `🔔 Teste de notificação de pedido — ${agora}`;
+
+            const resultados: { phone: string; ok: boolean; erro?: string }[] = [];
+            for (const to of destinos) {
+              try {
+                const okSend = await sendWaBridgeText(slot, phoneToJid(to), content);
+                resultados.push({ phone: to, ok: !!okSend });
+              } catch (e: any) {
+                resultados.push({ phone: to, ok: false, erro: e?.message ?? String(e) });
+              }
             }
+            out.envio = resultados;
           }
         }
       } finally {
@@ -256,7 +297,65 @@ async function startServer() {
     // Substitui a antiga tarefa agendada externa (Manus) que parou após a
     // migração para a Railway. Usa sync SELETIVO (preserva estoque).
     startProductSyncScheduler();
+
+    // Agendador do módulo Social: publica posts agendados vencidos e coleta métricas.
+    startSocialScheduler();
   });
+}
+
+/**
+ * Agendador do módulo Social:
+ * - A cada SOCIAL_PUBLISH_INTERVAL_MIN (padrão 1 min): publica posts agendados vencidos.
+ * - A cada SOCIAL_METRICS_INTERVAL_HOURS (padrão 6 h): coleta métricas dos publicados.
+ * Ambos se autodesligam se o publisher (Ayrshare) não estiver configurado.
+ */
+function startSocialScheduler() {
+  const publishMin = parseInt(process.env.SOCIAL_PUBLISH_INTERVAL_MIN || "1", 10);
+  const metricsHours = parseInt(process.env.SOCIAL_METRICS_INTERVAL_HOURS || "6", 10);
+
+  let publishing = false;
+  const publishTick = async () => {
+    if (publishing) return;
+    publishing = true;
+    try {
+      const r = await runScheduledPublications();
+      if (!r.skippedNotConfigured && r.attempted > 0) {
+        console.log(`[Social] Agendados: ${r.published} publicados, ${r.failed} falharam (de ${r.attempted}).`);
+      }
+    } catch (err: any) {
+      console.error("[Social] Falha ao publicar agendados:", err?.message ?? err);
+    } finally {
+      publishing = false;
+    }
+  };
+
+  let collecting = false;
+  const metricsTick = async () => {
+    if (collecting) return;
+    collecting = true;
+    try {
+      const r = await collectMetricsForPublished();
+      if (!r.skippedNotConfigured && r.collected > 0) {
+        console.log(`[Social] Métricas coletadas: ${r.collected} registros.`);
+      }
+    } catch (err: any) {
+      console.error("[Social] Falha ao coletar métricas:", err?.message ?? err);
+    } finally {
+      collecting = false;
+    }
+  };
+
+  if (Number.isFinite(publishMin) && publishMin > 0) {
+    setTimeout(publishTick, 20_000);
+    setInterval(publishTick, publishMin * 60_000);
+  }
+  if (Number.isFinite(metricsHours) && metricsHours > 0) {
+    setTimeout(metricsTick, 120_000);
+    setInterval(metricsTick, metricsHours * 60 * 60_000);
+  }
+  console.log(
+    `[Social] Agendador ativo — publica a cada ${publishMin} min, métricas a cada ${metricsHours} h.`
+  );
 }
 
 /**

@@ -96,7 +96,9 @@ function TabGeral() {
       data.forEach((c: any) => { map[c.key] = c.value || ""; });
       // Reflete o número padrão de notificação de pedidos quando ainda não foi
       // salvo (o servidor já notifica esse número por padrão).
-      if (map.notif_pedido_telefone === undefined) map.notif_pedido_telefone = "5511981693476";
+      if (map.notif_pedido_telefone === undefined) {
+        map.notif_pedido_telefone = "5511981693476, 5511992022928";
+      }
       setConfigs(map);
     }
   }, [data]);
@@ -114,7 +116,13 @@ function TabGeral() {
   const FIELD_CONFIG: Record<string, { label: string; icon: any; type: string; placeholder: string; hint?: string }> = {
     nome_loja: { label: "Nome da Loja", icon: Store, type: "text", placeholder: "Jurema Sport" },
     whatsapp_recibo: { label: "WhatsApp para Recibos", icon: Phone, type: "text", placeholder: "5511999999999", hint: "Número com DDI + DDD + número. Ex: 5511987654321" },
-    notif_pedido_telefone: { label: "WhatsApp para Notificação de Pedidos", icon: Phone, type: "text", placeholder: "5511981693476", hint: "Recebe uma mensagem automática com todos os dados a cada novo pedido. Deixe em branco para desativar." },
+    notif_pedido_telefone: {
+      label: "WhatsApp — Notificações (Pedidos, Suprimento e Sangria)",
+      icon: Phone,
+      type: "text",
+      placeholder: "5511981693476, 5511992022928",
+      hint: "Um ou mais números com DDI (separe por vírgula). Recebem pedidos, suprimentos e sangrias automaticamente. Deixe em branco para desativar.",
+    },
     taxa_debito: { label: "Taxa Débito (%)", icon: Percent, type: "number", placeholder: "3", hint: "Percentual aplicado em pagamentos no débito" },
     taxa_credito: { label: "Taxa Crédito (%)", icon: Percent, type: "number", placeholder: "5", hint: "Percentual aplicado em pagamentos no crédito" },
     min_atacado: { label: "Mínimo de Peças para Atacado", icon: ShoppingBag, type: "number", placeholder: "6", hint: "Quantidade mínima de itens para aplicar preço de atacado" },
@@ -148,6 +156,23 @@ function TabGeral() {
           </div>
         );
       })}
+
+      {configs.notif_pedido_telefone && (
+        <div className="bg-green-950/30 border border-green-900/50 rounded-2xl p-4">
+          <p className="text-green-400 text-sm font-semibold mb-1">Notificações automáticas (pedidos, suprimento e sangria):</p>
+          {configs.notif_pedido_telefone.split(/[,;\n|]+/).map((p) => p.replace(/\D/g, "")).filter(Boolean).map((phone) => (
+            <a
+              key={phone}
+              href={`https://wa.me/${phone}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block text-green-300 text-sm underline"
+            >
+              wa.me/{phone}
+            </a>
+          ))}
+        </div>
+      )}
 
       {configs.whatsapp_recibo && (
         <div className="bg-green-950/30 border border-green-900/50 rounded-2xl p-4">
