@@ -181,6 +181,8 @@ async function startServer() {
         const cfgVal = (cfg as any[])[0];
         const { getNotificationPhones, DEFAULT_NOTIF_PHONES } = await import("../pdvWaNotify");
         const phones = await getNotificationPhones(db);
+        out.numerosResolvidos = phones;
+        out.codigoVersao = "multi-notify-v2";
         out.telefoneConfig = cfgVal === undefined
           ? `(não definido → padrão ${DEFAULT_NOTIF_PHONES.join(", ")})`
           : phones.length > 0

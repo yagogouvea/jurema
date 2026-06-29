@@ -204,6 +204,20 @@ export async function seedPdvData(): Promise<void> {
       console.log("[PDV Seed] Vanessa: senha alinhada ao padrão local (jurema@123).");
     }
 
+    // Garante os dois números de notificação quando a config ainda não existe.
+    const NOTIF_PHONES_DEFAULT = "5511981693476, 5511992022928";
+    const [notifRows] = await connection.execute(
+      "SELECT value FROM pdv_config WHERE `key` = 'notif_pedido_telefone' LIMIT 1"
+    );
+    const notifCfg = (notifRows as { value?: string }[])[0];
+    if (notifCfg === undefined) {
+      await connection.execute(
+        "INSERT INTO pdv_config (`key`, value) VALUES ('notif_pedido_telefone', ?)",
+        [NOTIF_PHONES_DEFAULT]
+      );
+      console.log("[PDV Seed] notif_pedido_telefone criado com os dois números padrão.");
+    }
+
     await connection.end();
   } catch (error) {
     console.error("[PDV Seed] Error:", error);

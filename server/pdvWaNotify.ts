@@ -21,10 +21,21 @@ function fmtBRL(v: number): string {
   return `R$ ${(Number(v) || 0).toFixed(2).replace(".", ",")}`;
 }
 
+/** Normaliza telefone BR para envio WhatsApp (DDI 55). */
+export function normalizeNotificationPhone(raw: string): string {
+  const digits = (raw || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
+}
+
 /** Normaliza e deduplica telefones (somente dígitos, com DDI). */
 export function parseNotificationPhones(raw: string | undefined | null): string[] {
   if (!raw?.trim()) return [];
-  const parts = raw.split(/[,;\n|]+/).map((p) => p.replace(/\D/g, "")).filter(Boolean);
+  const parts = raw
+    .split(/[,;\n|]+/)
+    .map((p) => normalizeNotificationPhone(p))
+    .filter(Boolean);
   return [...new Set(parts)];
 }
 
@@ -44,7 +55,12 @@ export async function getNotificationPhones(db: Connection): Promise<string[]> {
 
 async function sendToAllPhones(slot: number, phones: string[], content: string): Promise<void> {
   for (const phone of phones) {
-    await sendWaBridgeText(slot, phoneToJid(phone), content);
+    try {
+      await sendWaBridgeText(slot, phoneToJid(phone), content);
+      console.log(`[pdvWaNotify] Enviado para ${phone}`);
+    } catch (err) {
+      console.error(`[pdvWaNotify] Falha ao enviar para ${phone}:`, err);
+    }
   }
 }
 
