@@ -15,8 +15,6 @@ import { runPdvMigration, seedPdvData } from "../routers/pdvMigration";
 import { runWaMediaBlobMigration } from "../routers/waMediaBlobMigration";
 import { runWaStatusPresetsMigration } from "../routers/waStatusPresetsMigration";
 import { runAutoSync } from "../routers/pdvAutoSync";
-import { registerSocialAgentApi } from "../social/agentApi";
-import { runScheduledPublications, collectMetricsForPublished } from "../social/socialService";
 
 // `tsx watch` no Windows costuma não definir NODE_ENV; sem isso o Vite não sobe.
 const entry = process.argv[1] || "";
@@ -77,8 +75,6 @@ async function startServer() {
   // Foto Sofia armazenada em MySQL LONGBLOB (servida com cache forte e ?v= cache-buster)
   registerPdvSofiaPhotoRoute(app);
   registerWaMessageMediaRoute(app);
-  // API REST do agente Social (MCP) — protegida por SOCIAL_AGENT_KEY
-  registerSocialAgentApi(app);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -299,65 +295,7 @@ async function startServer() {
     // Substitui a antiga tarefa agendada externa (Manus) que parou após a
     // migração para a Railway. Usa sync SELETIVO (preserva estoque).
     startProductSyncScheduler();
-
-    // Agendador do módulo Social: publica posts agendados vencidos e coleta métricas.
-    startSocialScheduler();
   });
-}
-
-/**
- * Agendador do módulo Social:
- * - A cada SOCIAL_PUBLISH_INTERVAL_MIN (padrão 1 min): publica posts agendados vencidos.
- * - A cada SOCIAL_METRICS_INTERVAL_HOURS (padrão 6 h): coleta métricas dos publicados.
- * Ambos se autodesligam se o publisher (Ayrshare) não estiver configurado.
- */
-function startSocialScheduler() {
-  const publishMin = parseInt(process.env.SOCIAL_PUBLISH_INTERVAL_MIN || "1", 10);
-  const metricsHours = parseInt(process.env.SOCIAL_METRICS_INTERVAL_HOURS || "6", 10);
-
-  let publishing = false;
-  const publishTick = async () => {
-    if (publishing) return;
-    publishing = true;
-    try {
-      const r = await runScheduledPublications();
-      if (!r.skippedNotConfigured && r.attempted > 0) {
-        console.log(`[Social] Agendados: ${r.published} publicados, ${r.failed} falharam (de ${r.attempted}).`);
-      }
-    } catch (err: any) {
-      console.error("[Social] Falha ao publicar agendados:", err?.message ?? err);
-    } finally {
-      publishing = false;
-    }
-  };
-
-  let collecting = false;
-  const metricsTick = async () => {
-    if (collecting) return;
-    collecting = true;
-    try {
-      const r = await collectMetricsForPublished();
-      if (!r.skippedNotConfigured && r.collected > 0) {
-        console.log(`[Social] Métricas coletadas: ${r.collected} registros.`);
-      }
-    } catch (err: any) {
-      console.error("[Social] Falha ao coletar métricas:", err?.message ?? err);
-    } finally {
-      collecting = false;
-    }
-  };
-
-  if (Number.isFinite(publishMin) && publishMin > 0) {
-    setTimeout(publishTick, 20_000);
-    setInterval(publishTick, publishMin * 60_000);
-  }
-  if (Number.isFinite(metricsHours) && metricsHours > 0) {
-    setTimeout(metricsTick, 120_000);
-    setInterval(metricsTick, metricsHours * 60 * 60_000);
-  }
-  console.log(
-    `[Social] Agendador ativo — publica a cada ${publishMin} min, métricas a cada ${metricsHours} h.`
-  );
 }
 
 /**
