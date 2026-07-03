@@ -268,6 +268,32 @@ async function startServer() {
     res.json(out);
   });
 
+  // Limpa todo o histórico de conversas WhatsApp IA (admin/script). Protegido por SHEETS_WEBHOOK_SECRET.
+  app.post("/api/admin/wa-clear-conversations", async (req, res) => {
+    const expected = process.env.SHEETS_WEBHOOK_SECRET || "jurema-pdv-2024";
+    const provided =
+      String(req.headers["x-webhook-secret"] ?? req.query.secret ?? req.body?.secret ?? "");
+    if (provided !== expected) {
+      return res.status(403).json({ ok: false, error: "Unauthorized" });
+    }
+    const url = process.env.DATABASE_URL;
+    if (!url) return res.status(500).json({ ok: false, error: "DATABASE_URL ausente" });
+    try {
+      const mysql = (await import("mysql2/promise")).default;
+      const db = await mysql.createConnection(url);
+      try {
+        const { clearAllWaConversationHistory } = await import("../waClearHistory");
+        const result = await clearAllWaConversationHistory(db);
+        console.log("[wa-clear] Histórico apagado:", result);
+        res.json({ ok: true, ...result });
+      } finally {
+        await db.end();
+      }
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? String(e) });
+    }
+  });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

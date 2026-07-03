@@ -1797,6 +1797,19 @@ export const waRouter = router({
       }
     }),
 
+  /** Apaga todo o histórico de conversas e mensagens (admin). Mantém instâncias e configurações da IA. */
+  clearAllConversations: publicProcedure.mutation(async ({ ctx }) => {
+    await requireWaAdmin(ctx);
+    const db = await getDb();
+    try {
+      const { clearAllWaConversationHistory } = await import("../waClearHistory");
+      const result = await clearAllWaConversationHistory(db);
+      return { success: true, ...result };
+    } finally {
+      await db.end();
+    }
+  }),
+
 });
 
 // ─── Helper: wa-bridge ───────────────────────────────────────────────────────

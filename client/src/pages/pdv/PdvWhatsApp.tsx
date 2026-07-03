@@ -1067,6 +1067,18 @@ export default function PdvWhatsApp() {
     onError: (e) => toast.error("Erro ao deduplicar: " + e.message),
   });
 
+  const clearAllMut = trpc.wa.clearAllConversations.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        `Histórico apagado: ${result.deleted.wa_conversations} conversa(s), ${result.deleted.wa_messages} mensagem(ns).`
+      );
+      setSelectedConvId(null);
+      utils.wa.listConversations.invalidate();
+      utils.wa.countByStatus.invalidate();
+    },
+    onError: (e) => toast.error("Erro ao limpar histórico: " + e.message),
+  });
+
   const sendMsgMut = trpc.wa.sendMessage.useMutation({
     onSuccess: () => {
       setMessageInput("");
@@ -1190,6 +1202,30 @@ export default function PdvWhatsApp() {
             </div>
             {isAdmin && (
               <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "Apagar TODO o histórico de conversas?\n\nIsso remove todas as mensagens e conversas. Instâncias e configurações da IA são mantidas."
+                      )
+                    ) {
+                      clearAllMut.mutate();
+                    }
+                  }}
+                  disabled={clearAllMut.isPending}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-red-950/40 disabled:opacity-50"
+                  style={{ color: clearAllMut.isPending ? "#555" : "#ef4444" }}
+                  title="Apagar todo o histórico de conversas"
+                >
+                  {clearAllMut.isPending ? (
+                    <span className="text-[9px] animate-spin">⟳</span>
+                  ) : (
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                  )}
+                </button>
                 <button
                   onClick={() => {
                     if (confirm("Mesclar conversas duplicadas? Isso irá unificar conversas do mesmo contato em uma só.")) {
