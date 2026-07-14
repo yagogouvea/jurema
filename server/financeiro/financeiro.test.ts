@@ -103,6 +103,24 @@ describe("infinitePayParser", () => {
     });
     expect(withoutHeader.period).toEqual({ start: "2026-07-01", end: "2026-07-01" });
   });
+
+  it("extrai formato colapsado do unpdf (uma linha por Pix)", () => {
+    const collapsed = `
+Relatório de movimentações CLOUDWALK - 0001 - 27244528-6
+01 Jul, 2026 - 02 Jul, 2026
+Data Hora Tipo de transação Nome Detalhe Valor (R$)
+05:50 Pix Pix GIL MARCOS DE OLIVEIRA BARBOSA CRUZ Recebido +180,00
+06:27 Pix Pix 56.119.430 DEIVID DOS SANTOS PIZELLI Recebido +315,00
+06:54 Pix Pix Victor Sidnei Sena da Silva Enviado -360,00
+01 Jul, 2026
+Página 1 de 1
+`;
+    const parsed = parseInfinitePayText(collapsed);
+    expect(parsed.lines.length).toBe(2);
+    expect(parsed.ignoredOutCount).toBe(1);
+    expect(parsed.lines[0].amountCents).toBe(18000);
+    expect(parsed.lines[0].date).toBe("2026-07-01");
+  });
 });
 
 describe("match", () => {

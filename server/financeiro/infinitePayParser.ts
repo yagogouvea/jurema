@@ -77,29 +77,100 @@ function extractCompany(text: string): string | null {
 }
 
 /**
- * InfinitePay costuma imprimir a data do dia no rodapé da página
- * (antes de "Central de Ajuda" / "Página X de Y").
+ * InfinitePay imprime a data do dia no rodapé, antes de "Página X de Y".
+ * Associa essa data à página que está terminando.
  */
 function findPageDates(text: string): Map<number, string> {
   const map = new Map<number, string>();
-  const pages = text.split(/P[áa]gina\s+(\d+)\s+de\s+\d+/i);
-  // split: [content0, pageNum1, content1, pageNum2, ...]
-  // Actually after first match: chunk before, then capt group, then after...
-  // Better scan line-by-line with current page.
-  let page = 1;
+  let pendingDate: string | null = null;
   for (const line of text.split(/\r?\n/)) {
-    const pageM = line.match(/P[áa]gina\s+(\d+)\s+de\s+\d+/i);
-    if (pageM) {
-      page = Number(pageM[1]);
-      continue;
-    }
-    const dm = line.match(/^(\d{1,2}\s+[A-Za-zÀ-ú]{3},?\s+\d{4})\s*$/);
-    if (dm) {
+    const dm = line.match(/^(\d{1,2}\s+[A-Za-zÀ-ú]{3},?\s+\d{4})\b/);
+    if (dm && !/\s[-–]\s/.test(line)) {
       const ymd = parsePtDateToken(dm[1]);
-      if (ymd) map.set(page, ymd);
+      if (ymd) pendingDate = ymd;
+    }
+    const pageM = line.match(/P[áa]gina\s+(\d+)\s+de\s+\d+/i);
+    if (pageM && pendingDate) {
+      map.set(Number(pageM[1]), pendingDate);
+      pendingDate = null;
+    }
+  }
+  // Texto colado (sem \n): "… +180,00 01 Jul, 2026 A Central… Página 1 de 9"
+  if (map.size === 0) {
+    const re =
+      /(\d{1,2}\s+[A-Za-zÀ-ú]{3},?\s+\d{4})\s+(?:A\s+Central|Central de Ajuda)?[^]*?P[áa]gina\s+(\d+)\s+de\s+\d+/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text))) {
+      const ymd = parsePtDateToken(m[1]);
+      if (ymd) map.set(Number(m[2]), ymd);
     }
   }
   return map;
+}
+
+const TX_COLLAPSED_RE =
+  /(\d{1,2}:\d{2})\s+Pix\s+(.+?)\s+(Recebido|Enviado)\s+([+\-−]?\d{1,3}(?:\.\d{3})*,\d{2})/gi;
+
+/** Extrai movimentos no formato de uma linha (como o unpdf devolve). */
+function extractCollapsedMoves(
+  text: string,
+  periodStart: string | null,
+  pageDates: Map<number, string>
+): { lines: ExtractLine[]; ignoredOutCount: number } {
+  const lines: ExtractLine[] = [];
+  let ignoredOutCount = 0;
+  // Marca posições de "Página N" → conteúdo seguinte é página N+1
+  const pageMarks: { idx: number; page: number }[] = [{ idx: 0, page: 1 }];
+  const pageRe = /P[áa]gina\s+(\d+)\s+de\s+\d+/gi;
+  let pm: RegExpExecArray | null;
+  while ((pm = pageRe.exec(text))) {
+    pageMarks.push({ idx: pm.index + pm[0].length, page: Number(pm[1]) + 1 });
+  }
+
+  const pageAt = (idx: number): number => {
+    let p = 1;
+    for (const mark of pageMarks) {
+      if (mark.idx <= idx) p = mark.page;
+      else break;
+    }
+    return p;
+  };
+
+  TX_COLLAPSED_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TX_COLLAPSED_RE.exec(text))) {
+    const time = m[1].padStart(5, "0");
+    const detail = /^Recebido$/i.test(m[3]) ? "Recebido" : "Enviado";
+    const centsSigned = parseBrlAmountToCents(m[4]);
+    if (detail === "Enviado") {
+      ignoredOutCount++;
+      continue;
+    }
+    if (centsSigned <= 0) continue;
+    const page = pageAt(m.index);
+    const date = pageDates.get(page) || pageDates.get(page - 1) || periodStart;
+    if (!date) continue;
+    const payerNameRaw = m[2]
+      .replace(/^Pix\s+/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const payerNameNorm = normalizeName(payerNameRaw);
+    const idSrc = stableLineId([date, time, payerNameNorm, centsSigned, page]);
+    lines.push({
+      id: hashId(idSrc),
+      source: "infinitepay",
+      date,
+      time,
+      datetimeIso: `${date}T${time}:00-03:00`,
+      type: "PIX",
+      direction: "in",
+      payerNameRaw,
+      payerNameNorm,
+      amountCents: centsSigned,
+      page,
+    });
+  }
+  return { lines, ignoredOutCount };
 }
 
 function hashId(s: string): string {
@@ -117,12 +188,15 @@ export function parseInfinitePayText(rawText: string): InfinitePayParseResult {
   const companyLabel = extractCompany(text);
   const pageDates = findPageDates(text);
 
+  // Preferir formato colapsado (unpdf: "05:50 Pix Pix NOME Recebido +180,00")
+  const collapsed = extractCollapsedMoves(text, period?.start || null, pageDates);
+
   const lines: ExtractLine[] = [];
   let ignoredOutCount = 0;
   let currentPage = 1;
   let currentDate =
-    period?.start ||
     pageDates.get(1) ||
+    period?.start ||
     null;
 
   // Acumulador de um lançamento multi-linha
@@ -194,9 +268,12 @@ export function parseInfinitePayText(rawText: string): InfinitePayParseResult {
 
     const pageM = line.match(/P[áa]gina\s+(\d+)\s+de\s+\d+/i);
     if (pageM) {
-      currentPage = Number(pageM[1]);
-      const d = pageDates.get(currentPage);
-      if (d) currentDate = d;
+      // Rodapé da página N → próximos lançamentos são da página N+1
+      currentPage = Number(pageM[1]) + 1;
+      currentDate =
+        pageDates.get(currentPage) ||
+        pageDates.get(Number(pageM[1])) ||
+        currentDate;
       continue;
     }
 
@@ -265,13 +342,18 @@ export function parseInfinitePayText(rawText: string): InfinitePayParseResult {
     }
   }
 
+  // Multiline antigo (hora / Pix / nome / Recebido em linhas separadas)
+  const multiline = { lines, ignoredOutCount };
+  const best =
+    collapsed.lines.length >= multiline.lines.length ? collapsed : multiline;
+
   return {
     source: "infinitepay",
     period,
     accountLabel,
     companyLabel,
-    lines,
-    ignoredOutCount,
+    lines: best.lines,
+    ignoredOutCount: best.ignoredOutCount,
   };
 }
 
@@ -317,9 +399,17 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
     const extractText = (mod as any).extractText;
     if (typeof getDocumentProxy === "function" && typeof extractText === "function") {
       const pdf = await getDocumentProxy(new Uint8Array(buffer));
-      const { text } = await extractText(pdf, { mergePages: true });
-      const joined = Array.isArray(text) ? text.join("\n") : String(text ?? "");
+      // mergePages:true cola tudo sem \n e quebra parsers; preferir páginas separadas.
+      const { text } = await extractText(pdf, { mergePages: false });
+      const joined = Array.isArray(text)
+        ? text.map((p: unknown) => String(p ?? "")).join("\n")
+        : String(text ?? "");
       if (joined.trim().length > 80) return joined;
+      const merged = await extractText(pdf, { mergePages: true });
+      const mergedText = Array.isArray(merged.text)
+        ? merged.text.join("\n")
+        : String(merged.text ?? "");
+      if (mergedText.trim().length > 80) return mergedText;
     }
   } catch (e) {
     console.warn("[financeiro] unpdf indisponível, usando extrator simples:", e);
