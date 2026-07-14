@@ -30,6 +30,11 @@ export async function parseExtratoPdf(
   }
 
   const text = await extractPdfText(buffer);
+  if (!text || text.replace(/\s+/g, "").length < 40) {
+    throw new Error(
+      "O PDF não tem texto legível (pode ser imagem/scan). Exporte o extrato em PDF com texto ou selecione a origem e tente outro arquivo."
+    );
+  }
   if (looksLikeMercadoPago(text)) {
     return parseMercadoPagoText(text);
   }
@@ -43,6 +48,6 @@ export async function parseExtratoPdf(
   const ip = parseInfinitePayText(text);
   if (ip.lines.length > 0) return { ...ip, ignoredOtherCount: 0 };
   throw new Error(
-    "Não foi possível identificar o extrato (InfinitePay ou Mercado Pago). Selecione a origem manualmente."
+    "Não foi possível identificar o extrato (InfinitePay ou Mercado Pago). No campo Origem, escolha a plataforma e tente de novo."
   );
 }

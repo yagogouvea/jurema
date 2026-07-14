@@ -243,18 +243,30 @@ export async function parseMercadoPagoPdf(buffer: Buffer): Promise<MercadoPagoPa
 
 export function looksLikeMercadoPago(text: string): boolean {
   const t = text.toLowerCase();
-  return (
-    t.includes("extrato de conta") &&
-    (t.includes("mercado pago") || t.includes("id da opera"))
-  );
+  const hasMp =
+    t.includes("mercado pago") ||
+    t.includes("mercadopago") ||
+    t.includes("id da opera") ||
+    t.includes("id de opera");
+  const hasExtrato =
+    t.includes("extrato de conta") ||
+    t.includes("libera") ||
+    t.includes("pagamento com codigo qr") ||
+    t.includes("pagamento com código qr") ||
+    /pix\s+/i.test(text);
+  return hasMp && hasExtrato;
 }
 
 export function looksLikeInfinitePay(text: string): boolean {
-  const t = text.toLowerCase();
+  const t = text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
   return (
     t.includes("cloudwalk") ||
     t.includes("infinitepay") ||
-    t.includes("relatório de movimentações") ||
-    t.includes("relatorio de movimentacoes")
+    t.includes("infinite pay") ||
+    t.includes("relatorio de movimentacoes") ||
+    (t.includes("recebido de") && t.includes("transferencia"))
   );
 }

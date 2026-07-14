@@ -99,6 +99,9 @@ async function loadPdvPixPayments(
     return mapPaymentRows(rows as any[]);
   }
 
+  // mysql2: INTERVAL/LIMIT não podem ser placeholders (mysqld_stmt_execute).
+  const before = Math.max(0, Math.min(365, Math.floor(beforeDays + 1)));
+  const after = Math.max(0, Math.min(365, Math.floor(afterDays + 1)));
   const [rows] = await db.execute(
     `SELECT
        p.id AS paymentId, o.pedidoId, o.status, o.clienteNome, p.nomePix, p.valor,
@@ -108,9 +111,9 @@ async function loadPdvPixPayments(
      WHERE p.formaPagamento = 'PIX'
        AND o.status <> 'CANCELADO'
        AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'))
-           BETWEEN DATE_SUB(?, INTERVAL ? DAY) AND DATE_ADD(?, INTERVAL ? DAY)
+           BETWEEN DATE_SUB(?, INTERVAL ${before} DAY) AND DATE_ADD(?, INTERVAL ${after} DAY)
      ORDER BY o.createdAt ASC`,
-    [start, beforeDays + 1, end, afterDays + 1]
+    [start, end]
   );
   return mapPaymentRows(rows as any[]);
 }
@@ -154,12 +157,14 @@ async function loadPdvCardPayments(
     );
     rows = r as any[];
   } else {
+    const before = Math.max(0, Math.min(365, Math.floor(beforeDays + 1)));
+    const after = Math.max(0, Math.min(365, Math.floor(afterDays + 1)));
     const [r] = await db.execute(
       `${select}
        AND DATE(CONVERT_TZ(o.createdAt, '+00:00', '-03:00'))
-           BETWEEN DATE_SUB(?, INTERVAL ? DAY) AND DATE_ADD(?, INTERVAL ? DAY)
+           BETWEEN DATE_SUB(?, INTERVAL ${before} DAY) AND DATE_ADD(?, INTERVAL ${after} DAY)
        ORDER BY o.createdAt ASC`,
-      [periodStart, beforeDays + 1, periodEnd, afterDays + 1]
+      [periodStart, periodEnd]
     );
     rows = r as any[];
   }
@@ -472,12 +477,12 @@ export const pdvFinanceiroRouter = router({
       await ensureFinanceiroTables();
       const db = await getDb();
       try {
+        const limit = Math.max(1, Math.min(50, Math.floor(input?.limit ?? 20)));
         const [rows] = await db.execute(
           `SELECT id, source, periodStart, periodEnd, accountLabel, createdBy, totalsJson, originalFileName, createdAt
            FROM pdv_reconciliations
            ORDER BY id DESC
-           LIMIT ?`,
-          [input?.limit ?? 20]
+           LIMIT ${limit}`
         );
         return (rows as any[]).map((r) => ({
           id: r.id,

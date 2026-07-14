@@ -226,6 +226,10 @@ export default function PdvFinanceiro() {
               Analisar
             </button>
           </div>
+          <p className="text-xs text-amber-400/90">
+            Se a detecção automática falhar, escolha <strong className="text-amber-300">Mercado Pago</strong> ou{" "}
+            <strong className="text-amber-300">InfinitePay</strong> em Origem antes de Analisar.
+          </p>
           <p className="text-xs text-gray-500 flex items-start gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
             Pix recebido / QR Pix × PIX do PDV. Liberação de dinheiro (MP) × Débito/Crédito
