@@ -171,7 +171,7 @@ export default function PdvFinanceiro() {
           <div>
             <h1 className="text-xl font-bold text-white">Financeiro</h1>
             <p className="text-sm text-gray-400">
-              Conciliação InfinitePay / Mercado Pago × pedidos PIX do PDV
+              Anexe o extrato do banco (InfinitePay ou Mercado Pago) — não o Relatório de Vendas do PDV
             </p>
           </div>
         </div>
@@ -257,8 +257,9 @@ export default function PdvFinanceiro() {
             </button>
           </div>
           <p className="text-xs text-gray-400">
-            O sistema lê o <strong className="text-gray-200">período do extrato</strong> e compara só os pedidos
-            do PDV dessa janela. Deixe as datas em branco para detectar do PDF, ou preencha se precisar forçar.
+            Use o PDF da InfinitePay (<strong className="text-gray-200">Relatório de movimentações</strong>) ou do
+            Mercado Pago (<strong className="text-gray-200">Extrato de conta</strong>). O sistema lê o período e
+            compara só os pedidos do PDV nessa janela.
           </p>
           <p className="text-xs text-amber-400/90">
             Se a detecção automática falhar, escolha <strong className="text-amber-300">Mercado Pago</strong> ou{" "}
