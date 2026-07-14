@@ -9,7 +9,7 @@ import { verifyPdvToken } from "./pdvAuth";
 import { createPdvMysqlConnection } from "../pdvMysql";
 import { parseInfinitePayText } from "../financeiro/infinitePayParser";
 import { parseMercadoPagoText } from "../financeiro/mercadoPagoParser";
-import { parseExtratoPdf } from "../financeiro/parseExtrato";
+import { ensurePeriodFromLines, parseExtratoPdf } from "../financeiro/parseExtrato";
 import { reconcileExtractToPayments } from "../financeiro/matchReconcile";
 import {
   reconcileCardLiberations,
@@ -256,6 +256,14 @@ export const pdvFinanceiroRouter = router({
         end: input.periodEnd || parsed.period?.end || null,
       };
 
+      if (!period.start || !period.end) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Não foi possível identificar o período do extrato. Informe Data início e Data fim na tela e analise de novo.",
+        });
+      }
+
       const tolerance = {
         beforeMs: input.beforeHours * 60 * 60 * 1000,
         afterMs: input.afterHours * 60 * 60 * 1000,
@@ -265,6 +273,7 @@ export const pdvFinanceiroRouter = router({
       let payments: PdvPixPayment[] = [];
       let cardPayments: PdvCardPayment[] = [];
       try {
+        // Pedidos do PDV só no período do extrato (+ tolerância de match PIX/cartão)
         payments = await loadPdvPixPayments(
           db,
           period.start,
@@ -415,6 +424,13 @@ export const pdvFinanceiroRouter = router({
             ? mp
             : { ...parseInfinitePayText(input.text), ignoredOtherCount: 0 };
       }
+      parsed = ensurePeriodFromLines(parsed);
+      if (!parsed.period?.start || !parsed.period?.end) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Não foi possível identificar o período do extrato no texto.",
+        });
+      }
       const liberacoes = parsed.lines.filter((l) => l.kindLabel === "liberacao");
       const matchable = parsed.lines.filter((l) => l.kindLabel !== "liberacao");
       const tolerance = {
@@ -427,15 +443,15 @@ export const pdvFinanceiroRouter = router({
       try {
         payments = await loadPdvPixPayments(
           db,
-          parsed.period?.start || null,
-          parsed.period?.end || null,
+          parsed.period.start,
+          parsed.period.end,
           tolerance.beforeMs,
           tolerance.afterMs
         );
         cards = await loadPdvCardPayments(
           db,
-          parsed.period?.start || null,
-          parsed.period?.end || null,
+          parsed.period.start,
+          parsed.period.end,
           DEFAULT_CARD_TOLERANCE.beforeMs,
           DEFAULT_CARD_TOLERANCE.afterMs
         );

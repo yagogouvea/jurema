@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseInfinitePayText } from "./infinitePayParser";
+import { ensurePeriodFromLines } from "./parseExtrato";
 import { reconcileExtractToPayments, scoreMatch, withinWindow } from "./matchReconcile";
 import { bestNameScore, normalizeName, parseBrlAmountToCents, toCents } from "./normalize";
 import type { ExtractLine, PdvPixPayment } from "./types";
@@ -91,6 +92,16 @@ describe("infinitePayParser", () => {
     expect(parsed.lines.filter((l) => l.amountCents === 31500).length).toBe(2);
     // Rafaela 315 + 20
     expect(parsed.lines.some((l) => l.amountCents === 2000)).toBe(true);
+  });
+
+  it("deriva período pelas datas dos lançamentos se cabeçalho faltar", () => {
+    const parsed = parseInfinitePayText(SAMPLE);
+    const withoutHeader = ensurePeriodFromLines({
+      ...parsed,
+      period: null,
+      ignoredOtherCount: 0,
+    });
+    expect(withoutHeader.period).toEqual({ start: "2026-07-01", end: "2026-07-01" });
   });
 });
 

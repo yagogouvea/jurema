@@ -19,6 +19,8 @@ export default function PdvFinanceiro() {
   const [fileName, setFileName] = useState<string>("");
   const [pdfBase64, setPdfBase64] = useState<string>("");
   const [source, setSource] = useState<"auto" | "infinitepay" | "mercado_pago">("auto");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const [beforeHours, setBeforeHours] = useState(36);
   const [afterHours, setAfterHours] = useState(72);
   const [tab, setTab] = useState<Tab>("matched");
@@ -28,10 +30,16 @@ export default function PdvFinanceiro() {
   const reconcile = trpc.pdvFinanceiro.reconcile.useMutation({
     onSuccess: (data) => {
       setResult(data);
+      if (data.period?.start) setPeriodStart(data.period.start);
+      if (data.period?.end) setPeriodEnd(data.period.end);
       setTab(data.totals.reviewCount > 0 ? "review" : "matched");
       utils.pdvFinanceiro.list.invalidate();
+      const per =
+        data.period?.start && data.period?.end
+          ? ` · período ${data.period.start} → ${data.period.end}`
+          : "";
       toast.success(
-        `Análise ok (${data.source}): ${data.totals.matchCount} localizados, ${data.totals.reviewCount} para revisar`
+        `Análise ok (${data.source}${per}): ${data.totals.matchCount} localizados, ${data.totals.reviewCount} para revisar`
       );
     },
     onError: (e) => toast.error(e.message || "Falha na conciliação"),
@@ -108,6 +116,8 @@ export default function PdvFinanceiro() {
       pdfBase64,
       fileName,
       source,
+      periodStart: periodStart || undefined,
+      periodEnd: periodEnd || undefined,
       beforeHours,
       afterHours,
       persist: true,
@@ -196,6 +206,26 @@ export default function PdvFinanceiro() {
               </select>
             </label>
             <label>
+              <span className="text-xs text-gray-500 block mb-1">Período início</span>
+              <input
+                type="date"
+                value={periodStart}
+                onChange={(e) => setPeriodStart(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white"
+                title="Opcional: se vazio, usa o período lido do PDF"
+              />
+            </label>
+            <label>
+              <span className="text-xs text-gray-500 block mb-1">Período fim</span>
+              <input
+                type="date"
+                value={periodEnd}
+                onChange={(e) => setPeriodEnd(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white"
+                title="Opcional: se vazio, usa o período lido do PDF"
+              />
+            </label>
+            <label>
               <span className="text-xs text-gray-500 block mb-1">PIX antes do pedido (h)</span>
               <input
                 type="number"
@@ -226,6 +256,10 @@ export default function PdvFinanceiro() {
               Analisar
             </button>
           </div>
+          <p className="text-xs text-gray-400">
+            O sistema lê o <strong className="text-gray-200">período do extrato</strong> e compara só os pedidos
+            do PDV dessa janela. Deixe as datas em branco para detectar do PDF, ou preencha se precisar forçar.
+          </p>
           <p className="text-xs text-amber-400/90">
             Se a detecção automática falhar, escolha <strong className="text-amber-300">Mercado Pago</strong> ou{" "}
             <strong className="text-amber-300">InfinitePay</strong> em Origem antes de Analisar.
@@ -239,6 +273,17 @@ export default function PdvFinanceiro() {
 
         {result && (
           <div className="space-y-4">
+            <div className="rounded-xl border border-emerald-800/50 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-100">
+              Período analisado:{" "}
+              <strong>
+                {result.period?.start || "?"} → {result.period?.end || "?"}
+              </strong>
+              <span className="text-emerald-200/70">
+                {" "}
+                · {result.source}
+                {result.accountLabel ? ` · ${result.accountLabel}` : ""}
+              </span>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 ["Extrato (entradas)", result.totals.extractInCents],
