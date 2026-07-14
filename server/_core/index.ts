@@ -14,6 +14,7 @@ import { registerWaMessageMediaRoute } from "../waMessageMediaRoute";
 import { runPdvMigration, seedPdvData } from "../routers/pdvMigration";
 import { runWaMediaBlobMigration } from "../routers/waMediaBlobMigration";
 import { runWaStatusPresetsMigration } from "../routers/waStatusPresetsMigration";
+import { ensureFinanceiroTables } from "../routers/pdvFinanceiro";
 import { runAutoSync } from "../routers/pdvAutoSync";
 
 // `tsx watch` no Windows costuma não definir NODE_ENV; sem isso o Vite não sobe.
@@ -315,6 +316,7 @@ async function startServer() {
       .then(() => seedPdvData())
       .then(() => runWaMediaBlobMigration())
       .then(() => runWaStatusPresetsMigration())
+      .then(() => ensureFinanceiroTables())
       .catch(err => console.error("[PDV] Setup error:", err));
 
     // Agendador interno de sincronização da planilha → sistema.

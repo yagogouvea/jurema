@@ -10,4 +10,6 @@ export const ENV = {
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
   openaiBaseUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com",
   openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  /** Modelo maior só para relatório financeiro / textos longos. */
+  openaiModelReport: process.env.OPENAI_MODEL_REPORT ?? "gpt-4o",
 };

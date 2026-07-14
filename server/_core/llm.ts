@@ -62,6 +62,8 @@ export type InvokeParams = {
   tool_choice?: ToolChoice;
   maxTokens?: number;
   max_tokens?: number;
+  /** Sobrescreve o modelo padrão (ex.: gpt-4o no relatório financeiro). */
+  model?: string;
   outputSchema?: OutputSchema;
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
@@ -307,10 +309,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
     maxTokens,
     max_tokens,
+    model: modelOverride,
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: provider.model,
+    model: modelOverride?.trim() || provider.model,
     messages: messages.map(normalizeMessage),
   };
 

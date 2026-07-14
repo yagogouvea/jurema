@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import {
   ShoppingBag, History, Users, LogOut,
   ChevronRight, Menu, X, BarChart2, Settings, TrendingUp, Bell,
-  Package, Wallet, FileText, PlusSquare, Globe, UserCircle, MessageCircle, LayoutGrid
+  Package, Wallet, FileText, PlusSquare, Globe, UserCircle, MessageCircle, LayoutGrid,
+  Landmark
 } from "lucide-react";
 
 interface PdvLayoutProps {
@@ -68,13 +69,14 @@ export default function PdvLayout({ children }: PdvLayoutProps) {
     { href: "/pdv/historico", icon: History, label: "Histórico" },
     { href: "/pdv/comissoes", icon: TrendingUp, label: "Bônus" },
     { href: "/pdv/meu-perfil", icon: UserCircle, label: "Meu Perfil" },
-    { href: "/pdv/whatsapp", icon: MessageCircle, label: "WhatsApp IA" },
+      { href: "/pdv/whatsapp", icon: MessageCircle, label: "WhatsApp IA" },
     ...(isAdmin ? [
       { href: "/pdv/dashboard", icon: BarChart2, label: "Dashboard" },
       { href: "/pdv/painel-vendedor", icon: LayoutGrid, label: "Painel Vendedor" },
       { href: "/pdv/vendedores", icon: Users, label: "Vendedores" },
       { href: "/pdv/sofia", icon: Package, label: "Sofia" },
       { href: "/pdv/desconto-folha", icon: Wallet, label: "Desc. Folha" },
+      { href: "/pdv/financeiro", icon: Landmark, label: "Financeiro" },
       { href: "/pdv/relatorio", icon: FileText, label: "Relatório" },
       { href: "/pdv/cadastro-produtos", icon: PlusSquare, label: "Cadastrar Produtos" },
       { href: "/pdv/gestao-site", icon: Globe, label: "Gestão Site" },

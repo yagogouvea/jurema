@@ -39,6 +39,7 @@ import PdvMeuPerfil from "./pages/pdv/PdvMeuPerfil";
 import PdvWhatsApp from "./pages/pdv/PdvWhatsApp";
 import PdvWhatsAppConfig from "./pages/pdv/PdvWhatsAppConfig";
 import PdvSellerPanel from "./pages/pdv/PdvSellerPanel";
+import PdvFinanceiro from "./pages/pdv/PdvFinanceiro";
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -86,6 +87,7 @@ function Router() {
       <Route path="/pdv/whatsapp/config" component={PdvWhatsAppConfig} />
       <Route path="/pdv/painel-vendedor" component={PdvSellerPanel} />
       <Route path="/pdv/whatsapp" component={PdvWhatsApp} />
+      <Route path="/pdv/financeiro" component={PdvFinanceiro} />
       <Route path="/pdv/notificacoes" component={PdvNotificacoes} />
       <Route path="/pdv" component={PdvMain} />
       <Route path="/404" component={NotFound} />

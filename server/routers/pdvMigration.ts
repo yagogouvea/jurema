@@ -121,6 +121,22 @@ CREATE TABLE IF NOT EXISTS pdv_goals (
   CONSTRAINT pdv_goals_id PRIMARY KEY(id),
   CONSTRAINT pdv_goals_key_unique UNIQUE(\`key\`)
 );
+
+CREATE TABLE IF NOT EXISTS pdv_reconciliations (
+  id INT AUTO_INCREMENT NOT NULL,
+  source VARCHAR(40) NOT NULL,
+  periodStart DATE NULL,
+  periodEnd DATE NULL,
+  accountLabel VARCHAR(255) NULL,
+  createdBy VARCHAR(255) NULL,
+  totalsJson JSON NOT NULL,
+  resultJson LONGTEXT NOT NULL,
+  narrativeText MEDIUMTEXT NULL,
+  reportPdf LONGBLOB NULL,
+  originalFileName VARCHAR(255) NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT pdv_reconciliations_id PRIMARY KEY(id)
+);
 `;
 
 export async function runPdvMigration(): Promise<void> {

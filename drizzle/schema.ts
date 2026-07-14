@@ -335,6 +335,23 @@ export const pdvCashFlow = mysqlTable("pdv_cash_flow", {
 export type PdvCashFlow = typeof pdvCashFlow.$inferSelect;
 export type InsertPdvCashFlow = typeof pdvCashFlow.$inferInsert;
 
+/** Histórico de conciliações extrato × pedidos (Financeiro). */
+export const pdvReconciliations = mysqlTable("pdv_reconciliations", {
+  id: int("id").autoincrement().primaryKey(),
+  source: varchar("source", { length: 40 }).notNull(),
+  periodStart: timestamp("periodStart"),
+  periodEnd: timestamp("periodEnd"),
+  accountLabel: varchar("accountLabel", { length: 255 }),
+  createdBy: varchar("createdBy", { length: 255 }),
+  totalsJson: json("totalsJson").notNull(),
+  resultJson: text("resultJson").notNull(),
+  narrativeText: text("narrativeText"),
+  reportPdf: text("reportPdf"), // armazenado como LONGBLOB no MySQL (migração runtime)
+  originalFileName: varchar("originalFileName", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type PdvReconciliation = typeof pdvReconciliations.$inferSelect;
+
 // Metas do PDV
 export const pdvGoals = mysqlTable("pdv_goals", {
   id: int("id").autoincrement().primaryKey(),
@@ -506,3 +523,129 @@ export const waAiLogs = mysqlTable("wa_ai_logs", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type WaAiLog = typeof waAiLogs.$inferSelect;
+
+// ============================================================
+// MÓDULO SOCIAL — Gestão de redes sociais (Instagram + TikTok)
+// Fase 1: conteúdo orgânico + análise. Publicação via agregador (Ayrshare).
+// ============================================================
+
+// Perfis sociais conectados (um por rede)
+export const socialAccounts = mysqlTable("social_accounts", {
+  id: int("id").autoincrement().primaryKey(),
+  network: mysqlEnum("network", ["instagram", "tiktok"]).notNull(),
+  handle: varchar("handle", { length: 120 }), // @perfil
+  displayName: varchar("displayName", { length: 255 }),
+  // ID do perfil no agregador (Ayrshare profileKey) ou na API oficial
+  externalId: varchar("externalId", { length: 255 }),
+  // Token de acesso (caso futuramente usemos API oficial direta)
+  accessToken: text("accessToken"),
+  status: mysqlEnum("status", ["connected", "disconnected", "error"]).default("disconnected").notNull(),
+  meta: json("meta"), // dados extras retornados pelo provedor
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SocialAccount = typeof socialAccounts.$inferSelect;
+export type InsertSocialAccount = typeof socialAccounts.$inferInsert;
+
+// Mídias (imagens/vídeos) usadas nos posts — armazenadas no S3/storage
+export const socialAssets = mysqlTable("social_assets", {
+  id: int("id").autoincrement().primaryKey(),
+  storageKey: varchar("storageKey", { length: 512 }), // chave relativa no storage
+  url: text("url").notNull(), // URL pública (necessária para publicar via API)
+  kind: mysqlEnum("kind", ["image", "video"]).default("image").notNull(),
+  source: mysqlEnum("source", ["ai", "upload", "template"]).default("ai").notNull(),
+  prompt: text("prompt"), // prompt usado caso gerado por IA
+  width: int("width"),
+  height: int("height"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type SocialAsset = typeof socialAssets.$inferSelect;
+export type InsertSocialAsset = typeof socialAssets.$inferInsert;
+
+// Campanhas (agrupador de posts por objetivo/tema + público-alvo sugerido pela IA)
+export const socialCampaigns = mysqlTable("social_campaigns", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  objective: varchar("objective", { length: 120 }), // ex: "alcance", "vendas", "engajamento"
+  theme: text("theme"), // tema/briefing da campanha
+  targetAudience: json("targetAudience"), // sugestão de público-alvo gerada pela IA
+  status: mysqlEnum("status", ["rascunho", "ativa", "encerrada"]).default("rascunho").notNull(),
+  startDate: timestamp("startDate"),
+  endDate: timestamp("endDate"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SocialCampaign = typeof socialCampaigns.$inferSelect;
+export type InsertSocialCampaign = typeof socialCampaigns.$inferInsert;
+
+// Publicações (rascunho → aprovado → agendado → publicado)
+export const socialPosts = mysqlTable("social_posts", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 255 }), // título interno (não vai pro post)
+  caption: text("caption"), // legenda final
+  hashtags: json("hashtags").$type<string[]>().default([]),
+  networks: json("networks").$type<string[]>().default([]), // ["instagram", "tiktok"]
+  assetId: int("assetId"), // FK -> social_assets.id (imagem/vídeo principal)
+  campaignId: int("campaignId"), // FK -> social_campaigns.id (opcional)
+  status: mysqlEnum("status", [
+    "rascunho",
+    "aprovado",
+    "agendado",
+    "publicando",
+    "publicado",
+    "falhou",
+  ]).default("rascunho").notNull(),
+  scheduledAt: timestamp("scheduledAt"), // horário agendado de publicação
+  publishedAt: timestamp("publishedAt"), // horário em que foi publicado
+  externalPostId: varchar("externalPostId", { length: 255 }), // id retornado pelo agregador
+  externalUrl: varchar("externalUrl", { length: 1000 }), // link do post publicado
+  error: text("error"), // mensagem de erro caso falhe
+  createdBy: varchar("createdBy", { length: 120 }), // nome de quem criou
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SocialPost = typeof socialPosts.$inferSelect;
+export type InsertSocialPost = typeof socialPosts.$inferInsert;
+
+// Brand Kit — identidade visual aplicada às artes (single-tenant por enquanto;
+// clientKey já previsto para evoluir a multicliente sem migração disruptiva)
+export const socialBrandKit = mysqlTable("social_brand_kit", {
+  id: int("id").autoincrement().primaryKey(),
+  clientKey: varchar("clientKey", { length: 64 }).default("default").notNull().unique(),
+  brandName: varchar("brandName", { length: 255 }),
+  primaryColor: varchar("primaryColor", { length: 9 }), // hex #RRGGBB(AA)
+  secondaryColor: varchar("secondaryColor", { length: 9 }),
+  accentColor: varchar("accentColor", { length: 9 }),
+  logoUrl: text("logoUrl"),
+  logoStorageKey: varchar("logoStorageKey", { length: 512 }),
+  fontFamily: varchar("fontFamily", { length: 120 }),
+  slogan: varchar("slogan", { length: 255 }),
+  tone: text("tone"), // tom de voz
+  guidelines: text("guidelines"), // do's & don'ts / instruções de estilo
+  referenceImages: json("referenceImages").$type<string[]>().default([]), // URLs de referência de estilo
+  logoPosition: mysqlEnum("logoPosition", [
+    "top-left", "top-right", "bottom-left", "bottom-right", "center", "none",
+  ]).default("bottom-right").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SocialBrandKit = typeof socialBrandKit.$inferSelect;
+export type InsertSocialBrandKit = typeof socialBrandKit.$inferInsert;
+
+// Métricas de desempenho por post/rede (coletadas periodicamente)
+export const socialMetrics = mysqlTable("social_metrics", {
+  id: int("id").autoincrement().primaryKey(),
+  postId: int("postId").notNull(), // FK -> social_posts.id
+  network: mysqlEnum("network", ["instagram", "tiktok"]).notNull(),
+  likes: int("likes").default(0).notNull(),
+  comments: int("comments").default(0).notNull(),
+  shares: int("shares").default(0).notNull(),
+  saves: int("saves").default(0).notNull(),
+  reach: int("reach").default(0).notNull(),
+  impressions: int("impressions").default(0).notNull(),
+  views: int("views").default(0).notNull(), // relevante para TikTok
+  collectedAt: timestamp("collectedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type SocialMetric = typeof socialMetrics.$inferSelect;
+export type InsertSocialMetric = typeof socialMetrics.$inferInsert;
