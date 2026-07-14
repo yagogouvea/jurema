@@ -4,6 +4,7 @@ import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import PdvLayout from "./PdvLayout";
 import {
   Landmark, Upload, FileText, Copy, Download, Loader2, RefreshCw, AlertTriangle,
+  ChevronDown, Search,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,20 +12,31 @@ function fmtBRL(cents: number): string {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-type Tab = "matched" | "review" | "onlyExtract" | "onlyPdv";
+function fmtDt(iso?: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  } catch {
+    return String(iso).slice(0, 16);
+  }
+}
+
+type Tab = "confirmed" | "review" | "unmatched" | "extractOnly";
 
 export default function PdvFinanceiro() {
   const { isAdmin } = usePdvAuth();
   const utils = trpc.useUtils();
-  const [fileName, setFileName] = useState<string>("");
-  const [pdfBase64, setPdfBase64] = useState<string>("");
+  const [fileName, setFileName] = useState("");
+  const [pdfBase64, setPdfBase64] = useState("");
   const [source, setSource] = useState<"auto" | "infinitepay" | "mercado_pago">("auto");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [beforeHours, setBeforeHours] = useState(36);
   const [afterHours, setAfterHours] = useState(72);
-  const [tab, setTab] = useState<Tab>("matched");
+  const [tab, setTab] = useState<Tab>("confirmed");
   const [result, setResult] = useState<any>(null);
+  const [search, setSearch] = useState("");
+  const [showNarrative, setShowNarrative] = useState(false);
 
   const history = trpc.pdvFinanceiro.list.useQuery({ limit: 15 }, { enabled: isAdmin });
   const reconcile = trpc.pdvFinanceiro.reconcile.useMutation({
@@ -32,14 +44,11 @@ export default function PdvFinanceiro() {
       setResult(data);
       if (data.period?.start) setPeriodStart(data.period.start);
       if (data.period?.end) setPeriodEnd(data.period.end);
-      setTab(data.totals.reviewCount > 0 ? "review" : "matched");
+      const reviewN = data.ordersReview?.length ?? data.totals.reviewCount ?? 0;
+      setTab(reviewN > 0 ? "review" : "confirmed");
       utils.pdvFinanceiro.list.invalidate();
-      const per =
-        data.period?.start && data.period?.end
-          ? ` · período ${data.period.start} → ${data.period.end}`
-          : "";
       toast.success(
-        `Análise ok (${data.source}${per}): ${data.totals.matchCount} localizados, ${data.totals.reviewCount} para revisar`
+        `Período ${data.period?.start || "?"} → ${data.period?.end || "?"}: ${data.ordersConfirmed?.length ?? data.totals.matchCount} confirmados, ${reviewN} dúvidas`
       );
     },
     onError: (e) => toast.error(e.message || "Falha na conciliação"),
@@ -54,7 +63,7 @@ export default function PdvFinanceiro() {
         reconciliationId: data.reconciliationId,
       }));
       utils.pdvFinanceiro.list.invalidate();
-      toast.success("Revisão atualizada");
+      toast.success("Atualizado — status gravado no pedido e na planilha");
     },
     onError: (e) => toast.error(e.message || "Falha ao confirmar"),
   });
@@ -64,6 +73,7 @@ export default function PdvFinanceiro() {
     setLoadingHistoryId(id);
     try {
       const data = await utils.pdvFinanceiro.get.fetch({ id });
+      const res = data.result || {};
       setResult({
         reconciliationId: data.id,
         source: data.source,
@@ -77,9 +87,16 @@ export default function PdvFinanceiro() {
         accountLabel: data.accountLabel,
         totals: data.totals,
         narrativeText: data.narrativeText,
-        ...(data.result || {}),
+        matched: res.matched,
+        review: res.review,
+        onlyExtract: res.onlyExtract,
+        onlyPdv: res.onlyPdv,
+        ordersConfirmed: res.ordersConfirmed,
+        ordersReview: res.ordersReview,
+        ordersUnmatched: res.ordersUnmatched,
+        extractUnmatched: res.extractUnmatched || res.onlyExtract,
       });
-      setTab((data.totals?.reviewCount ?? 0) > 0 ? "review" : "matched");
+      setTab((res.ordersReview?.length ?? data.totals?.reviewCount ?? 0) > 0 ? "review" : "confirmed");
       toast.success(`Conciliação #${data.id} carregada`);
     } catch (e: any) {
       toast.error(e?.message || "Erro ao carregar");
@@ -100,16 +117,13 @@ export default function PdvFinanceiro() {
     }
     setFileName(file.name);
     const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result || "");
-      setPdfBase64(dataUrl);
-    };
+    reader.onload = () => setPdfBase64(String(reader.result || ""));
     reader.readAsDataURL(file);
   };
 
   const run = () => {
     if (!pdfBase64) {
-      toast.error("Anexe o PDF do extrato (InfinitePay ou Mercado Pago)");
+      toast.error("Anexe o extrato (InfinitePay ou Mercado Pago)");
       return;
     }
     reconcile.mutate({
@@ -126,7 +140,10 @@ export default function PdvFinanceiro() {
   };
 
   const copyNarrative = async () => {
-    if (!result?.narrativeText) return;
+    if (!result?.narrativeText) {
+      toast.error("Resumo ainda não gerado");
+      return;
+    }
     await navigator.clipboard.writeText(result.narrativeText);
     toast.success("Resumo copiado");
   };
@@ -142,15 +159,38 @@ export default function PdvFinanceiro() {
     a.click();
   };
 
+  const confirmed = result?.ordersConfirmed || [];
+  const reviews = result?.ordersReview || [];
+  const unmatched = result?.ordersUnmatched || [];
+  const extractOnly = result?.extractUnmatched || result?.onlyExtract || [];
+
+  const q = search.trim().toLowerCase();
+  const filterConfirmed = useMemo(() => {
+    if (!q) return confirmed;
+    return confirmed.filter((r: any) => {
+      const blob = [
+        r.order?.pedidoId,
+        r.order?.clienteNome,
+        r.order?.sellerName,
+        r.nomePix,
+        r.extract?.map((e: any) => e.payerNameRaw).join(" "),
+        String(r.valorPdvCents / 100),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return blob.includes(q);
+    });
+  }, [confirmed, q]);
+
   const tabs = useMemo(
     () =>
       [
-        { id: "matched" as const, label: "Localizados", n: result?.matched?.length ?? 0 },
-        { id: "review" as const, label: "Revisar", n: result?.review?.length ?? 0 },
-        { id: "onlyExtract" as const, label: "Só extrato", n: result?.onlyExtract?.length ?? 0 },
-        { id: "onlyPdv" as const, label: "Só PDV", n: result?.onlyPdv?.length ?? 0 },
+        { id: "confirmed" as const, label: "Confirmados", n: confirmed.length },
+        { id: "review" as const, label: "Dúvidas", n: reviews.length },
+        { id: "unmatched" as const, label: "Pedidos sem extrato", n: unmatched.length },
+        { id: "extractOnly" as const, label: "Extrato sem pedido", n: extractOnly.length },
       ] as const,
-    [result]
+    [confirmed.length, reviews.length, unmatched.length, extractOnly.length]
   );
 
   if (!isAdmin) {
@@ -163,7 +203,7 @@ export default function PdvFinanceiro() {
 
   return (
     <PdvLayout>
-      <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
+      <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
         <div className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-xl bg-emerald-700/30 border border-emerald-600/40 flex items-center justify-center">
             <Landmark className="w-5 h-5 text-emerald-400" />
@@ -171,7 +211,7 @@ export default function PdvFinanceiro() {
           <div>
             <h1 className="text-xl font-bold text-white">Financeiro</h1>
             <p className="text-sm text-gray-400">
-              Anexe o extrato do banco (InfinitePay ou Mercado Pago) — não o Relatório de Vendas do PDV
+              Conciliação por pedidos do período × extrato InfinitePay / Mercado Pago
             </p>
           </div>
         </div>
@@ -180,18 +220,16 @@ export default function PdvFinanceiro() {
           <div className="flex flex-wrap items-end gap-4">
             <label className="flex-1 min-w-[220px]">
               <span className="text-xs text-gray-500 block mb-1">PDF do extrato</span>
-              <div className="flex items-center gap-2">
-                <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-sm text-gray-200 hover:border-emerald-600">
-                  <Upload className="w-4 h-4" />
-                  {fileName || "Escolher PDF"}
-                  <input
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    className="hidden"
-                    onChange={(e) => onFile(e.target.files?.[0] || null)}
-                  />
-                </label>
-              </div>
+              <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-sm text-gray-200 hover:border-emerald-600">
+                <Upload className="w-4 h-4" />
+                {fileName || "Escolher PDF"}
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  onChange={(e) => onFile(e.target.files?.[0] || null)}
+                />
+              </label>
             </label>
             <label>
               <span className="text-xs text-gray-500 block mb-1">Origem</span>
@@ -212,7 +250,6 @@ export default function PdvFinanceiro() {
                 value={periodStart}
                 onChange={(e) => setPeriodStart(e.target.value)}
                 className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white"
-                title="Opcional: se vazio, usa o período lido do PDF"
               />
             </label>
             <label>
@@ -222,29 +259,28 @@ export default function PdvFinanceiro() {
                 value={periodEnd}
                 onChange={(e) => setPeriodEnd(e.target.value)}
                 className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white"
-                title="Opcional: se vazio, usa o período lido do PDF"
               />
             </label>
             <label>
-              <span className="text-xs text-gray-500 block mb-1">PIX antes do pedido (h)</span>
+              <span className="text-xs text-gray-500 block mb-1">PIX antes (h)</span>
               <input
                 type="number"
                 min={0}
                 max={168}
                 value={beforeHours}
                 onChange={(e) => setBeforeHours(Number(e.target.value) || 0)}
-                className="w-24 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white"
+                className="w-20 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white"
               />
             </label>
             <label>
-              <span className="text-xs text-gray-500 block mb-1">PIX depois do pedido (h)</span>
+              <span className="text-xs text-gray-500 block mb-1">PIX depois (h)</span>
               <input
                 type="number"
                 min={0}
                 max={168}
                 value={afterHours}
                 onChange={(e) => setAfterHours(Number(e.target.value) || 0)}
-                className="w-24 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white"
+                className="w-20 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white"
               />
             </label>
             <button
@@ -257,25 +293,19 @@ export default function PdvFinanceiro() {
             </button>
           </div>
           <p className="text-xs text-gray-400">
-            Use o PDF da InfinitePay (<strong className="text-gray-200">Relatório de movimentações</strong>) ou do
-            Mercado Pago (<strong className="text-gray-200">Extrato de conta</strong>). O sistema lê o período e
-            compara só os pedidos do PDV nessa janela.
-          </p>
-          <p className="text-xs text-amber-400/90">
-            Se a detecção automática falhar, escolha <strong className="text-amber-300">Mercado Pago</strong> ou{" "}
-            <strong className="text-amber-300">InfinitePay</strong> em Origem antes de Analisar.
+            Use o <strong className="text-gray-200">extrato do banco</strong> (não o Relatório de Vendas do PDV).
+            O sistema lista os pedidos do período e marca o que bateu com certeza; dúvidas ficam para você confirmar.
           </p>
           <p className="text-xs text-gray-500 flex items-start gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            Pix recebido / QR Pix × PIX do PDV. Liberação de dinheiro (MP) × Débito/Crédito
-            (valor líquido, bruto ou lote). Pix enviado e empréstimos são ignorados.
+            Ao confirmar ou dispensar, o status vai para o pagamento no PDV e para a coluna Conciliação em VENDAS_CAIXA.
           </p>
         </div>
 
         {result && (
           <div className="space-y-4">
             <div className="rounded-xl border border-emerald-800/50 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-100">
-              Período analisado:{" "}
+              Período:{" "}
               <strong>
                 {result.period?.start || "?"} → {result.period?.end || "?"}
               </strong>
@@ -285,43 +315,70 @@ export default function PdvFinanceiro() {
                 {result.accountLabel ? ` · ${result.accountLabel}` : ""}
               </span>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {[
-                ["Extrato (entradas)", result.totals.extractInCents],
-                ["Localizados", result.totals.matchedCents],
-                ["Só extrato", result.totals.onlyExtractCents],
-                ["Só PDV", result.totals.onlyPdvCents],
-              ].map(([label, cents]) => (
+                ["Confirmados", confirmed.length, fmtBRL(result.totals?.matchedCents || 0)],
+                ["Dúvidas", reviews.length, "—"],
+                ["Sem extrato", unmatched.length, fmtBRL(result.totals?.onlyPdvCents || 0)],
+                ["Só extrato", extractOnly.length, fmtBRL(result.totals?.onlyExtractCents || 0)],
+                ["Entradas extrato", "—", fmtBRL(result.totals?.extractInCents || 0)],
+              ].map(([label, n, money]) => (
                 <div key={String(label)} className="rounded-xl border border-gray-800 bg-gray-900/50 p-3">
                   <div className="text-[11px] text-gray-500 uppercase tracking-wide">{label}</div>
-                  <div className="text-lg font-semibold text-white mt-1">{fmtBRL(Number(cents))}</div>
+                  <div className="text-lg font-semibold text-white mt-1">
+                    {n}
+                    {money !== "—" && (
+                      <span className="block text-xs font-normal text-gray-400 mt-0.5">{money}</span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={copyNarrative}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-700 text-sm text-gray-200 hover:bg-gray-800"
-              >
-                <Copy className="w-4 h-4" /> Copiar resumo
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar PED, cliente, valor…"
+                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-sm text-white"
+                />
+              </div>
               <button
                 onClick={downloadPdf}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-700 text-sm text-gray-200 hover:bg-gray-800"
               >
-                <Download className="w-4 h-4" /> Baixar PDF
+                <Download className="w-4 h-4" /> PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowNarrative((v) => !v)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-700 text-sm text-gray-400 hover:bg-gray-800"
+              >
+                <FileText className="w-4 h-4" />
+                Resumo IA
+                <ChevronDown className={`w-3.5 h-3.5 transition ${showNarrative ? "rotate-180" : ""}`} />
               </button>
             </div>
 
-            <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-4">
-              <div className="text-xs text-gray-500 mb-2 flex items-center gap-1">
-                <FileText className="w-3.5 h-3.5" /> Resumo
+            {showNarrative && (
+              <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-4 space-y-2">
+                <div className="flex justify-between items-center">
+                  <div className="text-xs text-gray-500">Resumo opcional (não é a lista principal)</div>
+                  <button
+                    onClick={copyNarrative}
+                    className="inline-flex items-center gap-1.5 text-xs text-gray-300 hover:text-white"
+                  >
+                    <Copy className="w-3.5 h-3.5" /> Copiar
+                  </button>
+                </div>
+                <pre className="whitespace-pre-wrap text-sm text-gray-300 font-sans leading-relaxed max-h-48 overflow-auto">
+                  {result.narrativeText || "Resumo não disponível nesta análise."}
+                </pre>
               </div>
-              <pre className="whitespace-pre-wrap text-sm text-gray-200 font-sans leading-relaxed">
-                {result.narrativeText}
-              </pre>
-            </div>
+            )}
 
             <div className="flex flex-wrap gap-2 border-b border-gray-800 pb-2">
               {tabs.map((t) => (
@@ -338,156 +395,256 @@ export default function PdvFinanceiro() {
             </div>
 
             <div className="rounded-xl border border-gray-800 overflow-hidden">
-              {tab === "matched" && (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-900 text-gray-500 text-xs">
-                    <tr>
-                      <th className="text-left px-3 py-2">Pedido</th>
-                      <th className="text-left px-3 py-2">Valor</th>
-                      <th className="text-left px-3 py-2">Tipo</th>
-                      <th className="text-left px-3 py-2">Pagador (extrato)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(result.matched || []).map((m: any, i: number) => (
-                      <tr key={i} className="border-t border-gray-800 text-gray-200">
-                        <td className="px-3 py-2">
-                          {m.payment.pedidoId}
-                          {m.relatedPayments?.length > 0 && (
-                            <span className="block text-[10px] text-gray-500">
-                              +{m.relatedPayments.map((p: any) => p.pedidoId).join(", ")}
-                            </span>
-                          )}
-                          {m.payment.formaPagamento && (
-                            <span className="block text-[10px] text-emerald-500/80">
-                              {m.payment.formaPagamento}
-                              {m.payment.matchBasis ? ` · ${m.payment.matchBasis}` : ""}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">{fmtBRL(m.payment.valorCents)}</td>
-                        <td className="px-3 py-2 text-xs text-gray-400">
-                          {m.kind} · {m.confidence}
-                          {m.notes && <span className="block text-[10px] text-gray-500">{m.notes}</span>}
-                        </td>
-                        <td className="px-3 py-2">
-                          {m.extract.map((e: any) => e.payerNameRaw).join(" + ")}
-                        </td>
-                      </tr>
-                    ))}
-                    {!result.matched?.length && (
+              {tab === "confirmed" && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[960px]">
+                    <thead className="bg-gray-900 text-gray-500 text-xs">
                       <tr>
-                        <td colSpan={4} className="px-3 py-6 text-center text-gray-500">
-                          Nenhum match automático
-                        </td>
+                        <th className="text-left px-3 py-2">Pedido</th>
+                        <th className="text-left px-3 py-2">Data/hora</th>
+                        <th className="text-left px-3 py-2">Cliente</th>
+                        <th className="text-left px-3 py-2">Vendedor</th>
+                        <th className="text-left px-3 py-2">Canal</th>
+                        <th className="text-left px-3 py-2">Forma</th>
+                        <th className="text-left px-3 py-2">Valor PDV</th>
+                        <th className="text-left px-3 py-2">Pagador extrato</th>
+                        <th className="text-left px-3 py-2">Valor extrato</th>
+                        <th className="text-left px-3 py-2">Data extrato</th>
+                        <th className="text-left px-3 py-2">Confiança</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filterConfirmed.map((r: any) => {
+                        const ex = r.extract?.[0];
+                        const extractCents = (r.extract || []).reduce(
+                          (s: number, e: any) => s + (e.amountCents || 0),
+                          0
+                        );
+                        return (
+                          <tr key={r.paymentId} className="border-t border-gray-800 text-gray-200">
+                            <td className="px-3 py-2 font-medium text-emerald-300">{r.order?.pedidoId}</td>
+                            <td className="px-3 py-2 text-xs text-gray-400">{fmtDt(r.order?.pedidoCreatedAt)}</td>
+                            <td className="px-3 py-2">{r.order?.clienteNome || "—"}</td>
+                            <td className="px-3 py-2">{r.order?.sellerName || "—"}</td>
+                            <td className="px-3 py-2 text-xs">{r.order?.canal || "—"}</td>
+                            <td className="px-3 py-2 text-xs">{r.formaPagamento}</td>
+                            <td className="px-3 py-2">{fmtBRL(r.valorPdvCents)}</td>
+                            <td className="px-3 py-2">
+                              {(r.extract || []).map((e: any) => e.payerNameRaw).join(" + ") || "—"}
+                            </td>
+                            <td className="px-3 py-2">{extractCents ? fmtBRL(extractCents) : "—"}</td>
+                            <td className="px-3 py-2 text-xs text-gray-400">
+                              {ex ? `${ex.date} ${ex.time}` : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-xs">
+                              <span
+                                className={
+                                  r.confidence === "high" ? "text-emerald-400" : "text-amber-400"
+                                }
+                              >
+                                {r.confidence}
+                              </span>
+                              {r.matchBasis && (
+                                <span className="block text-[10px] text-gray-500">{r.matchBasis}</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {!filterConfirmed.length && (
+                        <tr>
+                          <td colSpan={11} className="px-3 py-8 text-center text-gray-500">
+                            Nenhum pedido confirmado
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               )}
 
               {tab === "review" && (
                 <div className="divide-y divide-gray-800">
-                  {(result.review || []).map((r: any, i: number) => (
-                    <div key={i} className="p-3 text-sm text-gray-200 space-y-2">
-                      <div className="text-amber-400 text-xs">{r.reason}</div>
-                      <div>
-                        {r.extract?.map((e: any) => (
-                          <div key={e.id}>
-                            {e.date} {e.time} · {fmtBRL(e.amountCents)} · {e.payerNameRaw}
+                  {reviews.map((r: any) => (
+                    <div key={r.reviewIndex} className="p-4 grid md:grid-cols-2 gap-4 text-sm">
+                      <div className="space-y-2">
+                        <div className="text-[11px] uppercase tracking-wide text-amber-400/90">
+                          Extrato · {r.reason}
+                        </div>
+                        {(r.extract || []).map((e: any) => (
+                          <div
+                            key={e.id}
+                            className="rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-gray-200"
+                          >
+                            <div className="font-medium">{e.payerNameRaw}</div>
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              {e.date} {e.time} · {fmtBRL(e.amountCents)}
+                              {e.kindLabel ? ` · ${e.kindLabel}` : ""}
+                            </div>
                           </div>
                         ))}
+                        {!r.extract?.length && (
+                          <div className="text-gray-500 text-xs">Sem linha de extrato</div>
+                        )}
                       </div>
-                      {r.candidates?.length > 0 && result.reconciliationId && (
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {r.candidates.map((c: any) => (
-                            <button
-                              key={c.paymentId}
-                              disabled={confirmReview.isPending}
-                              onClick={() =>
-                                confirmReview.mutate({
-                                  reconciliationId: result.reconciliationId,
-                                  reviewIndex: i,
-                                  paymentId: c.paymentId,
-                                  action: "confirm",
-                                })
-                              }
-                              className="px-2.5 py-1 rounded-lg text-xs bg-emerald-700 hover:bg-emerald-600 text-white disabled:opacity-50"
-                              title={`Score ${c.score}`}
-                            >
-                              Confirmar {c.pedidoId}
-                              <span className="opacity-70"> · {fmtBRL(c.valorCents)}</span>
-                            </button>
-                          ))}
+
+                      <div className="space-y-3">
+                        <div className="text-[11px] uppercase tracking-wide text-gray-500">
+                          Pedidos candidatos — confirme se o pagamento é deste pedido
+                        </div>
+                        {(r.candidates || []).map((c: any) => (
+                          <div
+                            key={c.paymentId}
+                            className="rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-3 space-y-2"
+                          >
+                            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                              <span className="font-semibold text-emerald-300">{c.order?.pedidoId}</span>
+                              <span className="text-white">{fmtBRL(c.valorCents)}</span>
+                            </div>
+                            <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-400">
+                              <div>
+                                <dt className="text-gray-600">Cliente</dt>
+                                <dd className="text-gray-200">{c.order?.clienteNome || "—"}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-gray-600">Telefone</dt>
+                                <dd className="text-gray-200">{c.order?.clienteTelefone || "—"}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-gray-600">Vendedor</dt>
+                                <dd className="text-gray-200">{c.order?.sellerName || "—"}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-gray-600">Canal / regime</dt>
+                                <dd className="text-gray-200">
+                                  {c.order?.canal || "—"} · {c.order?.regime || "—"}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-gray-600">Data pedido</dt>
+                                <dd className="text-gray-200">{fmtDt(c.order?.pedidoCreatedAt)}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-gray-600">Nome PIX / score</dt>
+                                <dd className="text-gray-200">
+                                  {c.nomePix || "—"} · {c.score}
+                                </dd>
+                              </div>
+                              <div className="col-span-2">
+                                <dt className="text-gray-600">Itens</dt>
+                                <dd className="text-gray-300">{c.order?.itemsSummary || "—"}</dd>
+                              </div>
+                              {c.order?.justificativa && (
+                                <div className="col-span-2">
+                                  <dt className="text-gray-600">Obs.</dt>
+                                  <dd className="text-gray-300">{c.order.justificativa}</dd>
+                                </div>
+                              )}
+                            </dl>
+                            {result.reconciliationId ? (
+                              <button
+                                disabled={confirmReview.isPending}
+                                onClick={() =>
+                                  confirmReview.mutate({
+                                    reconciliationId: result.reconciliationId,
+                                    reviewIndex: r.reviewIndex,
+                                    paymentId: c.paymentId,
+                                    action: "confirm",
+                                  })
+                                }
+                                className="w-full mt-1 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-700 hover:bg-emerald-600 text-white disabled:opacity-50"
+                              >
+                                É este pedido
+                              </button>
+                            ) : (
+                              <div className="text-[11px] text-gray-500">Salve a análise para confirmar.</div>
+                            )}
+                          </div>
+                        ))}
+                        {!r.candidates?.length && (
+                          <div className="text-xs text-gray-500">Nenhum pedido candidato</div>
+                        )}
+                        {result.reconciliationId && (
                           <button
                             disabled={confirmReview.isPending}
                             onClick={() =>
                               confirmReview.mutate({
                                 reconciliationId: result.reconciliationId,
-                                reviewIndex: i,
+                                reviewIndex: r.reviewIndex,
                                 action: "dismiss",
                                 paymentId: null,
                               })
                             }
-                            className="px-2.5 py-1 rounded-lg text-xs border border-gray-700 text-gray-400 hover:bg-gray-800 disabled:opacity-50"
+                            className="w-full px-3 py-2 rounded-lg text-xs border border-gray-700 text-gray-400 hover:bg-gray-800 disabled:opacity-50"
                           >
-                            Dispensar
+                            Não é nenhum / dispensar
                           </button>
-                        </div>
-                      )}
-                      {r.candidates?.length > 0 && !result.reconciliationId && (
-                        <div className="text-xs text-gray-500">
-                          Salve a análise (com persistência) para confirmar candidatos.
-                        </div>
-                      )}
-                      {!r.candidates?.length && result.reconciliationId && (
-                        <button
-                          disabled={confirmReview.isPending}
-                          onClick={() =>
-                            confirmReview.mutate({
-                              reconciliationId: result.reconciliationId,
-                              reviewIndex: i,
-                              action: "dismiss",
-                              paymentId: null,
-                            })
-                          }
-                          className="px-2.5 py-1 rounded-lg text-xs border border-gray-700 text-gray-400 hover:bg-gray-800"
-                        >
-                          Dispensar
-                        </button>
-                      )}
+                        )}
+                      </div>
                     </div>
                   ))}
-                  {!result.review?.length && (
-                    <div className="p-6 text-center text-gray-500 text-sm">Nada para revisar</div>
+                  {!reviews.length && (
+                    <div className="p-8 text-center text-gray-500 text-sm">Nenhuma dúvida pendente</div>
                   )}
                 </div>
               )}
 
-              {tab === "onlyExtract" && (
-                <div className="divide-y divide-gray-800">
-                  {(result.onlyExtract || []).map((e: any) => (
-                    <div key={e.id} className="px-3 py-2 text-sm text-gray-200">
-                      {e.date} {e.time} · {fmtBRL(e.amountCents)} · {e.payerNameRaw}
-                    </div>
-                  ))}
-                  {!result.onlyExtract?.length && (
-                    <div className="p-6 text-center text-gray-500 text-sm">—</div>
-                  )}
+              {tab === "unmatched" && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[720px]">
+                    <thead className="bg-gray-900 text-gray-500 text-xs">
+                      <tr>
+                        <th className="text-left px-3 py-2">Pedido</th>
+                        <th className="text-left px-3 py-2">Data</th>
+                        <th className="text-left px-3 py-2">Cliente</th>
+                        <th className="text-left px-3 py-2">Vendedor</th>
+                        <th className="text-left px-3 py-2">Forma</th>
+                        <th className="text-left px-3 py-2">Valor</th>
+                        <th className="text-left px-3 py-2">Itens</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unmatched.map((p: any) => (
+                        <tr key={p.paymentId} className="border-t border-gray-800 text-gray-200">
+                          <td className="px-3 py-2 text-amber-300">{p.order?.pedidoId}</td>
+                          <td className="px-3 py-2 text-xs text-gray-400">{fmtDt(p.order?.pedidoCreatedAt)}</td>
+                          <td className="px-3 py-2">{p.order?.clienteNome || "—"}</td>
+                          <td className="px-3 py-2">{p.order?.sellerName || "—"}</td>
+                          <td className="px-3 py-2 text-xs">{p.formaPagamento}</td>
+                          <td className="px-3 py-2">{fmtBRL(p.valorCents)}</td>
+                          <td className="px-3 py-2 text-xs text-gray-400 max-w-xs truncate">
+                            {p.order?.itemsSummary || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                      {!unmatched.length && (
+                        <tr>
+                          <td colSpan={7} className="px-3 py-8 text-center text-gray-500">
+                            Todos os pagamentos do período têm correspondência ou estão em dúvida
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
-              {tab === "onlyPdv" && (
+              {tab === "extractOnly" && (
                 <div className="divide-y divide-gray-800">
-                  {(result.onlyPdv || []).map((p: any) => (
-                    <div key={p.paymentId} className="px-3 py-2 text-sm text-gray-200">
-                      {p.pedidoId} · {fmtBRL(p.valorCents)} ·{" "}
-                      {p.formaPagamento || "PIX"} · {p.clienteNome || p.nomePix || "sem nome"}{" "}
-                      <span className="text-gray-500">({p.status})</span>
+                  {extractOnly.map((e: any) => (
+                    <div key={e.id} className="px-3 py-2.5 text-sm text-gray-200 flex flex-wrap gap-x-4 gap-y-1">
+                      <span className="text-gray-400 text-xs">
+                        {e.date} {e.time}
+                      </span>
+                      <span>{fmtBRL(e.amountCents)}</span>
+                      <span>{e.payerNameRaw}</span>
+                      {e.kindLabel && (
+                        <span className="text-[10px] text-gray-500 uppercase">{e.kindLabel}</span>
+                      )}
                     </div>
                   ))}
-                  {!result.onlyPdv?.length && (
-                    <div className="p-6 text-center text-gray-500 text-sm">—</div>
+                  {!extractOnly.length && (
+                    <div className="p-8 text-center text-gray-500 text-sm">—</div>
                   )}
                 </div>
               )}
@@ -512,7 +669,8 @@ export default function PdvFinanceiro() {
                   <span className="text-gray-500"> · {h.createdBy}</span>
                 </div>
                 <div className="text-xs text-gray-500">
-                  {h.totals?.matchCount ?? "—"} localizados · {h.totals?.reviewCount ?? 0} revisar
+                  {h.totals?.orderConfirmedCount ?? h.totals?.matchCount ?? "—"} confirmados ·{" "}
+                  {h.totals?.orderReviewCount ?? h.totals?.reviewCount ?? 0} dúvidas
                 </div>
               </button>
             ))}

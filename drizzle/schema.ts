@@ -302,6 +302,12 @@ export const pdvOrderPayments = mysqlTable("pdv_order_payments", {
   taxa: decimal("taxa", { precision: 10, scale: 2 }).default("0").notNull(),
   valorLiquido: decimal("valorLiquido", { precision: 10, scale: 2 }).notNull(),
   nomePix: varchar("nomePix", { length: 255 }),
+  /** Status da conciliação com extrato (Financeiro). */
+  reconcileStatus: mysqlEnum("reconcileStatus", ["pending", "confirmed", "rejected", "unmatched"]),
+  reconcileSource: varchar("reconcileSource", { length: 40 }),
+  reconcileExtractRef: varchar("reconcileExtractRef", { length: 255 }),
+  reconciledAt: timestamp("reconciledAt"),
+  reconciledBy: varchar("reconciledBy", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

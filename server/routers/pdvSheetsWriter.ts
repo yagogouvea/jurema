@@ -1239,7 +1239,7 @@ export async function appendCashFlowToSheet(entry: {
 
 /**
  * Grava um pedido fechado na aba VENDAS_CAIXA da planilha.
- * Colunas: ID PEDIDO | DATA | VENDEDOR | CANAL | CLIENTE | REGIME | TOTAL (R$) | FORMA PAGAMENTO | STATUS | QTD ITENS | JUSTIFICATIVA <6
+ * Colunas: ID PEDIDO | DATA | VENDEDOR | CANAL | CLIENTE | REGIME | TOTAL (R$) | FORMA PAGAMENTO | STATUS | QTD ITENS | JUSTIFICATIVA <6 | CONCILIAÇÃO
  */
 export async function appendSaleToCashFlowSheet(pedido: {
   id: number;
@@ -1253,6 +1253,7 @@ export async function appendSaleToCashFlowSheet(pedido: {
   status: string;
   qtdItens: number;
   justificativaAtacado?: string;
+  conciliacao?: string;
 }): Promise<boolean> {
   try {
     const data = new Date(pedido.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -1268,12 +1269,67 @@ export async function appendSaleToCashFlowSheet(pedido: {
       pedido.status,
       pedido.qtdItens,
       pedido.justificativaAtacado || '',  // K: Justificativa <6 (atacado com menos de 6 peças)
+      pedido.conciliacao || '', // L: Conciliação
     ];
-    const ok = await appendToSheet(`${SALES_CASHFLOW_SHEET}!A:K`, [row]);
+    const ok = await appendToSheet(`${SALES_CASHFLOW_SHEET}!A:L`, [row]);
     if (ok) console.log(`[SheetsWriter] Pedido #${pedido.id} gravado em VENDAS_CAIXA`);
     return ok;
   } catch (err) {
     console.error('[SheetsWriter] appendSaleToCashFlowSheet error:', err);
+    return false;
+  }
+}
+
+/**
+ * Atualiza a coluna L (Conciliação) em VENDAS_CAIXA para o pedido.
+ * `pedidoId` aceita "PED-123" ou número; busca pela coluna A.
+ */
+export async function updateSaleReconcileInCashFlowSheet(
+  pedidoId: string | number,
+  label: 'Localizado' | 'Dúvida' | 'Não localizado' | ''
+): Promise<boolean> {
+  try {
+    const token = await getServiceAccountToken();
+    if (!token) return false;
+
+    // Garante cabeçalho da coluna L
+    try {
+      await updateCellInSheet(`${SALES_CASHFLOW_SHEET}!L1`, 'Conciliação');
+    } catch {
+      /* ignore */
+    }
+
+    const numericId =
+      typeof pedidoId === 'number'
+        ? pedidoId
+        : parseInt(String(pedidoId).replace(/\D/g, ''), 10) || 0;
+    if (!numericId) return false;
+
+    const colUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A:A`)}`;
+    const colRes = await fetch(colUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (!colRes.ok) {
+      console.warn('[SheetsWriter] Falha ao ler VENDAS_CAIXA!A:', await colRes.text());
+      return false;
+    }
+    const values: any[][] = ((await colRes.json()) as any).values || [];
+    let sheetRow = -1;
+    for (let i = 0; i < values.length; i++) {
+      const cell = values[i]?.[0];
+      const n = parseInt(String(cell ?? '').replace(/\D/g, ''), 10);
+      if (n === numericId) {
+        sheetRow = i + 1; // 1-indexed
+        break;
+      }
+    }
+    if (sheetRow < 2) {
+      console.warn(`[SheetsWriter] Pedido ${pedidoId} (#${numericId}) não encontrado em VENDAS_CAIXA`);
+      return false;
+    }
+    const ok = await updateCellInSheet(`${SALES_CASHFLOW_SHEET}!L${sheetRow}`, label);
+    if (ok) console.log(`[SheetsWriter] VENDAS_CAIXA L${sheetRow} = ${label} (pedido ${pedidoId})`);
+    return ok;
+  } catch (err) {
+    console.error('[SheetsWriter] updateSaleReconcileInCashFlowSheet error:', err);
     return false;
   }
 }
@@ -1412,10 +1468,11 @@ export async function syncAllSalesToCashFlowSheet(pedidos: Array<{
       p.status,
       p.qtdItens,
       p.justificativaAtacado || '',  // K: Justificativa <6
+      '', // L: Conciliação
     ]);
 
     // Limpar e reescrever
-    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A2:K5000`)}:clear`;
+    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A2:L5000`)}:clear`;
     await fetch(clearUrl, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -1423,7 +1480,7 @@ export async function syncAllSalesToCashFlowSheet(pedidos: Array<{
 
     if (rows.length === 0) return true;
 
-    const writeUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A2:K${rows.length + 1}`)}?valueInputOption=USER_ENTERED`;
+    const writeUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SALES_CASHFLOW_SHEET}!A2:L${rows.length + 1}`)}?valueInputOption=USER_ENTERED`;
     const res = await fetch(writeUrl, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

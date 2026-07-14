@@ -80,7 +80,69 @@ export type ReconcileTotals = {
   onlyPdvCents: number;
   matchCount: number;
   reviewCount: number;
+  /** Pedidos/pagamentos únicos no período (visão order-centric). */
+  orderConfirmedCount?: number;
+  orderReviewCount?: number;
+  orderUnmatchedCount?: number;
 };
+
+export type OrderSnapshot = {
+  pedidoId: string;
+  pedidoCreatedAt: string;
+  clienteNome: string | null;
+  clienteTelefone: string | null;
+  sellerName: string | null;
+  canal: string | null;
+  regime: string | null;
+  status: string;
+  justificativa: string | null;
+  itemsSummary: string;
+};
+
+export type OrderConfirmedRow = {
+  paymentId: number;
+  formaPagamento: string;
+  valorPdvCents: number;
+  nomePix: string | null;
+  order: OrderSnapshot;
+  extract: Array<{
+    id: string;
+    payerNameRaw: string;
+    amountCents: number;
+    datetimeIso: string;
+    date: string;
+    time: string;
+    kindLabel?: string;
+  }>;
+  confidence: MatchConfidence | string;
+  kind: MatchKind | string;
+  notes?: string;
+  matchBasis?: string;
+  relatedPaymentIds?: number[];
+};
+
+export type OrderReviewRow = {
+  reviewIndex: number;
+  reason: string;
+  extract: ExtractLine[];
+  candidates: Array<{
+    paymentId: number;
+    score: number;
+    valorCents: number;
+    nomePix: string | null;
+    order: OrderSnapshot;
+  }>;
+};
+
+export type OrderUnmatchedRow = {
+  paymentId: number;
+  formaPagamento: string;
+  valorCents: number;
+  nomePix: string | null;
+  order: OrderSnapshot;
+};
+
+export type ReconcileStatus = "pending" | "confirmed" | "rejected" | "unmatched";
 
 export type ReconcileResult = {
   source: ExtractSource;
@@ -100,6 +162,11 @@ export type ReconcileResult = {
     status: string;
     formaPagamento?: string;
   }>;
+  /** Visão principal da UI (pedidos). */
+  ordersConfirmed?: OrderConfirmedRow[];
+  ordersReview?: OrderReviewRow[];
+  ordersUnmatched?: OrderUnmatchedRow[];
+  extractUnmatched?: ExtractLine[];
   narrativeText: string;
   reportPdfBase64?: string;
 };

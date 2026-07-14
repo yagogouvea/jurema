@@ -18,12 +18,20 @@ import {
 import { generateReconcileNarrative } from "../financeiro/narrative";
 import { buildReconcileReportPdf } from "../financeiro/reportPdf";
 import {
+  buildOrderCentricView,
+  collectPedidoIdsFromCore,
+  loadOrderSnapshots,
+  sheetsLabelForStatus,
+} from "../financeiro/orderView";
+import {
   DEFAULT_CARD_TOLERANCE,
   DEFAULT_TOLERANCE,
   type PdvPixPayment,
   type ReconcileResult,
+  type ReconcileStatus,
 } from "../financeiro/types";
 import { toCents } from "../financeiro/normalize";
+import { updateSaleReconcileInCashFlowSheet } from "./pdvSheetsWriter";
 
 async function getDb() {
   return createPdvMysqlConnection();
@@ -55,6 +63,28 @@ CREATE TABLE IF NOT EXISTS pdv_reconciliations (
   CONSTRAINT pdv_reconciliations_id PRIMARY KEY(id)
 )`;
 
+async function ensurePaymentReconcileColumns(
+  db: Awaited<ReturnType<typeof getDb>>
+): Promise<void> {
+  const alters = [
+    `ALTER TABLE pdv_order_payments ADD COLUMN reconcileStatus ENUM('pending','confirmed','rejected','unmatched') NULL`,
+    `ALTER TABLE pdv_order_payments ADD COLUMN reconcileSource VARCHAR(40) NULL`,
+    `ALTER TABLE pdv_order_payments ADD COLUMN reconcileExtractRef VARCHAR(255) NULL`,
+    `ALTER TABLE pdv_order_payments ADD COLUMN reconciledAt TIMESTAMP NULL`,
+    `ALTER TABLE pdv_order_payments ADD COLUMN reconciledBy VARCHAR(255) NULL`,
+  ];
+  for (const sql of alters) {
+    try {
+      await db.execute(sql);
+    } catch (e: any) {
+      // 1060 = Duplicate column name
+      if (e?.errno !== 1060 && !String(e?.message || "").includes("Duplicate")) {
+        console.warn("[financeiro] alter payment reconcile:", e?.message || e);
+      }
+    }
+  }
+}
+
 export async function ensureFinanceiroTables(): Promise<void> {
   const url = process.env.DATABASE_URL;
   if (!url) return;
@@ -62,12 +92,122 @@ export async function ensureFinanceiroTables(): Promise<void> {
     const db = await createPdvMysqlConnection();
     try {
       await db.execute(CREATE_TABLE_SQL);
+      await ensurePaymentReconcileColumns(db);
     } finally {
       await db.end();
     }
   } catch (e) {
     console.warn("[financeiro] ensure tables:", e);
   }
+}
+
+async function setPaymentReconcileStatus(
+  db: Awaited<ReturnType<typeof getDb>>,
+  paymentId: number,
+  status: ReconcileStatus,
+  meta: {
+    source?: string | null;
+    extractRef?: string | null;
+    by?: string | null;
+    pedidoId?: string | null;
+    syncSheet?: boolean;
+  }
+): Promise<void> {
+  try {
+    await db.execute(
+      `UPDATE pdv_order_payments
+       SET reconcileStatus = ?, reconcileSource = ?, reconcileExtractRef = ?,
+           reconciledAt = NOW(), reconciledBy = ?
+       WHERE id = ?`,
+      [
+        status,
+        meta.source || null,
+        meta.extractRef || null,
+        meta.by || null,
+        paymentId,
+      ]
+    );
+  } catch (e) {
+    console.warn("[financeiro] setPaymentReconcileStatus:", e);
+  }
+  if (meta.syncSheet !== false && meta.pedidoId) {
+    updateSaleReconcileInCashFlowSheet(
+      meta.pedidoId,
+      sheetsLabelForStatus(status)
+    ).catch((err) => console.warn("[financeiro] sheets reconcile:", err));
+  }
+}
+
+async function persistReconcileStatusesFromCore(
+  db: Awaited<ReturnType<typeof getDb>>,
+  core: Pick<ReconcileResult, "matched" | "review" | "onlyPdv">,
+  source: string,
+  by: string
+): Promise<void> {
+  for (const m of core.matched || []) {
+    const ref = (m.extract || []).map((e) => e.id).join(",").slice(0, 250);
+    await setPaymentReconcileStatus(db, m.payment.paymentId, "confirmed", {
+      source,
+      extractRef: ref,
+      by,
+      pedidoId: m.payment.pedidoId,
+      syncSheet: true,
+    });
+    for (const rel of m.relatedPayments || []) {
+      await setPaymentReconcileStatus(db, rel.paymentId, "confirmed", {
+        source,
+        extractRef: ref,
+        by,
+        pedidoId: rel.pedidoId,
+        syncSheet: true,
+      });
+    }
+  }
+  const pendingPayIds = new Set<number>();
+  for (const r of core.review || []) {
+    for (const c of r.candidates || []) {
+      if (!pendingPayIds.has(c.paymentId)) {
+        pendingPayIds.add(c.paymentId);
+        await setPaymentReconcileStatus(db, c.paymentId, "pending", {
+          source,
+          extractRef: (r.extract || []).map((e) => e.id).join(",").slice(0, 250),
+          by,
+          pedidoId: c.pedidoId,
+          syncSheet: true,
+        });
+      }
+    }
+    if (r.payment && !pendingPayIds.has(r.payment.paymentId)) {
+      pendingPayIds.add(r.payment.paymentId);
+      await setPaymentReconcileStatus(db, r.payment.paymentId, "pending", {
+        source,
+        by,
+        pedidoId: r.payment.pedidoId,
+        syncSheet: true,
+      });
+    }
+  }
+  for (const p of core.onlyPdv || []) {
+    if (pendingPayIds.has(p.paymentId)) continue;
+    await setPaymentReconcileStatus(db, p.paymentId, "unmatched", {
+      source,
+      by,
+      pedidoId: p.pedidoId,
+      syncSheet: true,
+    });
+  }
+}
+
+async function attachOrderViews(
+  db: Awaited<ReturnType<typeof getDb>>,
+  core: Pick<ReconcileResult, "matched" | "review" | "onlyPdv" | "onlyExtract" | "totals">
+) {
+  const snaps = await loadOrderSnapshots(db, collectPedidoIdsFromCore(core));
+  const view = buildOrderCentricView(core, snaps);
+  core.totals.orderConfirmedCount = view.ordersConfirmed.length;
+  core.totals.orderReviewCount = view.ordersReview.length;
+  core.totals.orderUnmatchedCount = view.ordersUnmatched.length;
+  return view;
 }
 
 async function loadPdvPixPayments(
@@ -341,10 +481,29 @@ export const pdvFinanceiroRouter = router({
       core.totals.matchCount = core.matched.length;
       core.totals.reviewCount = core.review.length;
 
-      const narrativeText = await generateReconcileNarrative(core);
+      const dbView = await getDb();
+      let orderView;
+      try {
+        await ensurePaymentReconcileColumns(dbView);
+        orderView = await attachOrderViews(dbView, core);
+        if (input.persist) {
+          await persistReconcileStatusesFromCore(
+            dbView,
+            core,
+            parsed.source,
+            admin.name
+          );
+        }
+      } finally {
+        await dbView.end();
+      }
+
+      // Narrativa só para PDF/cópia opcional (não é o retorno principal da UI)
+      let narrativeText = "";
       let reportPdfBase64: string | undefined;
       let reportPdf: Buffer | undefined;
       if (input.generatePdf) {
+        narrativeText = await generateReconcileNarrative(core);
         reportPdf = buildReconcileReportPdf(
           { ...core, narrativeText },
           { generatedBy: admin.name }
@@ -352,7 +511,12 @@ export const pdvFinanceiroRouter = router({
         reportPdfBase64 = reportPdf.toString("base64");
       }
 
-      const full: ReconcileResult = { ...core, narrativeText, reportPdfBase64 };
+      const full: ReconcileResult = {
+        ...core,
+        ...orderView,
+        narrativeText,
+        reportPdfBase64,
+      };
       let reconciliationId: number | null = null;
 
       if (input.persist) {
@@ -374,11 +538,15 @@ export const pdvFinanceiroRouter = router({
                 review: full.review,
                 onlyExtract: full.onlyExtract,
                 onlyPdv: full.onlyPdv,
+                ordersConfirmed: full.ordersConfirmed,
+                ordersReview: full.ordersReview,
+                ordersUnmatched: full.ordersUnmatched,
+                extractUnmatched: full.extractUnmatched,
                 ignoredOutCount: parsed.ignoredOutCount,
                 ignoredOtherCount: parsed.ignoredOtherCount ?? 0,
                 liberacoes: liberacoes.length,
               }),
-              narrativeText,
+              narrativeText || null,
               reportPdf ?? null,
               input.fileName || null,
             ]
@@ -530,6 +698,27 @@ export const pdvFinanceiroRouter = router({
         );
         const r = (rows as any[])[0];
         if (!r) throw new TRPCError({ code: "NOT_FOUND", message: "Conciliação não encontrada" });
+        const result =
+          typeof r.resultJson === "string" ? JSON.parse(r.resultJson) : r.resultJson || {};
+        let totals =
+          typeof r.totalsJson === "string" ? JSON.parse(r.totalsJson) : r.totalsJson;
+        // Rebuild order view se conciliação antiga não tiver
+        if (!result.ordersConfirmed) {
+          const view = await attachOrderViews(db, {
+            matched: result.matched || [],
+            review: result.review || [],
+            onlyPdv: result.onlyPdv || [],
+            onlyExtract: result.onlyExtract || [],
+            totals: totals || {},
+          });
+          Object.assign(result, view);
+          totals = {
+            ...totals,
+            orderConfirmedCount: view.ordersConfirmed.length,
+            orderReviewCount: view.ordersReview.length,
+            orderUnmatchedCount: view.ordersUnmatched.length,
+          };
+        }
         return {
           id: r.id,
           source: r.source,
@@ -537,8 +726,8 @@ export const pdvFinanceiroRouter = router({
           periodEnd: r.periodEnd,
           accountLabel: r.accountLabel,
           createdBy: r.createdBy,
-          totals: typeof r.totalsJson === "string" ? JSON.parse(r.totalsJson) : r.totalsJson,
-          result: typeof r.resultJson === "string" ? JSON.parse(r.resultJson) : r.resultJson,
+          totals,
+          result,
           narrativeText: r.narrativeText,
           originalFileName: r.originalFileName,
           createdAt: r.createdAt,
@@ -607,10 +796,28 @@ export const pdvFinanceiroRouter = router({
         const item = review[input.reviewIndex];
         const extractLines = item.extract || [];
 
+        const rejectedCandidateIds: number[] = [];
         if (input.action === "dismiss" || input.paymentId == null) {
+          for (const c of item.candidates || []) {
+            rejectedCandidateIds.push(Number(c.paymentId));
+          }
           review.splice(input.reviewIndex, 1);
           for (const line of extractLines) {
             if (!onlyExtract.some((e) => e.id === line.id)) onlyExtract.push(line);
+          }
+          // candidatos vão para só PDV se ainda não estiverem
+          for (const c of item.candidates || []) {
+            if (!onlyPdv.some((p) => Number(p.paymentId) === Number(c.paymentId))) {
+              onlyPdv.push({
+                pedidoId: String(c.pedidoId),
+                paymentId: Number(c.paymentId),
+                valorCents: Number(c.valorCents) || 0,
+                clienteNome: c.clienteNome ?? null,
+                nomePix: c.nomePix ?? null,
+                pedidoCreatedAt: new Date().toISOString(),
+                status: "PAGO",
+              });
+            }
           }
         } else {
           const paymentId = input.paymentId;
@@ -659,14 +866,49 @@ export const pdvFinanceiroRouter = router({
             },
           });
 
+          // Outros candidatos da dúvida → não localizado
+          for (const c of item.candidates || []) {
+            if (Number(c.paymentId) !== paymentId) {
+              rejectedCandidateIds.push(Number(c.paymentId));
+              if (!onlyPdv.some((p) => Number(p.paymentId) === Number(c.paymentId))) {
+                onlyPdv.push({
+                  pedidoId: String(c.pedidoId),
+                  paymentId: Number(c.paymentId),
+                  valorCents: Number(c.valorCents) || 0,
+                  clienteNome: c.clienteNome ?? null,
+                  nomePix: c.nomePix ?? null,
+                  pedidoCreatedAt: new Date().toISOString(),
+                  status: "PAGO",
+                });
+              }
+            }
+          }
+
           review.splice(input.reviewIndex, 1);
           onlyPdv = onlyPdv.filter((p) => Number(p.paymentId) !== paymentId);
-          // linha do extrato sai de onlyExtract se estiver lá
           const extractIds = new Set(extractLines.map((e: any) => e.id));
           onlyExtract = onlyExtract.filter((e) => !extractIds.has(e.id));
+
+          await setPaymentReconcileStatus(db, paymentId, "confirmed", {
+            source: row.source,
+            extractRef: extractLines.map((e: any) => e.id).join(",").slice(0, 250),
+            by: admin.name,
+            pedidoId: String(pay.pedidoId),
+            syncSheet: true,
+          });
         }
 
-        const totals = {
+        for (const pid of rejectedCandidateIds) {
+          const cand = (item.candidates || []).find((c: any) => Number(c.paymentId) === pid);
+          await setPaymentReconcileStatus(db, pid, "unmatched", {
+            source: row.source,
+            by: admin.name,
+            pedidoId: cand?.pedidoId ? String(cand.pedidoId) : null,
+            syncSheet: true,
+          });
+        }
+
+        const totalsBase = {
           extractInCents:
             typeof row.totalsJson === "string"
               ? JSON.parse(row.totalsJson).extractInCents
@@ -678,12 +920,28 @@ export const pdvFinanceiroRouter = router({
           reviewCount: review.length,
         };
 
+        const orderView = await attachOrderViews(db, {
+          matched,
+          review,
+          onlyExtract,
+          onlyPdv,
+          totals: totalsBase,
+        });
+
+        const totals = {
+          ...totalsBase,
+          orderConfirmedCount: orderView.ordersConfirmed.length,
+          orderReviewCount: orderView.ordersReview.length,
+          orderUnmatchedCount: orderView.ordersUnmatched.length,
+        };
+
         const newResult = {
           ...result,
           matched,
           review,
           onlyExtract,
           onlyPdv,
+          ...orderView,
         };
 
         let narrativeText = String(row.narrativeText || "");
@@ -716,6 +974,7 @@ export const pdvFinanceiroRouter = router({
           review,
           onlyExtract,
           onlyPdv,
+          ...orderView,
           narrativeText,
         };
       } finally {
