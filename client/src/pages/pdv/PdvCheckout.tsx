@@ -244,7 +244,20 @@ export default function PdvCheckout({
       onSuccess();
     },
     onError: (err) => {
-      toast.error(err.message || "Erro ao finalizar pedido");
+      let msg = err.message || "Erro ao finalizar pedido";
+      // Evita toast com JSON cru do Zod
+      if (msg.trim().startsWith("[")) {
+        try {
+          const parsed = JSON.parse(msg);
+          if (Array.isArray(parsed)) {
+            msg = [...new Set(parsed.map((i: any) => String(i?.message || "")).filter(Boolean))].join(" · ")
+              || "Preencha quem pagou e a observação do pagamento";
+          }
+        } catch {
+          /* keep msg */
+        }
+      }
+      toast.error(msg);
     },
   });
 
@@ -438,15 +451,16 @@ export default function PdvCheckout({
     setShowPayerModal(true);
   };
 
-  const confirmPayerModal = () => {
+  const confirmPayerModal = (formEl?: HTMLFormElement | null) => {
+    // Lê do FormData (mais confiável no celular — evita valor “preso” no teclado)
+    const fd = formEl ? new FormData(formEl) : null;
     const next = payments.map((p, i) => {
       if (!isElectronic(p.formaPagamento)) return p;
-      const d = payerDraft[i];
-      return {
-        ...p,
-        nomePix: (d?.quemPagou || "").trim(),
-        obsPagamento: (d?.obs || "").trim(),
-      };
+      const fromFormQuem = fd?.get(`quemPagou_${i}`);
+      const fromFormObs = fd?.get(`obs_${i}`);
+      const quemPagou = String(fromFormQuem ?? payerDraft[i]?.quemPagou ?? p.nomePix ?? "").trim();
+      const obs = String(fromFormObs ?? payerDraft[i]?.obs ?? p.obsPagamento ?? "").trim();
+      return { ...p, nomePix: quemPagou, obsPagamento: obs };
     });
     for (let i = 0; i < next.length; i++) {
       const p = next[i];
@@ -1295,16 +1309,21 @@ export default function PdvCheckout({
 
       {/* Popup obrigatório: quem pagou + observação (PIX / débito / crédito) */}
       {showPayerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4">
+          <form
+            className="flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-2xl border border-gray-700 bg-gray-900 shadow-2xl sm:rounded-2xl"
+            onSubmit={(e) => {
+              e.preventDefault();
+              confirmPayerModal(e.currentTarget);
+            }}
+          >
             <div className="border-b border-gray-800 px-5 py-4">
               <h2 className="text-lg font-bold text-white">Identificação do pagamento</h2>
               <p className="mt-1 text-xs text-gray-400">
-                Obrigatório para PIX, débito e crédito. Pode informar vários nomes (PIX picado) —
-                isso ajuda a IA a achar o pagamento no extrato.
+                Preencha quem pagou e a observação para cada PIX/débito/crédito. Pode vários nomes (PIX picado).
               </p>
             </div>
-            <div className="max-h-[60vh] space-y-4 overflow-y-auto px-5 py-4">
+            <div className="max-h-[55vh] space-y-4 overflow-y-auto px-5 py-4">
               {payments.map((p, i) => {
                 if (!isElectronic(p.formaPagamento)) return null;
                 const method = PAYMENT_METHODS.find((m) => m.key === p.formaPagamento)!;
@@ -1321,11 +1340,13 @@ export default function PdvCheckout({
                         <span className="ml-1 font-normal text-gray-500">(pode vários nomes)</span>
                       </label>
                       <textarea
-                        value={draft.quemPagou}
+                        name={`quemPagou_${i}`}
+                        required
+                        defaultValue={draft.quemPagou}
                         onChange={(e) =>
                           setPayerDraft((prev) => ({
                             ...prev,
-                            [i]: { ...draft, quemPagou: e.target.value },
+                            [i]: { ...(prev[i] || draft), quemPagou: e.target.value },
                           }))
                         }
                         placeholder="Ex.: M&M Store, Olympia Store e Flávio"
@@ -1335,7 +1356,7 @@ export default function PdvCheckout({
                         autoFocus={Object.keys(payerDraft)[0] === String(i)}
                       />
                       <p className="mt-1 text-[10px] text-gray-500">
-                        PIX picado em contas diferentes: coloque todos os nomes separados por vírgula ou “e”.
+                        PIX picado: separe os nomes por vírgula ou “e”.
                       </p>
                     </div>
                     <div>
@@ -1343,11 +1364,13 @@ export default function PdvCheckout({
                         Observação <span className="text-red-400">*</span>
                       </label>
                       <textarea
-                        value={draft.obs}
+                        name={`obs_${i}`}
+                        required
+                        defaultValue={draft.obs}
                         onChange={(e) =>
                           setPayerDraft((prev) => ({
                             ...prev,
-                            [i]: { ...draft, obs: e.target.value },
+                            [i]: { ...(prev[i] || draft), obs: e.target.value },
                           }))
                         }
                         placeholder="Campo livre — ex.: final do cartão, comprovante, horário…"
@@ -1369,8 +1392,7 @@ export default function PdvCheckout({
                 Voltar
               </button>
               <button
-                type="button"
-                onClick={confirmPayerModal}
+                type="submit"
                 disabled={createOrderMutation.isPending}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-green-700 py-3 text-sm font-bold text-white hover:bg-green-800 disabled:opacity-50"
               >
@@ -1384,7 +1406,7 @@ export default function PdvCheckout({
                 )}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
     </div>

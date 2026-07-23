@@ -109,6 +109,17 @@ export const pdvOrdersRouter = router({
       services: z.array(OrderServiceSchema).default([]),
     }))
     .mutation(async ({ input, ctx }) => {
+      // Guarda extra com mensagem amigável (evita toast com JSON do Zod no celular)
+      for (const p of input.payments) {
+        if (!ELECTRONIC_PAYMENTS.has(p.formaPagamento)) continue;
+        if (!p.nomePix?.trim() || !p.obsPagamento?.trim()) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Informe quem pagou e a observação do pagamento (obrigatório para PIX, débito e crédito).",
+          });
+        }
+      }
       const seller = await requirePdvAuth(ctx);
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
