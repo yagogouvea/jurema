@@ -19,6 +19,7 @@ function paymentDto(p: PdvPixPayment): MatchedItem["payment"] {
     paymentId: p.paymentId,
     valorCents: p.valorCents,
     nomePix: p.nomePix,
+    obsPagamento: p.obsPagamento ?? null,
     clienteNome: p.clienteNome,
     pedidoCreatedAt: p.pedidoCreatedAt.toISOString(),
     status: p.status,
@@ -152,6 +153,7 @@ export function reconcileExtractToPayments(input: ReconcileInput): Omit<
           valorCents: s.pay.valorCents,
           clienteNome: s.pay.clienteNome,
           nomePix: s.pay.nomePix,
+          obsPagamento: s.pay.obsPagamento ?? null,
         })),
       });
       // Não remove line do pool — ainda pode entrar em split; se ficou em review 1:1,
@@ -222,6 +224,7 @@ export function reconcileExtractToPayments(input: ReconcileInput): Omit<
           valorCents: s.pay.valorCents,
           clienteNome: s.pay.clienteNome,
           nomePix: s.pay.nomePix,
+          obsPagamento: s.pay.obsPagamento ?? null,
         })),
       });
       for (const l of group) poolLines.delete(l.id);
@@ -237,6 +240,7 @@ export function reconcileExtractToPayments(input: ReconcileInput): Omit<
     valorCents: p.valorCents,
     clienteNome: p.clienteNome,
     nomePix: p.nomePix,
+    obsPagamento: p.obsPagamento ?? null,
     pedidoCreatedAt: p.pedidoCreatedAt.toISOString(),
     status: p.status,
   }));

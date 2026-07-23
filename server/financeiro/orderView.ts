@@ -119,6 +119,7 @@ export function buildOrderCentricView(
       formaPagamento: m.payment.formaPagamento || "PIX",
       valorPdvCents: m.payment.valorCents,
       nomePix: m.payment.nomePix,
+      obsPagamento: m.payment.obsPagamento ?? null,
       order: snap,
       extract: extractBrief(m.extract || []),
       confidence: m.confidence,
@@ -141,6 +142,7 @@ export function buildOrderCentricView(
         score: c.score,
         valorCents: c.valorCents,
         nomePix: c.nomePix,
+        obsPagamento: (c as { obsPagamento?: string | null }).obsPagamento ?? null,
         order: snap,
       };
     });
@@ -158,6 +160,7 @@ export function buildOrderCentricView(
         score: 0,
         valorCents: r.payment.valorCents,
         nomePix: r.payment.nomePix,
+        obsPagamento: r.payment.obsPagamento ?? null,
         order: snap,
       });
     }
@@ -182,6 +185,7 @@ export function buildOrderCentricView(
       formaPagamento: p.formaPagamento || "PIX",
       valorCents: p.valorCents,
       nomePix: p.nomePix,
+      obsPagamento: p.obsPagamento ?? null,
       order: snap,
     };
   });

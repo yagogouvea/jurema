@@ -23,6 +23,9 @@ export type PdvCardPayment = {
   pedidoId: string;
   status: string;
   clienteNome: string | null;
+  /** Titular / quem pagou (mesmo campo nomePix do PDV). */
+  nomePix: string | null;
+  obsPagamento?: string | null;
   formaPagamento: "DEBITO" | "CREDITO";
   valorCents: number;
   taxaCents: number;
@@ -61,7 +64,8 @@ function cardPaymentDto(
     pedidoId: p.pedidoId,
     paymentId: p.paymentId,
     valorCents: opts?.displayCents ?? p.valorLiquidoCents,
-    nomePix: null,
+    nomePix: p.nomePix,
+    obsPagamento: p.obsPagamento ?? null,
     clienteNome: p.clienteNome,
     pedidoCreatedAt: p.pedidoCreatedAt.toISOString(),
     status: p.status,
@@ -131,6 +135,7 @@ export type CardLiberacaoResult = {
     valorCents: number;
     clienteNome: string | null;
     nomePix: string | null;
+    obsPagamento?: string | null;
     pedidoCreatedAt: string;
     status: string;
     formaPagamento?: string;
@@ -282,7 +287,8 @@ export function reconcileCardLiberations(params: {
     paymentId: p.paymentId,
     valorCents: p.valorLiquidoCents,
     clienteNome: p.clienteNome,
-    nomePix: null as string | null,
+    nomePix: p.nomePix,
+    obsPagamento: p.obsPagamento ?? null,
     pedidoCreatedAt: p.pedidoCreatedAt.toISOString(),
     status: p.status,
     formaPagamento: p.formaPagamento,

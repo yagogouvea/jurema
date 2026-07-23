@@ -41,7 +41,10 @@ interface PaymentItem {
   valorLiquido: number;
   /** Valor a passar na maquininha (pode ser editado) */
   valorMaquininha: number;
+  /** Quem pagou (titular) — PIX / débito / crédito */
   nomePix?: string;
+  /** Observação livre do pagamento */
+  obsPagamento?: string;
 }
 
 const PAYMENT_METHODS = [
@@ -51,6 +54,9 @@ const PAYMENT_METHODS = [
   { key: "CREDITO",        label: "Crédito",       taxa: 5, icon: CreditCard, color: "text-purple-400" },
   { key: "DESCONTO_FOLHA", label: "Desc. Folha",   taxa: 0, icon: Building,   color: "text-orange-400" },
 ] as const;
+
+const ELECTRONIC_METHODS = new Set(["PIX", "DEBITO", "CREDITO"]);
+const isElectronic = (m: string) => ELECTRONIC_METHODS.has(m);
 
 const SERVICE_TYPES = ["CORREIO", "CARRETO", "CAIXINHA", "OUTRO"];
 
@@ -100,11 +106,15 @@ export default function PdvCheckout({
   const [newPaymentMethod, setNewPaymentMethod] = useState<typeof PAYMENT_METHODS[number]["key"]>("PIX");
   const [newPaymentValor, setNewPaymentValor] = useState("");
   const [newPaymentNomePix, setNewPaymentNomePix] = useState("");
+  const [newPaymentObs, setNewPaymentObs] = useState("");
   // editing maquininha value for an existing payment
   const [editingMaquininhaIdx, setEditingMaquininhaIdx] = useState<number | null>(null);
   const [editingMaquininhaVal, setEditingMaquininhaVal] = useState("");
   const [justificativa, setJustificativa] = useState("");
   const [showItems, setShowItems] = useState(false);
+  /** Popup obrigatório: quem pagou + obs (PIX / débito / crédito) */
+  const [showPayerModal, setShowPayerModal] = useState(false);
+  const [payerDraft, setPayerDraft] = useState<Record<number, { quemPagou: string; obs: string }>>({});
   // Pendente explícito: checkbox + valor manual + justificativa
   const [isPendente, setIsPendente] = useState(false);
   const [valorPendenteManual, setValorPendenteManual] = useState("");
@@ -318,6 +328,15 @@ export default function PdvCheckout({
   const addPayment = () => {
     const valor = parseFloat(newPaymentValor.replace(",", "."));
     if (isNaN(valor) || valor <= 0) { toast.error("Valor inválido"); return; }
+    const electronic = isElectronic(newPaymentMethod);
+    if (electronic && !newPaymentNomePix.trim()) {
+      toast.error("Informe quem pagou (titular da conta/cartão)");
+      return;
+    }
+    if (electronic && !newPaymentObs.trim()) {
+      toast.error("Informe a observação do pagamento");
+      return;
+    }
     const method = PAYMENT_METHODS.find(m => m.key === newPaymentMethod)!;
     const taxa = (valor * method.taxa) / 100;
     const valorLiquido = valor - taxa;
@@ -329,10 +348,12 @@ export default function PdvCheckout({
       taxa,
       valorLiquido,
       valorMaquininha,
-      nomePix: newPaymentMethod === "PIX" ? newPaymentNomePix : undefined,
+      nomePix: electronic ? newPaymentNomePix.trim() : undefined,
+      obsPagamento: electronic ? newPaymentObs.trim() : undefined,
     }]);
     setNewPaymentValor("");
     setNewPaymentNomePix("");
+    setNewPaymentObs("");
     setShowAddPayment(false);
   };
 
@@ -354,6 +375,96 @@ export default function PdvCheckout({
   const isAtacadoMenos6 = regime === "ATACADO" && totalPecas < 6;
   // Pedido apenas com serviços (sem produtos no carrinho)
   const isSomenteServico = cart.length === 0;
+
+  const buildOrderPayload = (paymentsToSend: PaymentItem[]) => ({
+    canal,
+    clienteNome: clienteNome.trim() as string,
+    clienteTelefone: clienteTelefone || undefined,
+    regime,
+    totalVarejo,
+    totalAtacado,
+    // totalAplicado = subtotal dos produtos + serviços extras (valor real da venda sem taxa de cartão)
+    totalAplicado: totalGeral,
+    totalPago,
+    totalPendente,
+    justificativa: justificativa || undefined,
+    status: statusPedido,
+    items: cart.map((item, idx) => {
+      const isSof = !!sofiaItems[idx];
+      const precoUnitario = isSof
+        ? roundMoney(parseMoney(sofiaPrecoUnitario[idx] ?? "") || 0)
+        : roundMoney(item.precoUnitario);
+      const totalItem = roundMoney(precoUnitario * item.quantidade);
+      return {
+        productId: item.productId,
+        linha: item.linha,
+        modelo: item.modelo,
+        time: item.time,
+        descricao: item.descricao,
+        tipo: item.tipo,
+        tamanho: item.tamanho,
+        quantidade: item.quantidade,
+        precoUnitario,
+        totalItem,
+        isSofia: isSof,
+        comissaoLojaSofia: isSof ? parseFloat((sofiaComissao[idx] || "0").replace(",", ".")) || 0 : undefined,
+      };
+    }),
+    payments: paymentsToSend.map((p) => ({
+      formaPagamento: p.formaPagamento,
+      valor: p.valor,
+      taxa: p.taxa,
+      valorLiquido: p.valorLiquido,
+      nomePix: p.nomePix,
+      obsPagamento: p.obsPagamento,
+    })),
+    services,
+  });
+
+  const submitOrder = (paymentsToSend: PaymentItem[]) => {
+    createOrderMutation.mutate(buildOrderPayload(paymentsToSend));
+  };
+
+  const openPayerModal = (list: PaymentItem[]) => {
+    const draft: Record<number, { quemPagou: string; obs: string }> = {};
+    list.forEach((p, i) => {
+      if (!isElectronic(p.formaPagamento)) return;
+      draft[i] = {
+        quemPagou: p.nomePix?.trim() || "",
+        obs: p.obsPagamento?.trim() || "",
+      };
+    });
+    setPayerDraft(draft);
+    setShowPayerModal(true);
+  };
+
+  const confirmPayerModal = () => {
+    const next = payments.map((p, i) => {
+      if (!isElectronic(p.formaPagamento)) return p;
+      const d = payerDraft[i];
+      return {
+        ...p,
+        nomePix: (d?.quemPagou || "").trim(),
+        obsPagamento: (d?.obs || "").trim(),
+      };
+    });
+    for (let i = 0; i < next.length; i++) {
+      const p = next[i];
+      if (!isElectronic(p.formaPagamento)) continue;
+      const label = PAYMENT_METHODS.find((m) => m.key === p.formaPagamento)?.label || p.formaPagamento;
+      if (!p.nomePix) {
+        toast.error(`${label}: informe quem pagou`);
+        return;
+      }
+      if (!p.obsPagamento) {
+        toast.error(`${label}: informe a observação do pagamento`);
+        return;
+      }
+    }
+    setPayments(next);
+    setShowPayerModal(false);
+    submitOrder(next);
+  };
 
   const handleFinalize = () => {
     // Se carrinho vazio, precisa ter pelo menos 1 serviço
@@ -400,43 +511,14 @@ export default function PdvCheckout({
       );
       return;
     }
-    createOrderMutation.mutate({
-      canal,
-      clienteNome: clienteNome.trim() as string,
-      clienteTelefone: clienteTelefone || undefined,
-      regime,
-      totalVarejo,
-      totalAtacado,
-      // totalAplicado = subtotal dos produtos + serviços extras (valor real da venda sem taxa de cartão)
-      totalAplicado: totalGeral,
-      totalPago,
-      totalPendente,
-      justificativa: justificativa || undefined,
-      status: statusPedido,
-      items: cart.map((item, idx) => {
-        const isSof = !!sofiaItems[idx];
-        const precoUnitario = isSof
-          ? roundMoney(parseMoney(sofiaPrecoUnitario[idx] ?? "") || 0)
-          : roundMoney(item.precoUnitario);
-        const totalItem = roundMoney(precoUnitario * item.quantidade);
-        return {
-          productId: item.productId,
-          linha: item.linha,
-          modelo: item.modelo,
-          time: item.time,
-          descricao: item.descricao,
-          tipo: item.tipo,
-          tamanho: item.tamanho,
-          quantidade: item.quantidade,
-          precoUnitario,
-          totalItem,
-          isSofia: isSof,
-          comissaoLojaSofia: isSof ? parseFloat((sofiaComissao[idx] || "0").replace(",", ".")) || 0 : undefined,
-        };
-      }),
-      payments,
-      services,
-    });
+
+    // PIX / débito / crédito → popup obrigatório (quem pagou + observação)
+    if (payments.some((p) => isElectronic(p.formaPagamento))) {
+      openPayerModal(payments);
+      return;
+    }
+
+    submitOrder(payments);
   };
 
   return (
@@ -871,15 +953,41 @@ export default function PdvCheckout({
                   />
                 </div>
 
-                {/* PIX name */}
-                {newPaymentMethod === "PIX" && (
-                  <input
-                    type="text"
-                    value={newPaymentNomePix}
-                    onChange={(e) => setNewPaymentNomePix(e.target.value)}
-                    placeholder="Nome do PIX (opcional)"
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-600"
-                  />
+                {/* Quem pagou + observação — PIX / débito / crédito */}
+                {isElectronic(newPaymentMethod) && (
+                  <div className="space-y-2 rounded-xl border border-amber-800/50 bg-amber-950/20 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
+                      Identificação do pagamento (obrigatório)
+                    </p>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-400">
+                        Quem pagou? (pode ter mais de um nome)
+                      </label>
+                      <textarea
+                        value={newPaymentNomePix}
+                        onChange={(e) => setNewPaymentNomePix(e.target.value)}
+                        placeholder="Ex.: Empresa XYZ, João Silva e Maria Souza"
+                        rows={2}
+                        maxLength={500}
+                        className="w-full resize-none rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:border-green-600"
+                      />
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        PIX picado: separe por vírgula ou “e” — todos os titulares do extrato.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-400">
+                        Observação do pagamento
+                      </label>
+                      <textarea
+                        value={newPaymentObs}
+                        onChange={(e) => setNewPaymentObs(e.target.value)}
+                        placeholder="Ex.: final do cartão, comprovante, horário…"
+                        rows={2}
+                        className="w-full resize-none rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:border-green-600"
+                      />
+                    </div>
+                  </div>
                 )}
 
                 {/* Taxa preview — sempre visível para débito/crédito */}
@@ -930,7 +1038,9 @@ export default function PdvCheckout({
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm font-semibold ${method.color}`}>{method.label}</span>
-                          {payment.nomePix && <span className="text-gray-400 text-xs">({payment.nomePix})</span>}
+                          {payment.nomePix && (
+                            <span className="text-gray-400 text-xs">· {payment.nomePix}</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="text-white text-sm font-semibold">R$ {fmt(payment.valor)}</span>
@@ -942,6 +1052,10 @@ export default function PdvCheckout({
                           </button>
                         </div>
                       </div>
+
+                      {payment.obsPagamento && (
+                        <p className="mt-1 text-[11px] text-gray-500">Obs.: {payment.obsPagamento}</p>
+                      )}
 
                       {/* Maquininha row — only for credit/debit */}
                       {hasTaxa && (
@@ -1178,6 +1292,101 @@ export default function PdvCheckout({
           )}
         </button>
       </div>
+
+      {/* Popup obrigatório: quem pagou + observação (PIX / débito / crédito) */}
+      {showPayerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl">
+            <div className="border-b border-gray-800 px-5 py-4">
+              <h2 className="text-lg font-bold text-white">Identificação do pagamento</h2>
+              <p className="mt-1 text-xs text-gray-400">
+                Obrigatório para PIX, débito e crédito. Pode informar vários nomes (PIX picado) —
+                isso ajuda a IA a achar o pagamento no extrato.
+              </p>
+            </div>
+            <div className="max-h-[60vh] space-y-4 overflow-y-auto px-5 py-4">
+              {payments.map((p, i) => {
+                if (!isElectronic(p.formaPagamento)) return null;
+                const method = PAYMENT_METHODS.find((m) => m.key === p.formaPagamento)!;
+                const draft = payerDraft[i] || { quemPagou: "", obs: "" };
+                return (
+                  <div key={i} className="space-y-2 rounded-xl border border-gray-700 bg-gray-800/60 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-sm font-semibold ${method.color}`}>{method.label}</span>
+                      <span className="text-sm font-semibold text-white">R$ {fmt(p.valor)}</span>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-400">
+                        Quem pagou? <span className="text-red-400">*</span>
+                        <span className="ml-1 font-normal text-gray-500">(pode vários nomes)</span>
+                      </label>
+                      <textarea
+                        value={draft.quemPagou}
+                        onChange={(e) =>
+                          setPayerDraft((prev) => ({
+                            ...prev,
+                            [i]: { ...draft, quemPagou: e.target.value },
+                          }))
+                        }
+                        placeholder="Ex.: M&M Store, Olympia Store e Flávio"
+                        rows={2}
+                        maxLength={500}
+                        className="w-full resize-none rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:border-green-600 focus:outline-none"
+                        autoFocus={Object.keys(payerDraft)[0] === String(i)}
+                      />
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        PIX picado em contas diferentes: coloque todos os nomes separados por vírgula ou “e”.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-400">
+                        Observação <span className="text-red-400">*</span>
+                      </label>
+                      <textarea
+                        value={draft.obs}
+                        onChange={(e) =>
+                          setPayerDraft((prev) => ({
+                            ...prev,
+                            [i]: { ...draft, obs: e.target.value },
+                          }))
+                        }
+                        placeholder="Campo livre — ex.: final do cartão, comprovante, horário…"
+                        rows={2}
+                        className="w-full resize-none rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:border-green-600 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-2 border-t border-gray-800 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setShowPayerModal(false)}
+                disabled={createOrderMutation.isPending}
+                className="rounded-xl px-4 py-3 text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={confirmPayerModal}
+                disabled={createOrderMutation.isPending}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-green-700 py-3 text-sm font-bold text-white hover:bg-green-800 disabled:opacity-50"
+              >
+                {createOrderMutation.isPending ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Confirmar e finalizar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

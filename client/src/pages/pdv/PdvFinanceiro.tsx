@@ -173,6 +173,7 @@ export default function PdvFinanceiro() {
         r.order?.clienteNome,
         r.order?.sellerName,
         r.nomePix,
+        r.obsPagamento,
         r.extract?.map((e: any) => e.payerNameRaw).join(" "),
         String(r.valorPdvCents / 100),
       ]
@@ -406,6 +407,8 @@ export default function PdvFinanceiro() {
                         <th className="text-left px-3 py-2">Vendedor</th>
                         <th className="text-left px-3 py-2">Canal</th>
                         <th className="text-left px-3 py-2">Forma</th>
+                        <th className="text-left px-3 py-2">Quem pagou</th>
+                        <th className="text-left px-3 py-2">Obs. pag.</th>
                         <th className="text-left px-3 py-2">Valor PDV</th>
                         <th className="text-left px-3 py-2">Pagador extrato</th>
                         <th className="text-left px-3 py-2">Valor extrato</th>
@@ -428,6 +431,10 @@ export default function PdvFinanceiro() {
                             <td className="px-3 py-2">{r.order?.sellerName || "—"}</td>
                             <td className="px-3 py-2 text-xs">{r.order?.canal || "—"}</td>
                             <td className="px-3 py-2 text-xs">{r.formaPagamento}</td>
+                            <td className="px-3 py-2 text-xs">{r.nomePix || "—"}</td>
+                            <td className="px-3 py-2 text-xs text-gray-400 max-w-[140px] truncate" title={r.obsPagamento || undefined}>
+                              {r.obsPagamento || "—"}
+                            </td>
                             <td className="px-3 py-2">{fmtBRL(r.valorPdvCents)}</td>
                             <td className="px-3 py-2">
                               {(r.extract || []).map((e: any) => e.payerNameRaw).join(" + ") || "—"}
@@ -525,11 +532,17 @@ export default function PdvFinanceiro() {
                                 <dd className="text-gray-200">{fmtDt(c.order?.pedidoCreatedAt)}</dd>
                               </div>
                               <div>
-                                <dt className="text-gray-600">Nome PIX / score</dt>
+                                <dt className="text-gray-600">Quem pagou / score</dt>
                                 <dd className="text-gray-200">
                                   {c.nomePix || "—"} · {c.score}
                                 </dd>
                               </div>
+                              {c.obsPagamento && (
+                                <div className="col-span-2">
+                                  <dt className="text-gray-600">Obs. pagamento</dt>
+                                  <dd className="text-gray-300">{c.obsPagamento}</dd>
+                                </div>
+                              )}
                               <div className="col-span-2">
                                 <dt className="text-gray-600">Itens</dt>
                                 <dd className="text-gray-300">{c.order?.itemsSummary || "—"}</dd>
@@ -599,6 +612,8 @@ export default function PdvFinanceiro() {
                         <th className="text-left px-3 py-2">Cliente</th>
                         <th className="text-left px-3 py-2">Vendedor</th>
                         <th className="text-left px-3 py-2">Forma</th>
+                        <th className="text-left px-3 py-2">Quem pagou</th>
+                        <th className="text-left px-3 py-2">Obs. pag.</th>
                         <th className="text-left px-3 py-2">Valor</th>
                         <th className="text-left px-3 py-2">Itens</th>
                       </tr>
@@ -611,6 +626,10 @@ export default function PdvFinanceiro() {
                           <td className="px-3 py-2">{p.order?.clienteNome || "—"}</td>
                           <td className="px-3 py-2">{p.order?.sellerName || "—"}</td>
                           <td className="px-3 py-2 text-xs">{p.formaPagamento}</td>
+                          <td className="px-3 py-2 text-xs">{p.nomePix || "—"}</td>
+                          <td className="px-3 py-2 text-xs text-gray-400 max-w-[140px] truncate" title={p.obsPagamento || undefined}>
+                            {p.obsPagamento || "—"}
+                          </td>
                           <td className="px-3 py-2">{fmtBRL(p.valorCents)}</td>
                           <td className="px-3 py-2 text-xs text-gray-400 max-w-xs truncate">
                             {p.order?.itemsSummary || "—"}
@@ -619,7 +638,7 @@ export default function PdvFinanceiro() {
                       ))}
                       {!unmatched.length && (
                         <tr>
-                          <td colSpan={7} className="px-3 py-8 text-center text-gray-500">
+                          <td colSpan={9} className="px-3 py-8 text-center text-gray-500">
                             Todos os pagamentos do período têm correspondência ou estão em dúvida
                           </td>
                         </tr>

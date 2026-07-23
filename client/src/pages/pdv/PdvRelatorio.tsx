@@ -1436,7 +1436,8 @@ function OrderReportContent({
             <thead>
               <tr>
                 <th style={thStyle}>Forma</th>
-                <th style={thStyle}>Identificação</th>
+                <th style={thStyle}>Quem pagou</th>
+                <th style={thStyle}>Obs. pagamento</th>
                 <th style={thRight}>Cobrado</th>
                 <th style={thRight}>Taxa</th>
                 <th style={thRight}>Líquido (loja)</th>
@@ -1450,6 +1451,7 @@ function OrderReportContent({
                   <tr key={i}>
                     <td style={tdStyle}>{PAYMENT_LABELS[p.formaPagamento] || p.formaPagamento}</td>
                     <td style={tdStyle}>{p.nomePix || "—"}</td>
+                    <td style={tdStyle}>{p.obsPagamento || "—"}</td>
                     <td style={tdRight}>{formatCurrency(cobrado)}</td>
                     <td style={tdRight}>{taxa > 0 ? formatCurrency(taxa) : "—"}</td>
                     <td style={tdRight}>{formatCurrency(toNum(p.valor))}</td>

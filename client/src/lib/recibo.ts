@@ -33,6 +33,7 @@ export interface ReciboPayment {
   valor: number | string;
   taxa?: number | string;
   nomePix?: string | null;
+  obsPagamento?: string | null;
 }
 
 export interface ReciboData {
@@ -152,7 +153,9 @@ export function buildReciboHtml(data: ReciboData): string {
       const taxa = n(p.taxa);
       const exib = taxa > 0 ? n(p.valor) + taxa : n(p.valor);
       const label = PAYMENT_LABELS[p.formaPagamento] || p.formaPagamento;
-      return `<div class="row"><span>${esc(label)}${p.nomePix ? ` · ${esc(p.nomePix)}` : ""}${taxa > 0 ? ` <span class="unit">(taxa ${brl(taxa)})</span>` : ""}</span><span>${brl(exib)}</span></div>`;
+      const quem = p.nomePix ? ` · ${esc(p.nomePix)}` : "";
+      const obs = p.obsPagamento ? ` <span class="unit">(${esc(p.obsPagamento)})</span>` : "";
+      return `<div class="row"><span>${esc(label)}${quem}${obs}${taxa > 0 ? ` <span class="unit">(taxa ${brl(taxa)})</span>` : ""}</span><span>${brl(exib)}</span></div>`;
     })
     .join("");
 
@@ -316,7 +319,8 @@ export function downloadReciboPdf(data: ReciboData): void {
     const taxa = n(p.taxa);
     const exib = taxa > 0 ? n(p.valor) + taxa : n(p.valor);
     const label = PAYMENT_LABELS[p.formaPagamento] || p.formaPagamento;
-    pushLR(`${label}${p.nomePix ? ` (${p.nomePix})` : ""}`, brl(exib), 9, "normal");
+    const quemObs = [p.nomePix, p.obsPagamento].filter(Boolean).join(" · ");
+    pushLR(`${label}${quemObs ? ` (${quemObs})` : ""}`, brl(exib), 9, "normal");
   }
   if (t.pendente > 0) {
     space(0.5);

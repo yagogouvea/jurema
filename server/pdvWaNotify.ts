@@ -122,8 +122,9 @@ export function buildOrderNotificationMessage(params: {
     for (const p of input.payments) {
       const label = PAGAMENTO_LABELS[p.formaPagamento] || p.formaPagamento;
       const taxa = Number(p.taxa) > 0 ? ` (taxa ${fmtBRL(p.taxa)})` : "";
-      const pix = p.nomePix ? ` — ${p.nomePix}` : "";
-      lines.push(`• ${label}: ${fmtBRL(p.valor)}${taxa}${pix}`);
+      const quem = p.nomePix ? ` — ${p.nomePix}` : "";
+      const obs = p.obsPagamento ? ` (${p.obsPagamento})` : "";
+      lines.push(`• ${label}: ${fmtBRL(p.valor)}${taxa}${quem}${obs}`);
     }
   }
 

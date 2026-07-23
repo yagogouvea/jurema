@@ -26,6 +26,7 @@ export type PdvPixPayment = {
   status: string;
   clienteNome: string | null;
   nomePix: string | null;
+  obsPagamento?: string | null;
   valorCents: number;
   pedidoCreatedAt: Date;
   paymentCreatedAt: Date;
@@ -39,6 +40,7 @@ export type MatchedPaymentRef = {
   paymentId: number;
   valorCents: number;
   nomePix: string | null;
+  obsPagamento?: string | null;
   clienteNome: string | null;
   pedidoCreatedAt: string;
   status: string;
@@ -70,6 +72,7 @@ export type ReviewItem = {
     valorCents: number;
     clienteNome: string | null;
     nomePix: string | null;
+    obsPagamento?: string | null;
   }>;
 };
 
@@ -104,6 +107,7 @@ export type OrderConfirmedRow = {
   formaPagamento: string;
   valorPdvCents: number;
   nomePix: string | null;
+  obsPagamento?: string | null;
   order: OrderSnapshot;
   extract: Array<{
     id: string;
@@ -130,6 +134,7 @@ export type OrderReviewRow = {
     score: number;
     valorCents: number;
     nomePix: string | null;
+    obsPagamento?: string | null;
     order: OrderSnapshot;
   }>;
 };
@@ -139,6 +144,7 @@ export type OrderUnmatchedRow = {
   formaPagamento: string;
   valorCents: number;
   nomePix: string | null;
+  obsPagamento?: string | null;
   order: OrderSnapshot;
 };
 
@@ -158,6 +164,7 @@ export type ReconcileResult = {
     valorCents: number;
     clienteNome: string | null;
     nomePix: string | null;
+    obsPagamento?: string | null;
     pedidoCreatedAt: string;
     status: string;
     formaPagamento?: string;

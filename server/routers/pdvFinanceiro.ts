@@ -227,7 +227,7 @@ async function loadPdvPixPayments(
     // Sem período: últimos 45 dias
     const [rows] = await db.execute(
       `SELECT
-         p.id AS paymentId, o.pedidoId, o.status, o.clienteNome, p.nomePix, p.valor,
+         p.id AS paymentId, o.pedidoId, o.status, o.clienteNome, p.nomePix, p.obsPagamento, p.valor,
          o.createdAt AS pedidoCreatedAt, p.createdAt AS paymentCreatedAt
        FROM pdv_order_payments p
        JOIN pdv_orders o ON o.pedidoId = p.pedidoId
@@ -244,7 +244,7 @@ async function loadPdvPixPayments(
   const after = Math.max(0, Math.min(365, Math.floor(afterDays + 1)));
   const [rows] = await db.execute(
     `SELECT
-       p.id AS paymentId, o.pedidoId, o.status, o.clienteNome, p.nomePix, p.valor,
+       p.id AS paymentId, o.pedidoId, o.status, o.clienteNome, p.nomePix, p.obsPagamento, p.valor,
        o.createdAt AS pedidoCreatedAt, p.createdAt AS paymentCreatedAt
      FROM pdv_order_payments p
      JOIN pdv_orders o ON o.pedidoId = p.pedidoId
@@ -265,6 +265,7 @@ function mapPaymentRows(rows: any[]): PdvPixPayment[] {
     status: String(r.status || "PAGO"),
     clienteNome: r.clienteNome == null ? null : String(r.clienteNome),
     nomePix: r.nomePix == null ? null : String(r.nomePix),
+    obsPagamento: r.obsPagamento == null ? null : String(r.obsPagamento),
     valorCents: toCents(r.valor),
     pedidoCreatedAt: new Date(r.pedidoCreatedAt),
     paymentCreatedAt: new Date(r.paymentCreatedAt),
@@ -282,7 +283,7 @@ async function loadPdvCardPayments(
   const afterDays = Math.ceil(afterMs / (24 * 60 * 60 * 1000));
 
   const select = `SELECT
-       p.id AS paymentId, o.pedidoId, o.status, o.clienteNome,
+       p.id AS paymentId, o.pedidoId, o.status, o.clienteNome, p.nomePix, p.obsPagamento,
        p.formaPagamento, p.valor, p.taxa, p.valorLiquido,
        o.createdAt AS pedidoCreatedAt, p.createdAt AS paymentCreatedAt
      FROM pdv_order_payments p
@@ -321,6 +322,8 @@ async function loadPdvCardPayments(
       pedidoId: String(r.pedidoId),
       status: String(r.status || "PAGO"),
       clienteNome: r.clienteNome == null ? null : String(r.clienteNome),
+      nomePix: r.nomePix == null ? null : String(r.nomePix),
+      obsPagamento: r.obsPagamento == null ? null : String(r.obsPagamento),
       formaPagamento: String(r.formaPagamento) as "DEBITO" | "CREDITO",
       valorCents,
       taxaCents,
@@ -822,7 +825,7 @@ export const pdvFinanceiroRouter = router({
         } else {
           const paymentId = input.paymentId;
           const [payRows] = await db.execute(
-            `SELECT p.id AS paymentId, o.pedidoId, o.status, o.clienteNome, p.nomePix,
+            `SELECT p.id AS paymentId, o.pedidoId, o.status, o.clienteNome, p.nomePix, p.obsPagamento,
                     p.formaPagamento, p.valor, p.taxa, p.valorLiquido, o.createdAt AS pedidoCreatedAt
              FROM pdv_order_payments p
              JOIN pdv_orders o ON o.pedidoId = p.pedidoId
@@ -856,6 +859,7 @@ export const pdvFinanceiroRouter = router({
               paymentId: Number(pay.paymentId),
               valorCents: extractCents || valorCents,
               nomePix: pay.nomePix == null ? null : String(pay.nomePix),
+              obsPagamento: pay.obsPagamento == null ? null : String(pay.obsPagamento),
               clienteNome: pay.clienteNome == null ? null : String(pay.clienteNome),
               pedidoCreatedAt: new Date(pay.pedidoCreatedAt).toISOString(),
               status: String(pay.status || "PAGO"),

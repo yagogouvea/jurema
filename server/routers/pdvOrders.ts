@@ -46,13 +46,36 @@ const OrderItemSchema = z.object({
   comissaoLojaSofia: z.number().optional().nullable(), // comissão personalizada da loja por item Sofia (R$)
 });
 
-const OrderPaymentSchema = z.object({
-  formaPagamento: z.enum(["PIX", "DINHEIRO", "DEBITO", "CREDITO", "DESCONTO_FOLHA"]),
-  valor: z.number().min(0),
-  taxa: z.number().default(0),
-  valorLiquido: z.number().min(0),
-  nomePix: z.string().optional(),
-});
+const ELECTRONIC_PAYMENTS = new Set(["PIX", "DEBITO", "CREDITO"]);
+
+const OrderPaymentSchema = z
+  .object({
+    formaPagamento: z.enum(["PIX", "DINHEIRO", "DEBITO", "CREDITO", "DESCONTO_FOLHA"]),
+    valor: z.number().min(0),
+    taxa: z.number().default(0),
+    valorLiquido: z.number().min(0),
+    /** Quem pagou (titular) — obrigatório para PIX/débito/crédito. */
+    nomePix: z.string().optional(),
+    /** Observação livre do pagamento — obrigatória para PIX/débito/crédito. */
+    obsPagamento: z.string().optional(),
+  })
+  .superRefine((p, ctx) => {
+    if (!ELECTRONIC_PAYMENTS.has(p.formaPagamento)) return;
+    if (!p.nomePix?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Informe quem pagou (titular da conta/cartão)",
+        path: ["nomePix"],
+      });
+    }
+    if (!p.obsPagamento?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Informe a observação do pagamento",
+        path: ["obsPagamento"],
+      });
+    }
+  });
 
 const OrderServiceSchema = z.object({
   tipo: z.string(),
@@ -175,11 +198,13 @@ export const pdvOrdersRouter = router({
         for (const payment of input.payments) {
           await db.execute(
             `INSERT INTO pdv_order_payments 
-             (pedidoId, formaPagamento, valor, taxa, valorLiquido, nomePix)
-             VALUES (?, ?, ?, ?, ?, ?)`,
+             (pedidoId, formaPagamento, valor, taxa, valorLiquido, nomePix, obsPagamento)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [
               pedidoId, payment.formaPagamento, payment.valor, payment.taxa,
-              payment.valorLiquido, payment.nomePix || null
+              payment.valorLiquido,
+              payment.nomePix?.trim() || null,
+              payment.obsPagamento?.trim() || null,
             ]
           );
         }

@@ -121,7 +121,8 @@ export function buildReconcileReportPdf(
 
   section("Só no PDV");
   for (const p of result.onlyPdv.slice(0, 60)) {
-    const line = `${p.pedidoId} ${formatCentsBRL(p.valorCents)} — ${p.clienteNome || p.nomePix || "—"} (${p.status})`;
+    const obs = p.obsPagamento ? ` · ${p.obsPagamento}` : "";
+    const line = `${p.pedidoId} ${formatCentsBRL(p.valorCents)} — ${p.clienteNome || p.nomePix || "—"}${obs} (${p.status})`;
     for (const w of wrapLines(doc, line, maxW)) {
       ensureSpace(5);
       doc.text(w, margin, y);

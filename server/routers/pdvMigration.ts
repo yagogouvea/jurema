@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS pdv_order_payments (
   valor DECIMAL(10,2) NOT NULL,
   taxa DECIMAL(10,2) NOT NULL DEFAULT '0',
   valorLiquido DECIMAL(10,2) NOT NULL,
-  nomePix VARCHAR(255),
+  nomePix VARCHAR(500),
+  obsPagamento TEXT,
   createdAt TIMESTAMP NOT NULL DEFAULT (now()),
   CONSTRAINT pdv_order_payments_id PRIMARY KEY(id)
 );
@@ -139,6 +140,23 @@ CREATE TABLE IF NOT EXISTS pdv_reconciliations (
 );
 `;
 
+async function ensurePaymentExtraColumns(connection: mysql.Connection): Promise<void> {
+  const alters = [
+    `ALTER TABLE pdv_order_payments ADD COLUMN obsPagamento TEXT NULL`,
+    `ALTER TABLE pdv_order_payments MODIFY COLUMN nomePix VARCHAR(500) NULL`,
+  ];
+  for (const sql of alters) {
+    try {
+      await connection.execute(sql);
+    } catch (e: any) {
+      // 1060 = Duplicate column name
+      if (e?.errno !== 1060 && !String(e?.message || "").includes("Duplicate")) {
+        console.warn("[PDV Migration] alter payment columns:", e?.message || e);
+      }
+    }
+  }
+}
+
 export async function runPdvMigration(): Promise<void> {
   const url = process.env.DATABASE_URL;
   if (!url) {
@@ -155,6 +173,7 @@ export async function runPdvMigration(): Promise<void> {
     for (const stmt of statements) {
       await connection.execute(stmt);
     }
+    await ensurePaymentExtraColumns(connection);
     await connection.end();
     console.log("[PDV Migration] Tables created successfully");
   } catch (error) {

@@ -30,6 +30,8 @@ function card(
   return {
     status: "PAGO",
     clienteNome: null,
+    nomePix: null,
+    obsPagamento: null,
     formaPagamento: "DEBITO",
     taxaCents: taxa,
     valorLiquidoCents: liquido,

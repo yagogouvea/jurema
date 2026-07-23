@@ -48,8 +48,9 @@ export function buildFallbackNarrative(
   if (result.onlyPdv.length > 0) {
     lines.push("Destaques — só no PDV:");
     for (const p of result.onlyPdv.slice(0, 8)) {
+      const obs = p.obsPagamento ? ` [${p.obsPagamento}]` : "";
       lines.push(
-        `• ${p.pedidoId} ${formatCentsBRL(p.valorCents)} — ${p.clienteNome || p.nomePix || "sem nome"}`
+        `• ${p.pedidoId} ${formatCentsBRL(p.valorCents)} — ${p.clienteNome || p.nomePix || "sem nome"}${obs}`
       );
     }
     if (result.onlyPdv.length > 8) lines.push(`… +${result.onlyPdv.length - 8} pedidos`);
@@ -100,7 +101,14 @@ export async function generateReconcileNarrative(
       pedidoId: p.pedidoId,
       valor: formatCentsBRL(p.valorCents),
       cliente: p.clienteNome,
-      nomePix: p.nomePix,
+      quemPagou: p.nomePix,
+      obsPagamento: p.obsPagamento,
+    })),
+    matchedWithPayer: result.matched.slice(0, 25).map((m) => ({
+      pedidoId: m.payment.pedidoId,
+      quemPagou: m.payment.nomePix,
+      obsPagamento: m.payment.obsPagamento,
+      pagadorExtrato: m.extract.map((e) => e.payerNameRaw).join(" + "),
     })),
   };
 

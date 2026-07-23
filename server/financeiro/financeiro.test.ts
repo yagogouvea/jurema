@@ -80,6 +80,12 @@ describe("normalize", () => {
   it("compara nomes parciais", () => {
     expect(bestNameScore("IGOR LEITE TROMBELA", "Igor Leite", null)).toBeGreaterThanOrEqual(0.55);
   });
+
+  it("aceita vários titulares (PIX picado) e casa com qualquer um", () => {
+    const multi = "M&M Store, Olympia Store e Flavio Silva";
+    expect(bestNameScore("FLAVIO SILVA", multi, null)).toBeGreaterThanOrEqual(0.55);
+    expect(bestNameScore("OLYMPIA STORE", multi, null)).toBeGreaterThanOrEqual(0.55);
+  });
 });
 
 describe("infinitePayParser", () => {

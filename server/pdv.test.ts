@@ -291,6 +291,7 @@ describe("PDV Orders Schema", () => {
     expect(cols).toContain("valor");
     expect(cols).toContain("taxa");
     expect(cols).toContain("nomePix");
+    expect(cols).toContain("obsPagamento");
   });
 
   it("should have correct columns in pdv_cash_flow", async () => {

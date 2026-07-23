@@ -401,9 +401,14 @@ export default function PdvHistorico() {
                       <div key={i} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-2">
                         <div>
                           <span className="text-white text-sm">{PAYMENT_LABELS[p.formaPagamento] || p.formaPagamento}</span>
-                          {p.nomePix && <span className="text-gray-400 text-xs ml-2">{p.nomePix}</span>}
+                          {p.nomePix && (
+                            <span className="text-gray-400 text-xs ml-2">quem pagou: {p.nomePix}</span>
+                          )}
                           {hasTaxa && (
                             <span className="text-gray-500 text-xs ml-2">taxa: {formatCurrency(taxa)}</span>
+                          )}
+                          {p.obsPagamento && (
+                            <div className="text-gray-500 text-[11px] mt-0.5">Obs.: {p.obsPagamento}</div>
                           )}
                         </div>
                         <div className="text-right">

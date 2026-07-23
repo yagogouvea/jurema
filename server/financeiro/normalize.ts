@@ -71,12 +71,28 @@ export function nameSimilarity(aRaw: string, bRaw: string): number {
   return union > 0 ? inter / union : 0;
 }
 
+/** Separa vários titulares (PIX picado): "Empresa, Fulano e Beltrana". */
+export function splitPayerNames(raw: string | null | undefined): string[] {
+  const text = (raw || "").trim();
+  if (!text) return [];
+  const parts = text
+    .split(/\s*(?:,|;|\||\/|\n|\be\b|\bE\b)\s*/)
+    .map((p) => p.trim())
+    .filter((p) => p.length >= 2);
+  // Inclui o texto completo também (casos sem separador claro)
+  return parts.length > 0 ? [...new Set([text, ...parts])] : [text];
+}
+
 export function bestNameScore(
   extractName: string,
   nomePix: string | null | undefined,
   clienteNome: string | null | undefined
 ): number {
-  return Math.max(nameSimilarity(extractName, nomePix || ""), nameSimilarity(extractName, clienteNome || ""));
+  let best = nameSimilarity(extractName, clienteNome || "");
+  for (const part of splitPayerNames(nomePix)) {
+    best = Math.max(best, nameSimilarity(extractName, part));
+  }
+  return best;
 }
 
 export function formatCentsBRL(cents: number): string {

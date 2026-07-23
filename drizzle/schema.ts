@@ -301,7 +301,10 @@ export const pdvOrderPayments = mysqlTable("pdv_order_payments", {
   valor: decimal("valor", { precision: 10, scale: 2 }).notNull(),
   taxa: decimal("taxa", { precision: 10, scale: 2 }).default("0").notNull(),
   valorLiquido: decimal("valorLiquido", { precision: 10, scale: 2 }).notNull(),
-  nomePix: varchar("nomePix", { length: 255 }),
+  /** Titular(es) / quem pagou — aceita vários nomes (PIX picado). */
+  nomePix: varchar("nomePix", { length: 500 }),
+  /** Observação livre do pagamento (ajuda a IA no extrato). */
+  obsPagamento: text("obsPagamento"),
   /** Status da conciliação com extrato (Financeiro). */
   reconcileStatus: mysqlEnum("reconcileStatus", ["pending", "confirmed", "rejected", "unmatched"]),
   reconcileSource: varchar("reconcileSource", { length: 40 }),
