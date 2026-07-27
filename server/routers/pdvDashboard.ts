@@ -714,12 +714,13 @@ export const pdvDashboardRouter = router({
         rows = r as any[];
       }
 
-      // Buscar total de caixinhas no período (em horário BR)
+      // Buscar total de caixinhas no período (em horário BR) — ignora pedidos cancelados
       const [caixRows] = await db.execute(
         `SELECT COALESCE(SUM(s.valor), 0) as totalCaixinha, COUNT(s.id) as qtdCaixinha
          FROM pdv_order_services s
          JOIN pdv_orders o ON o.pedidoId = s.pedidoId
          WHERE s.tipo = 'CAIXINHA'
+           AND o.status != 'CANCELADO'
            AND o.sellerId = ?
            AND DATE(${spLocalDateTimeExpr("s.createdAt")}) >= ?
            AND DATE(${spLocalDateTimeExpr("s.createdAt")}) <= ?`,
@@ -959,7 +960,10 @@ export const pdvDashboardRouter = router({
             o.status, o.totalAplicado, o.sellerName,
             COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade ELSE 0 END), 0) as totalPecas,
             COALESCE(SUM(CASE WHEN (COALESCE(oi.isSofia, 0) = 0) THEN oi.quantidade * oi.comissaoUnitaria ELSE 0 END), 0) as bonusTotal,
-            COALESCE((SELECT SUM(os2.valor) FROM pdv_order_services os2 WHERE os2.pedidoId = o.pedidoId AND os2.tipo = 'CAIXINHA'), 0) as caixinhaTotal
+            CASE WHEN o.status = 'CANCELADO' THEN 0 ELSE COALESCE((
+              SELECT SUM(os2.valor) FROM pdv_order_services os2
+              WHERE os2.pedidoId = o.pedidoId AND os2.tipo = 'CAIXINHA'
+            ), 0) END as caixinhaTotal
           FROM pdv_orders o
           LEFT JOIN pdv_order_items oi ON oi.pedidoId = o.pedidoId
           WHERE o.sellerId IN (${placeholders})

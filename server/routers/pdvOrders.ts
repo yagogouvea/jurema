@@ -749,6 +749,7 @@ export const pdvOrdersRouter = router({
           FROM pdv_order_services s
           JOIN pdv_orders o ON o.pedidoId = s.pedidoId
           WHERE s.tipo = 'CAIXINHA'
+            AND o.status != 'CANCELADO'
         `;
         const histParams: any[] = [];
 
@@ -774,6 +775,7 @@ export const pdvOrdersRouter = router({
             FROM pdv_order_services s
             JOIN pdv_orders o ON o.pedidoId = s.pedidoId
             WHERE s.tipo = 'CAIXINHA'
+              AND o.status != 'CANCELADO'
           `;
           const sumParams: any[] = [];
           if (input.startDate) { sumQuery += ` AND DATE(${spLocalDateTimeExpr("s.createdAt")}) >= ?`; sumParams.push(input.startDate); }
@@ -789,6 +791,7 @@ export const pdvOrdersRouter = router({
           FROM pdv_order_services s
           JOIN pdv_orders o ON o.pedidoId = s.pedidoId
           WHERE s.tipo = 'CAIXINHA'
+            AND o.status != 'CANCELADO'
         `;
         const totalParams: any[] = [];
         if (effectiveSellerId !== null) { totalQuery += ' AND o.sellerId = ?'; totalParams.push(effectiveSellerId); }
