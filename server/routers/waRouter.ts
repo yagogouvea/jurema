@@ -147,7 +147,8 @@ function scheduleIaReplyAfterCustomerSequence(params: { conversationId: number; 
       try {
         const { generateAiResponse } = await import("./waAiResponder");
         const result = await generateAiResponse(asyncDb as any, conversationId, instanceId, (iid, jid, content) =>
-          callWaBridge(iid, jid, content)
+          // keepUnread: celular físico continua com conversa NÃO visualizada após a IA responder
+          callWaBridge(iid, jid, content, { keepUnread: true })
         );
         if (result.ok) {
           console.log(
@@ -1245,7 +1246,7 @@ export const waRouter = router({
                 "UPDATE wa_conversations SET lastMessage=?, lastMessageAt=NOW() WHERE id=?",
                 [awayMsg.substring(0, 100), capturedConvId]
               );
-              callWaBridge(capturedInstanceId, capturedRemoteJid, awayMsg).catch(e =>
+              callWaBridge(capturedInstanceId, capturedRemoteJid, awayMsg, { keepUnread: true }).catch(e =>
                 console.error("[webhook] Erro ao enviar ausência via wa-bridge:", e)
               );
               awaySent = true;
@@ -1817,8 +1818,16 @@ export const waRouter = router({
 /**
  * Envia uma mensagem via wa-bridge (microserviço Baileys no Railway).
  * Silencioso se WA_BRIDGE_URL não estiver configurado (modo desenvolvimento).
+ *
+ * @param opts.keepUnread — se true, o bridge remarca o chat como não lido no celular
+ *   após enviar (uso típico: resposta automática da IA).
  */
-async function callWaBridge(instanceId: number, remoteJid: string, content: string): Promise<void> {
+async function callWaBridge(
+  instanceId: number,
+  remoteJid: string,
+  content: string,
+  opts?: { keepUnread?: boolean }
+): Promise<void> {
   const bridgeUrl = process.env.WA_BRIDGE_URL;
   const bridgeKey = process.env.WA_BRIDGE_API_KEY;
 
@@ -1833,7 +1842,12 @@ async function callWaBridge(instanceId: number, remoteJid: string, content: stri
       "Content-Type": "application/json",
       "x-wa-bridge-key": bridgeKey ?? "",
     },
-    body: JSON.stringify({ instanceId, remoteJid, content }),
+    body: JSON.stringify({
+      instanceId,
+      remoteJid,
+      content,
+      keepUnread: opts?.keepUnread === true,
+    }),
     signal: AbortSignal.timeout(10_000),
   });
 
