@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerUploadRoutes } from "../uploadHandler";
 import { registerPdvSofiaPhotoRoute } from "../pdvSofiaPhotoRoute";
+import { registerAppVersionRoute } from "../appVersionRoute";
 import { registerWaMessageMediaRoute } from "../waMessageMediaRoute";
 import { runPdvMigration, seedPdvData } from "../routers/pdvMigration";
 import { runWaMediaBlobMigration } from "../routers/waMediaBlobMigration";
@@ -67,6 +68,8 @@ async function startServer() {
     });
   });
 
+  // Versão do build do front — usada pelo app para se atualizar sozinho
+  registerAppVersionRoute(app);
   // Storage proxy for /manus-storage/* paths
   registerStorageProxy(app);
   // OAuth callback under /api/oauth/callback

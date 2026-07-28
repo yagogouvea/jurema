@@ -12,6 +12,7 @@ import PdvCheckout from "./PdvCheckout";
 import SizePickerModal from "@/components/pdv/SizePickerModal";
 import type { GroupedProduct } from "@/components/pdv/SizePickerModal";
 import { ProductPhotoAvatar, ProductPhotoLightbox } from "@/components/ProductPhotoLightbox";
+import { useBlockAppReload } from "@/hooks/useBlockAppReload";
 
 // Re-export CartItem type used throughout this file
 interface CartItem {
@@ -101,6 +102,9 @@ export default function PdvMain() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCart, setShowCart] = useState(false);
   const [regimeManual, setRegimeManual] = useState<"ATACADO" | "VAREJO" | null>(null);
+
+  // Venda em andamento: segura o auto-reload de nova versão (o carrinho só vive em memória)
+  useBlockAppReload(cart.length > 0 || showCheckout);
 
   // Size picker modal state
   const [selectedGroup, setSelectedGroup] = useState<GroupedProduct | null>(null);

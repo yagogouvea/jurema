@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import AppUpdateWatcher from "./components/AppUpdateWatcher";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { CartProvider } from "./contexts/CartContext";
 import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
@@ -107,6 +108,7 @@ function App() {
               <CartProvider>
                 <TooltipProvider>
                   <Toaster richColors position="top-right" />
+                  <AppUpdateWatcher />
                   <Router />
                 </TooltipProvider>
               </CartProvider>
