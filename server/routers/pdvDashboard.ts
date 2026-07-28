@@ -346,6 +346,23 @@ export const pdvDashboardRouter = router({
         const [balanceRows] = await db.execute(
           "SELECT COALESCE(SUM(CASE WHEN tipo = 'SUPRIMENTO' THEN valor ELSE -valor END), 0) as saldo FROM pdv_cash_flow"
         );
+
+        // Último fechamento (ancora o saldo à contagem física)
+        const [closureRows] = await db.execute(
+          `SELECT id, dia, saldoSistema, valorContado, diferenca, justificativa, usuario, createdAt
+           FROM pdv_cash_closures
+           ORDER BY dia DESC
+           LIMIT 1`
+        );
+        const lastClosure = (closureRows as any[])[0] || null;
+
+        // Fechamento de hoje (fuso SP), se já existir
+        const hojeSp = todayYmdSaoPaulo();
+        const [todayClosureRows] = await db.execute(
+          "SELECT id, dia, saldoSistema, valorContado, diferenca, justificativa, usuario, createdAt FROM pdv_cash_closures WHERE dia = ? LIMIT 1",
+          [hojeSp]
+        );
+        const todayClosure = (todayClosureRows as any[])[0] || null;
         
         await db.end();
         
@@ -355,6 +372,28 @@ export const pdvDashboardRouter = router({
           saldo: (balanceRows as any[])[0].saldo,
           page: input.page,
           totalPages: Math.ceil(total / input.limit),
+          lastClosure: lastClosure
+            ? {
+                ...lastClosure,
+                dia: lastClosure.dia instanceof Date
+                  ? lastClosure.dia.toISOString().slice(0, 10)
+                  : String(lastClosure.dia).slice(0, 10),
+                saldoSistema: parseFloat(lastClosure.saldoSistema),
+                valorContado: parseFloat(lastClosure.valorContado),
+                diferenca: parseFloat(lastClosure.diferenca),
+              }
+            : null,
+          todayClosure: todayClosure
+            ? {
+                ...todayClosure,
+                dia: todayClosure.dia instanceof Date
+                  ? todayClosure.dia.toISOString().slice(0, 10)
+                  : String(todayClosure.dia).slice(0, 10),
+                saldoSistema: parseFloat(todayClosure.saldoSistema),
+                valorContado: parseFloat(todayClosure.valorContado),
+                diferenca: parseFloat(todayClosure.diferenca),
+              }
+            : null,
         };
       } catch (err) {
         if (err instanceof TRPCError) throw err;
@@ -399,6 +438,198 @@ export const pdvDashboardRouter = router({
       }).catch(err => console.error('[CashFlow] Erro na notificação WhatsApp:', err));
 
       return { success: true };
+    }),
+
+  /**
+   * Prévia do fechamento: saldo esperado agora + resumo do dia (SP).
+   * Usado pelo modal de Fechamento de Caixa.
+   */
+  cashClosePreview: publicProcedure.query(async ({ ctx }) => {
+    await requirePdvAdmin(ctx);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+    try {
+      const hojeSp = todayYmdSaoPaulo();
+
+      const [balanceRows] = await db.execute(
+        "SELECT COALESCE(SUM(CASE WHEN tipo = 'SUPRIMENTO' THEN valor ELSE -valor END), 0) as saldo FROM pdv_cash_flow"
+      );
+      const saldoSistema = parseFloat((balanceRows as any[])[0]?.saldo || "0");
+
+      const [todayClosureRows] = await db.execute(
+        "SELECT id, dia, saldoSistema, valorContado, diferenca, justificativa, usuario, createdAt FROM pdv_cash_closures WHERE dia = ? LIMIT 1",
+        [hojeSp]
+      );
+      const todayClosureRaw = (todayClosureRows as any[])[0] || null;
+
+      const dayExpr = `DATE(${spLocalDateTimeExpr("createdAt")})`;
+      const [dayRows] = await db.execute(
+        `SELECT
+           COALESCE(SUM(CASE WHEN tipo = 'SUPRIMENTO' THEN valor ELSE 0 END), 0) AS suprimentos,
+           COALESCE(SUM(CASE WHEN tipo = 'SANGRIA' THEN valor ELSE 0 END), 0) AS sangrias
+         FROM pdv_cash_flow
+         WHERE ${dayExpr} = ?`,
+        [hojeSp]
+      );
+      const day = (dayRows as any[])[0] || {};
+
+      const [lastClosureRows] = await db.execute(
+        `SELECT id, dia, valorContado, diferenca, usuario, createdAt
+         FROM pdv_cash_closures
+         ORDER BY dia DESC
+         LIMIT 1`
+      );
+      const last = (lastClosureRows as any[])[0] || null;
+
+      await db.end();
+
+      return {
+        dia: hojeSp,
+        saldoSistema,
+        suprimentosHoje: parseFloat(day.suprimentos || "0"),
+        sangriasHoje: parseFloat(day.sangrias || "0"),
+        liquidoHoje: parseFloat(day.suprimentos || "0") - parseFloat(day.sangrias || "0"),
+        alreadyClosed: !!todayClosureRaw,
+        todayClosure: todayClosureRaw
+          ? {
+              id: todayClosureRaw.id,
+              dia: hojeSp,
+              saldoSistema: parseFloat(todayClosureRaw.saldoSistema),
+              valorContado: parseFloat(todayClosureRaw.valorContado),
+              diferenca: parseFloat(todayClosureRaw.diferenca),
+              justificativa: todayClosureRaw.justificativa,
+              usuario: todayClosureRaw.usuario,
+            }
+          : null,
+        lastClosure: last
+          ? {
+              id: last.id,
+              dia: last.dia instanceof Date ? last.dia.toISOString().slice(0, 10) : String(last.dia).slice(0, 10),
+              valorContado: parseFloat(last.valorContado),
+              diferenca: parseFloat(last.diferenca),
+              usuario: last.usuario,
+            }
+          : null,
+      };
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      console.error("[PDV Dashboard] cashClosePreview:", err);
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    }
+  }),
+
+  /**
+   * Fecha o caixa do dia (fuso SP):
+   * - grava a contagem física
+   * - se houver diferença, lança SUPRIMENTO (sobra) ou SANGRIA (falta) para
+   *   ancorar o saldo do sistema ao valor contado — o dia seguinte começa daí
+   */
+  closeCash: publicProcedure
+    .input(z.object({
+      valorContado: z.number().min(0),
+      justificativa: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const seller = await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      try {
+        const hojeSp = todayYmdSaoPaulo();
+
+        const [existing] = await db.execute(
+          "SELECT id FROM pdv_cash_closures WHERE dia = ? LIMIT 1",
+          [hojeSp]
+        );
+        if ((existing as any[]).length > 0) {
+          await db.end();
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "O caixa de hoje já foi fechado. Se precisar corrigir, lance um suprimento/sangria manual.",
+          });
+        }
+
+        const [balanceRows] = await db.execute(
+          "SELECT COALESCE(SUM(CASE WHEN tipo = 'SUPRIMENTO' THEN valor ELSE -valor END), 0) as saldo FROM pdv_cash_flow"
+        );
+        const saldoSistema = parseFloat((balanceRows as any[])[0]?.saldo || "0");
+        const valorContado = Math.round(input.valorContado * 100) / 100;
+        const diferenca = Math.round((valorContado - saldoSistema) * 100) / 100;
+
+        if (Math.abs(diferenca) > 0.009 && !input.justificativa?.trim()) {
+          await db.end();
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Informe a justificativa da sobra ou falta de caixa",
+          });
+        }
+
+        let cashFlowId: number | null = null;
+        const diaBr = hojeSp.slice(8, 10) + "/" + hojeSp.slice(5, 7);
+
+        if (Math.abs(diferenca) > 0.009) {
+          const tipo = diferenca > 0 ? "SUPRIMENTO" : "SANGRIA";
+          const abs = Math.abs(diferenca);
+          const label = diferenca > 0 ? "sobra" : "falta";
+          const justificativa = (input.justificativa || "").trim();
+          const descricao = `Fechamento ${diaBr} — ${label} de R$ ${abs.toFixed(2).replace(".", ",")}${justificativa ? `: ${justificativa}` : ""}`.slice(0, 255);
+
+          const [cashResult] = await db.execute(
+            "INSERT INTO pdv_cash_flow (tipo, descricao, valor, usuario) VALUES (?, ?, ?, ?)",
+            [tipo, descricao, abs, seller.name]
+          ) as any;
+          cashFlowId = cashResult.insertId;
+
+          appendCashFlowToSheet({
+            id: cashFlowId!,
+            tipo,
+            descricao,
+            valor: abs,
+            usuario: seller.name,
+            createdAt: new Date(),
+          }).catch(err => console.error("[CashClose] Erro ao sincronizar ajuste:", err));
+
+          notifyCashFlowViaWhatsApp({
+            tipo,
+            descricao,
+            valor: abs,
+            usuario: seller.name,
+            origem: "manual",
+          }).catch(err => console.error("[CashClose] Erro na notificação WhatsApp:", err));
+        }
+
+        const [closureResult] = await db.execute(
+          `INSERT INTO pdv_cash_closures
+             (dia, saldoSistema, valorContado, diferenca, justificativa, usuario, cashFlowId)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            hojeSp,
+            saldoSistema,
+            valorContado,
+            diferenca,
+            input.justificativa?.trim() || null,
+            seller.name,
+            cashFlowId,
+          ]
+        ) as any;
+
+        await db.end();
+
+        return {
+          success: true,
+          id: closureResult.insertId,
+          dia: hojeSp,
+          saldoSistema,
+          valorContado,
+          diferenca,
+          cashFlowId,
+        };
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+        console.error("[PDV Dashboard] closeCash:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao fechar o caixa" });
+      }
     }),
 
   updateGoals: publicProcedure

@@ -9,7 +9,8 @@ import {
 } from "recharts";
 import {
   TrendingUp, ShoppingBag, Users, DollarSign, Plus, Minus,
-  Target, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Box, ChevronRight
+  Target, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Box, ChevronRight,
+  Lock
 } from "lucide-react";
 import { toast } from "sonner";
 import { firstOfMonthYmdSaoPaulo, todayYmdSaoPaulo } from "@shared/spCalendar";
@@ -34,6 +35,9 @@ export default function PdvDashboard() {
   const [cashDesc, setCashDesc] = useState("");
   const [cashValor, setCashValor] = useState("");
   const [caixSellerId, setCaixSellerId] = useState<number | undefined>(undefined);
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [closeValorContado, setCloseValorContado] = useState("");
+  const [closeJustificativa, setCloseJustificativa] = useState("");
 
   const { data, isLoading, refetch } = trpc.pdvDashboard.summary.useQuery({
     startDate,
@@ -57,6 +61,29 @@ export default function PdvDashboard() {
       setCashDesc("");
       setCashValor("");
       setShowCashModal(null);
+      refetchCash();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const { data: closePreview, refetch: refetchClosePreview } = trpc.pdvDashboard.cashClosePreview.useQuery(
+    undefined,
+    { enabled: isAdmin && showCloseModal }
+  );
+
+  const closeCashMutation = trpc.pdvDashboard.closeCash.useMutation({
+    onSuccess: (res) => {
+      const dif = Number(res.diferenca || 0);
+      if (Math.abs(dif) < 0.01) {
+        toast.success("Caixa fechado — contagem bateu com o sistema");
+      } else if (dif > 0) {
+        toast.success(`Caixa fechado — sobra de ${formatCurrency(dif)} registrada`);
+      } else {
+        toast.success(`Caixa fechado — falta de ${formatCurrency(Math.abs(dif))} registrada`);
+      }
+      setShowCloseModal(false);
+      setCloseValorContado("");
+      setCloseJustificativa("");
       refetchCash();
     },
     onError: (err) => toast.error(err.message),
@@ -139,6 +166,35 @@ export default function PdvDashboard() {
       tipo: showCashModal!,
       descricao: cashDesc,
       valor,
+    });
+  };
+
+  const parseMoneyBr = (raw: string): number => {
+    const n = parseFloat(raw.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const closeDiffPreview = (() => {
+    if (!closePreview) return null;
+    const contado = parseMoneyBr(closeValorContado);
+    if (isNaN(contado)) return null;
+    return Math.round((contado - closePreview.saldoSistema) * 100) / 100;
+  })();
+
+  const handleCloseCash = () => {
+    const valorContado = parseMoneyBr(closeValorContado);
+    if (isNaN(valorContado) || valorContado < 0) {
+      toast.error("Informe o valor contado na gaveta");
+      return;
+    }
+    const dif = Math.round((valorContado - (closePreview?.saldoSistema ?? 0)) * 100) / 100;
+    if (Math.abs(dif) > 0.009 && !closeJustificativa.trim()) {
+      toast.error("Informe a justificativa da sobra ou falta");
+      return;
+    }
+    closeCashMutation.mutate({
+      valorContado,
+      justificativa: closeJustificativa.trim() || undefined,
     });
   };
 
@@ -563,13 +619,27 @@ export default function PdvDashboard() {
         {/* Caixa */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
           <div className="flex flex-col gap-3 mb-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-white font-semibold">Fluxo de Caixa</h3>
-              <span className="text-gray-400 text-sm">
-                Saldo: <span className={`font-bold ${parseFloat(cashData?.saldo || "0") >= 0 ? "text-green-400" : "text-red-400"}`}>
-                  {formatCurrency(parseFloat(cashData?.saldo || "0"))}
+              <div className="text-right">
+                <span className="text-gray-400 text-sm">
+                  Saldo: <span className={`font-bold ${parseFloat(cashData?.saldo || "0") >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {formatCurrency(parseFloat(cashData?.saldo || "0"))}
+                  </span>
                 </span>
-              </span>
+                {cashData?.todayClosure ? (
+                  <div className="text-[11px] text-green-400/80 mt-0.5">
+                    Fechado hoje · contado {formatCurrency(cashData.todayClosure.valorContado)}
+                    {Math.abs(cashData.todayClosure.diferenca) >= 0.01
+                      ? ` (${cashData.todayClosure.diferenca > 0 ? "sobra" : "falta"} ${formatCurrency(Math.abs(cashData.todayClosure.diferenca))})`
+                      : " · bateu"}
+                  </div>
+                ) : cashData?.lastClosure ? (
+                  <div className="text-[11px] text-gray-500 mt-0.5">
+                    Último fechamento {formatDate(cashData.lastClosure.dia)} · {formatCurrency(cashData.lastClosure.valorContado)}
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -585,6 +655,18 @@ export default function PdvDashboard() {
               >
                 <Minus className="w-3.5 h-3.5" />
                 Sangria
+              </button>
+              <button
+                onClick={() => {
+                  setCloseValorContado("");
+                  setCloseJustificativa("");
+                  setShowCloseModal(true);
+                  refetchClosePreview();
+                }}
+                className="bg-amber-700 hover:bg-amber-800 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Fechar Caixa
               </button>
               <div className="flex-1" />
               <button
@@ -851,6 +933,130 @@ export default function PdvDashboard() {
                 Cancelar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fechamento de Caixa */}
+      {showCloseModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center gap-2 mb-1">
+              <Lock className="w-5 h-5 text-amber-400" />
+              <h3 className="text-white font-bold text-lg">Fechar Caixa</h3>
+            </div>
+            <p className="text-gray-400 text-xs mb-4">
+              Conte o dinheiro da gaveta e confira com o saldo do sistema.
+              Se houver diferença, o ajuste fica registrado e o dia seguinte começa do valor contado.
+            </p>
+
+            {closePreview?.alreadyClosed ? (
+              <div className="bg-green-950/40 border border-green-800 rounded-xl p-4 mb-4">
+                <p className="text-green-300 text-sm font-semibold">Caixa de hoje já foi fechado</p>
+                <p className="text-green-200/80 text-xs mt-1">
+                  Contado {formatCurrency(closePreview.todayClosure!.valorContado)}
+                  {Math.abs(closePreview.todayClosure!.diferenca) >= 0.01
+                    ? ` · ${closePreview.todayClosure!.diferenca > 0 ? "sobra" : "falta"} ${formatCurrency(Math.abs(closePreview.todayClosure!.diferenca))}`
+                    : " · bateu com o sistema"}
+                  {closePreview.todayClosure!.usuario ? ` · por ${closePreview.todayClosure!.usuario}` : ""}
+                </p>
+                {closePreview.todayClosure!.justificativa && (
+                  <p className="text-gray-400 text-xs mt-2">Justificativa: {closePreview.todayClosure!.justificativa}</p>
+                )}
+                <button
+                  onClick={() => setShowCloseModal(false)}
+                  className="mt-4 w-full bg-gray-800 hover:bg-gray-700 text-white py-2.5 rounded-xl text-sm"
+                >
+                  Fechar
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className="bg-gray-800 rounded-xl p-3">
+                    <div className="text-[10px] uppercase tracking-wide text-gray-500">Esperado (sistema)</div>
+                    <div className="text-white font-bold text-lg mt-0.5">
+                      {closePreview ? formatCurrency(closePreview.saldoSistema) : "…"}
+                    </div>
+                  </div>
+                  <div className="bg-gray-800 rounded-xl p-3">
+                    <div className="text-[10px] uppercase tracking-wide text-gray-500">Líquido do dia</div>
+                    <div className={`font-bold text-lg mt-0.5 ${(closePreview?.liquidoHoje ?? 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {closePreview ? formatCurrency(closePreview.liquidoHoje) : "…"}
+                    </div>
+                  </div>
+                </div>
+                {closePreview && (
+                  <p className="text-[11px] text-gray-500 mb-3">
+                    Hoje: +{formatCurrency(closePreview.suprimentosHoje)} suprimentos · −{formatCurrency(closePreview.sangriasHoje)} sangrias
+                    {closePreview.lastClosure
+                      ? ` · último fechamento ${formatDate(closePreview.lastClosure.dia)}`
+                      : ""}
+                  </p>
+                )}
+
+                <label className="block text-xs text-gray-400 mb-1">
+                  Valor contado na gaveta <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={closeValorContado}
+                  onChange={(e) => setCloseValorContado(e.target.value)}
+                  placeholder="Ex.: 25,00"
+                  autoFocus
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-amber-600 mb-3"
+                />
+
+                {closeDiffPreview !== null && Math.abs(closeDiffPreview) >= 0.01 && (
+                  <div className={`rounded-xl px-3 py-2 mb-3 text-sm border ${
+                    closeDiffPreview > 0
+                      ? "bg-green-950/40 border-green-800 text-green-300"
+                      : "bg-red-950/40 border-red-800 text-red-300"
+                  }`}>
+                    {closeDiffPreview > 0 ? "Sobra" : "Falta"} de {formatCurrency(Math.abs(closeDiffPreview))}
+                    — será lançada automaticamente no caixa.
+                  </div>
+                )}
+                {closeDiffPreview !== null && Math.abs(closeDiffPreview) < 0.01 && closeValorContado.trim() !== "" && (
+                  <div className="rounded-xl px-3 py-2 mb-3 text-sm border bg-green-950/40 border-green-800 text-green-300">
+                    Contagem bate com o sistema ✓
+                  </div>
+                )}
+
+                {closeDiffPreview !== null && Math.abs(closeDiffPreview) >= 0.01 && (
+                  <>
+                    <label className="block text-xs text-gray-400 mb-1">
+                      Justificativa <span className="text-red-400">*</span>
+                    </label>
+                    <textarea
+                      value={closeJustificativa}
+                      onChange={(e) => setCloseJustificativa(e.target.value)}
+                      placeholder="Ex.: caixinha em espécie não lançada, troco, fundo de troco…"
+                      rows={2}
+                      maxLength={500}
+                      className="w-full resize-none bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-amber-600 mb-3 text-sm"
+                    />
+                  </>
+                )}
+
+                <div className="flex gap-3 mt-2">
+                  <button
+                    onClick={handleCloseCash}
+                    disabled={closeCashMutation.isPending || !closePreview}
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
+                  >
+                    {closeCashMutation.isPending ? "Fechando…" : "Confirmar fechamento"}
+                  </button>
+                  <button
+                    onClick={() => setShowCloseModal(false)}
+                    className="px-5 text-gray-400 hover:text-white py-3 rounded-xl transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

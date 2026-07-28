@@ -8,6 +8,7 @@ import {
   decimal,
   boolean,
   json,
+  date,
 } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
@@ -343,6 +344,22 @@ export const pdvCashFlow = mysqlTable("pdv_cash_flow", {
 
 export type PdvCashFlow = typeof pdvCashFlow.$inferSelect;
 export type InsertPdvCashFlow = typeof pdvCashFlow.$inferInsert;
+
+/** Fechamento diário de caixa (contagem física × saldo do sistema). */
+export const pdvCashClosures = mysqlTable("pdv_cash_closures", {
+  id: int("id").autoincrement().primaryKey(),
+  dia: date("dia").notNull().unique(),
+  saldoSistema: decimal("saldoSistema", { precision: 10, scale: 2 }).notNull(),
+  valorContado: decimal("valorContado", { precision: 10, scale: 2 }).notNull(),
+  diferenca: decimal("diferenca", { precision: 10, scale: 2 }).notNull(),
+  justificativa: varchar("justificativa", { length: 500 }),
+  usuario: varchar("usuario", { length: 255 }),
+  cashFlowId: int("cashFlowId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PdvCashClosure = typeof pdvCashClosures.$inferSelect;
+export type InsertPdvCashClosure = typeof pdvCashClosures.$inferInsert;
 
 /** Histórico de conciliações extrato × pedidos (Financeiro). */
 export const pdvReconciliations = mysqlTable("pdv_reconciliations", {

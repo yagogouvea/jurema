@@ -103,6 +103,20 @@ CREATE TABLE IF NOT EXISTS pdv_cash_flow (
   CONSTRAINT pdv_cash_flow_id PRIMARY KEY(id)
 );
 
+CREATE TABLE IF NOT EXISTS pdv_cash_closures (
+  id INT AUTO_INCREMENT NOT NULL,
+  dia DATE NOT NULL,
+  saldoSistema DECIMAL(10,2) NOT NULL,
+  valorContado DECIMAL(10,2) NOT NULL,
+  diferenca DECIMAL(10,2) NOT NULL,
+  justificativa VARCHAR(500) NULL,
+  usuario VARCHAR(255),
+  cashFlowId INT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT pdv_cash_closures_id PRIMARY KEY(id),
+  CONSTRAINT pdv_cash_closures_dia_unique UNIQUE(dia)
+);
+
 CREATE TABLE IF NOT EXISTS pdv_order_photos (
   pedidoId VARCHAR(50) NOT NULL,
   mimeType VARCHAR(50) NOT NULL DEFAULT 'image/jpeg',

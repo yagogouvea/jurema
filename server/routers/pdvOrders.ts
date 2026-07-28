@@ -625,7 +625,7 @@ export const pdvOrdersRouter = router({
       status: z.enum(["PAGO", "PENDENTE", "CANCELADO"]),
     }))
     .mutation(async ({ input, ctx }) => {
-      await requirePdvAdmin(ctx);
+      const seller = await requirePdvAdmin(ctx);
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
@@ -664,6 +664,51 @@ export const pdvOrdersRouter = router({
               [item.quantidade, item.productId]
             );
           }
+
+          // Estorno automático do dinheiro no caixa (se houver pagamento DINHEIRO)
+          let estornoDinheiro = 0;
+          try {
+            const [payRows] = await db.execute(
+              "SELECT COALESCE(SUM(valor), 0) AS totalDinheiro FROM pdv_order_payments WHERE pedidoId = ? AND formaPagamento = 'DINHEIRO'",
+              [input.pedidoId]
+            );
+            estornoDinheiro = parseFloat((payRows as any[])[0]?.totalDinheiro || "0") || 0;
+
+            if (estornoDinheiro > 0.009) {
+              // Idempotente: não cria segundo estorno se já existir
+              const [jaEstornado] = await db.execute(
+                "SELECT id FROM pdv_cash_flow WHERE tipo = 'SANGRIA' AND descricao LIKE ? LIMIT 1",
+                [`%Estorno cancelamento ${input.pedidoId}%`]
+              );
+              if ((jaEstornado as any[]).length === 0) {
+                const descEstorno = `Estorno cancelamento ${input.pedidoId}`;
+                const [cashResult] = await db.execute(
+                  "INSERT INTO pdv_cash_flow (tipo, descricao, valor, usuario) VALUES (?, ?, ?, ?)",
+                  ["SANGRIA", descEstorno, estornoDinheiro, seller.name]
+                ) as any;
+                const newCashId = cashResult.insertId;
+                appendCashFlowToSheet({
+                  id: newCashId,
+                  tipo: "SANGRIA",
+                  descricao: descEstorno,
+                  valor: estornoDinheiro,
+                  usuario: seller.name,
+                  createdAt: new Date(),
+                }).catch((err: any) => console.error("[PDV Orders] Erro ao sincronizar estorno cancelamento:", err));
+                notifyCashFlowViaWhatsApp({
+                  tipo: "SANGRIA",
+                  descricao: descEstorno,
+                  valor: estornoDinheiro,
+                  usuario: seller.name,
+                  origem: "manual",
+                }).catch((err: any) => console.error("[PDV Orders] Erro na notificação de estorno:", err));
+                console.log(`[PDV Orders] Estorno de R$${estornoDinheiro.toFixed(2)} no caixa por cancelamento de ${input.pedidoId}`);
+              }
+            }
+          } catch (cashErr) {
+            console.error("[PDV Orders] Erro ao estornar dinheiro no cancelamento:", cashErr);
+          }
+
           await db.end();
           console.log(`[PDV Orders] Pedido ${input.pedidoId} cancelado — estoque devolvido para ${items.length} produto(s)`);
           // Devolver estoque e deletar linhas da planilha (assíncrono, não bloqueia resposta)
@@ -689,6 +734,57 @@ export const pdvOrdersRouter = router({
               [item.quantidade, item.productId]
             );
           }
+
+          // Se havia estorno de dinheiro, recria o suprimento (reativação)
+          try {
+            const [payRows] = await db.execute(
+              "SELECT COALESCE(SUM(valor), 0) AS totalDinheiro FROM pdv_order_payments WHERE pedidoId = ? AND formaPagamento = 'DINHEIRO'",
+              [input.pedidoId]
+            );
+            const totalDinheiro = parseFloat((payRows as any[])[0]?.totalDinheiro || "0") || 0;
+            if (totalDinheiro > 0.009) {
+              const [jaEstornado] = await db.execute(
+                "SELECT id FROM pdv_cash_flow WHERE tipo = 'SANGRIA' AND descricao LIKE ? LIMIT 1",
+                [`%Estorno cancelamento ${input.pedidoId}%`]
+              );
+              const [jaReativado] = await db.execute(
+                "SELECT id FROM pdv_cash_flow WHERE tipo = 'SUPRIMENTO' AND descricao LIKE ? LIMIT 1",
+                [`%Reativação ${input.pedidoId}%`]
+              );
+              // Só recria se houve estorno e ainda não reativou
+              if ((jaEstornado as any[]).length > 0 && (jaReativado as any[]).length === 0) {
+                const [orderInfo] = await db.execute(
+                  "SELECT clienteNome FROM pdv_orders WHERE pedidoId = ?",
+                  [input.pedidoId]
+                );
+                const clienteNome = (orderInfo as any[])[0]?.clienteNome;
+                const descSup = `Reativação ${input.pedidoId}${clienteNome ? " - " + clienteNome : ""}`;
+                const [cashResult] = await db.execute(
+                  "INSERT INTO pdv_cash_flow (tipo, descricao, valor, usuario) VALUES (?, ?, ?, ?)",
+                  ["SUPRIMENTO", descSup, totalDinheiro, seller.name]
+                ) as any;
+                appendCashFlowToSheet({
+                  id: cashResult.insertId,
+                  tipo: "SUPRIMENTO",
+                  descricao: descSup,
+                  valor: totalDinheiro,
+                  usuario: seller.name,
+                  createdAt: new Date(),
+                }).catch((err: any) => console.error("[PDV Orders] Erro ao sincronizar reativação:", err));
+                notifyCashFlowViaWhatsApp({
+                  tipo: "SUPRIMENTO",
+                  descricao: descSup,
+                  valor: totalDinheiro,
+                  usuario: seller.name,
+                  origem: "venda_dinheiro",
+                }).catch((err: any) => console.error("[PDV Orders] Erro na notificação de reativação:", err));
+                console.log(`[PDV Orders] Suprimento de reativação R$${totalDinheiro.toFixed(2)} para ${input.pedidoId}`);
+              }
+            }
+          } catch (cashErr) {
+            console.error("[PDV Orders] Erro ao recriar suprimento na reativação:", cashErr);
+          }
+
           await db.end();
           console.log(`[PDV Orders] Pedido ${input.pedidoId} reativado (${statusAtual} -> ${input.status}) — estoque descontado para ${items.length} produto(s)`);
            // Descontar estoque também na planilha (assíncrono)
