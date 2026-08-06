@@ -53,15 +53,29 @@ export async function getNotificationPhones(db: Connection): Promise<string[]> {
   return parseNotificationPhones(cfg.value);
 }
 
-async function sendToAllPhones(slot: number, phones: string[], content: string): Promise<void> {
+async function sendToAllPhones(
+  slot: number,
+  phones: string[],
+  content: string
+): Promise<{ enviados: string[]; falhas: string[] }> {
+  const enviados: string[] = [];
+  const falhas: string[] = [];
   for (const phone of phones) {
     try {
-      await sendWaBridgeText(slot, phoneToJid(phone), content);
-      console.log(`[pdvWaNotify] Enviado para ${phone}`);
+      const ok = await sendWaBridgeText(slot, phoneToJid(phone), content);
+      if (ok) {
+        enviados.push(phone);
+        console.log(`[pdvWaNotify] Enviado para ${phone}`);
+      } else {
+        falhas.push(phone);
+        console.error(`[pdvWaNotify] Não enviado para ${phone} (bridge indisponível)`);
+      }
     } catch (err) {
+      falhas.push(phone);
       console.error(`[pdvWaNotify] Falha ao enviar para ${phone}:`, err);
     }
   }
+  return { enviados, falhas };
 }
 
 export function buildOrderNotificationMessage(params: {
@@ -182,15 +196,24 @@ export async function notifyOrderViaWhatsApp(params: {
     }
 
     if (slot === null) {
-      console.warn("[notifyOrder] Nenhuma instância wa-bridge ativa — notificação não enviada.");
+      console.error(
+        `[notifyOrder] ${params.pedidoId}: WhatsApp desconectado — notificação NÃO enviada para ${phones.join(", ")}.`
+      );
       return;
     }
 
     const content = buildOrderNotificationMessage(params);
-    await sendToAllPhones(slot, phones, content);
-    console.log(
-      `[notifyOrder] ${params.pedidoId} enviado para ${phones.join(", ")} (instância ${slot}).`
-    );
+    const { enviados, falhas } = await sendToAllPhones(slot, phones, content);
+    if (falhas.length > 0) {
+      console.error(
+        `[notifyOrder] ${params.pedidoId}: falhou para ${falhas.join(", ")} (instância ${slot}).`
+      );
+    }
+    if (enviados.length > 0) {
+      console.log(
+        `[notifyOrder] ${params.pedidoId} enviado para ${enviados.join(", ")} (instância ${slot}).`
+      );
+    }
   } catch (err) {
     console.error("[notifyOrder] Falha ao enviar notificação de pedido:", err);
   }
@@ -217,15 +240,24 @@ export async function notifyCashFlowViaWhatsApp(params: {
     }
 
     if (slot === null) {
-      console.warn("[notifyCashFlow] Nenhuma instância wa-bridge ativa — notificação não enviada.");
+      console.error(
+        `[notifyCashFlow] ${params.tipo}: WhatsApp desconectado — notificação NÃO enviada para ${phones.join(", ")}.`
+      );
       return;
     }
 
     const content = buildCashFlowNotificationMessage(params);
-    await sendToAllPhones(slot, phones, content);
-    console.log(
-      `[notifyCashFlow] ${params.tipo} R$${params.valor} enviado para ${phones.join(", ")}.`
-    );
+    const { enviados, falhas } = await sendToAllPhones(slot, phones, content);
+    if (falhas.length > 0) {
+      console.error(
+        `[notifyCashFlow] ${params.tipo} R$${params.valor}: falhou para ${falhas.join(", ")}.`
+      );
+    }
+    if (enviados.length > 0) {
+      console.log(
+        `[notifyCashFlow] ${params.tipo} R$${params.valor} enviado para ${enviados.join(", ")}.`
+      );
+    }
   } catch (err) {
     console.error("[notifyCashFlow] Falha ao enviar notificação de caixa:", err);
   }

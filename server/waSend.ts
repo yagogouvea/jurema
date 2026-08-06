@@ -59,40 +59,49 @@ export async function sendWaBridgeText(
 }
 
 /**
- * Consulta o status real do wa-bridge e retorna o slot de uma sessão conectada.
- * Esta é a fonte de verdade (a tabela wa_instances costuma estar desatualizada
- * ou mal configurada). Retorna o slot numérico conectado ou null.
+ * Consulta o status real do wa-bridge.
+ * `reachable` distingue "bridge fora do ar" de "bridge respondeu, mas nenhum
+ * número conectado" — sem isso o envio cai no fallback e falha em silêncio.
  */
-export async function resolveConnectedSlotFromBridge(): Promise<number | null> {
+export async function queryBridgeConnectedSlot(): Promise<{
+  reachable: boolean;
+  slot: number | null;
+}> {
   const bridgeUrl = process.env.WA_BRIDGE_URL;
   const bridgeKey = process.env.WA_BRIDGE_API_KEY;
-  if (!bridgeUrl) return null;
+  if (!bridgeUrl) return { reachable: false, slot: null };
   try {
     const res = await fetch(`${bridgeUrl}/status`, {
       headers: { "x-wa-bridge-key": bridgeKey ?? "" },
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { reachable: false, slot: null };
     const data = (await res.json()) as { sessions?: any[] };
     const sessions = data?.sessions ?? [];
     const connected = sessions.find((s) => String(s?.status).toLowerCase() === "connected");
-    if (!connected) return null;
+    if (!connected) return { reachable: true, slot: null };
     const slot = parseInt(`${connected.instanceId}`.trim(), 10);
-    return Number.isFinite(slot) ? slot : null;
+    return { reachable: true, slot: Number.isFinite(slot) ? slot : null };
   } catch {
-    return null;
+    return { reachable: false, slot: null };
   }
+}
+
+/** Slot de uma sessão conectada segundo o wa-bridge, ou null. */
+export async function resolveConnectedSlotFromBridge(): Promise<number | null> {
+  return (await queryBridgeConnectedSlot()).slot;
 }
 
 /**
  * Descobre qual slot de instância usar para ENVIAR.
  * 1) Prioriza o status REAL do wa-bridge (sessão conectada).
- * 2) Cai para a tabela wa_instances (apenas instanceId numérico).
- * Retorna o número do slot ou null.
+ * 2) Se a bridge respondeu sem nenhum número conectado, não há como enviar.
+ * 3) Só usa a tabela wa_instances quando a bridge está inacessível.
  */
 export async function resolveSenderInstanceSlot(db: Connection): Promise<number | null> {
-  const fromBridge = await resolveConnectedSlotFromBridge();
+  const { reachable, slot: fromBridge } = await queryBridgeConnectedSlot();
   if (fromBridge !== null) return fromBridge;
+  if (reachable) return null;
 
   // Fallback: tabela wa_instances (só aceita instanceId puramente numérico).
   const [rows] = await db.execute(
