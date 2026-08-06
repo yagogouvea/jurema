@@ -17,6 +17,7 @@ import { runWaMediaBlobMigration } from "../routers/waMediaBlobMigration";
 import { runWaStatusPresetsMigration } from "../routers/waStatusPresetsMigration";
 import { ensureFinanceiroTables } from "../routers/pdvFinanceiro";
 import { runAutoSync } from "../routers/pdvAutoSync";
+import { runDemoBootstrap } from "../demo/demoBootstrap";
 
 // `tsx watch` no Windows costuma não definir NODE_ENV; sem isso o Vite não sobe.
 const entry = process.argv[1] || "";
@@ -317,6 +318,7 @@ async function startServer() {
     // Run PDV migration and seed after server starts
     runPdvMigration()
       .then(() => seedPdvData())
+      .then(() => runDemoBootstrap()) // só com DEMO_MODE=1 (Street Sportes); nunca na produção
       .then(() => runWaMediaBlobMigration())
       .then(() => runWaStatusPresetsMigration())
       .then(() => ensureFinanceiroTables())
