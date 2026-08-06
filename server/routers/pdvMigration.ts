@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS pdv_sellers (
   passwordHash VARCHAR(255) NOT NULL,
   role ENUM('seller','admin') NOT NULL DEFAULT 'seller',
   isActive BOOLEAN NOT NULL DEFAULT true,
+  pontosOffset DECIMAL(12,2) NOT NULL DEFAULT '0',
+  pontosOffsetMes VARCHAR(7) NULL,
   createdAt TIMESTAMP NOT NULL DEFAULT (now()),
   updatedAt TIMESTAMP NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT pdv_sellers_id PRIMARY KEY(id),
@@ -28,6 +30,12 @@ CREATE TABLE IF NOT EXISTS pdv_products (
   precoAtacado DECIMAL(10,2) NOT NULL DEFAULT '0',
   precoVarejo DECIMAL(10,2) NOT NULL DEFAULT '0',
   isActive BOOLEAN NOT NULL DEFAULT true,
+  isSofia BOOLEAN NOT NULL DEFAULT false,
+  fotoUrl VARCHAR(1000) NULL,
+  temporada VARCHAR(100) NULL,
+  ptAtacado DECIMAL(10,2) NOT NULL DEFAULT '0',
+  ptVarejo DECIMAL(10,2) NOT NULL DEFAULT '0',
+  custo DECIMAL(10,2) NOT NULL DEFAULT '0',
   createdAt TIMESTAMP NOT NULL DEFAULT (now()),
   updatedAt TIMESTAMP NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT pdv_products_id PRIMARY KEY(id)
@@ -48,7 +56,9 @@ CREATE TABLE IF NOT EXISTS pdv_orders (
   totalPago DECIMAL(10,2) NOT NULL DEFAULT '0',
   totalPendente DECIMAL(10,2) NOT NULL DEFAULT '0',
   justificativa TEXT,
+  isSofia BOOLEAN NOT NULL DEFAULT false,
   status ENUM('PAGO','PENDENTE','CANCELADO') NOT NULL DEFAULT 'PAGO',
+  fotoUrl VARCHAR(2000) NULL,
   createdAt TIMESTAMP NOT NULL DEFAULT (now()),
   updatedAt TIMESTAMP NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT pdv_orders_id PRIMARY KEY(id),
@@ -63,10 +73,16 @@ CREATE TABLE IF NOT EXISTS pdv_order_items (
   modelo VARCHAR(50),
   time VARCHAR(100),
   descricao VARCHAR(255),
+  tipo VARCHAR(100),
   tamanho VARCHAR(20) NOT NULL,
   quantidade INT NOT NULL,
   precoUnitario DECIMAL(10,2) NOT NULL,
   totalItem DECIMAL(10,2) NOT NULL,
+  isSofia BOOLEAN NOT NULL DEFAULT false,
+  comissaoUnitaria DECIMAL(10,2) NOT NULL DEFAULT '0.50',
+  comissaoLojaSofia DECIMAL(10,2) NULL,
+  ptAtacado DECIMAL(10,2) NOT NULL DEFAULT '0',
+  ptVarejo DECIMAL(10,2) NOT NULL DEFAULT '0',
   CONSTRAINT pdv_order_items_id PRIMARY KEY(id)
 );
 
@@ -79,6 +95,11 @@ CREATE TABLE IF NOT EXISTS pdv_order_payments (
   valorLiquido DECIMAL(10,2) NOT NULL,
   nomePix VARCHAR(500),
   obsPagamento TEXT,
+  reconcileStatus ENUM('pending','confirmed','rejected','unmatched') NULL,
+  reconcileSource VARCHAR(40) NULL,
+  reconcileExtractRef VARCHAR(255) NULL,
+  reconciledAt TIMESTAMP NULL,
+  reconciledBy VARCHAR(255) NULL,
   createdAt TIMESTAMP NOT NULL DEFAULT (now()),
   CONSTRAINT pdv_order_payments_id PRIMARY KEY(id)
 );
@@ -89,6 +110,7 @@ CREATE TABLE IF NOT EXISTS pdv_order_services (
   tipo VARCHAR(100) NOT NULL,
   descricao VARCHAR(255),
   valor DECIMAL(10,2) NOT NULL,
+  cep VARCHAR(10) NULL,
   createdAt TIMESTAMP NOT NULL DEFAULT (now()),
   CONSTRAINT pdv_order_services_id PRIMARY KEY(id)
 );
@@ -137,6 +159,15 @@ CREATE TABLE IF NOT EXISTS pdv_goals (
   CONSTRAINT pdv_goals_key_unique UNIQUE(\`key\`)
 );
 
+CREATE TABLE IF NOT EXISTS pdv_config (
+  id INT AUTO_INCREMENT NOT NULL,
+  \`key\` VARCHAR(100) NOT NULL,
+  value TEXT NOT NULL,
+  updatedAt TIMESTAMP NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT pdv_config_id PRIMARY KEY(id),
+  CONSTRAINT pdv_config_key_unique UNIQUE(\`key\`)
+);
+
 CREATE TABLE IF NOT EXISTS pdv_reconciliations (
   id INT AUTO_INCREMENT NOT NULL,
   source VARCHAR(40) NOT NULL,
@@ -148,26 +179,128 @@ CREATE TABLE IF NOT EXISTS pdv_reconciliations (
   resultJson LONGTEXT NOT NULL,
   narrativeText MEDIUMTEXT NULL,
   reportPdf LONGBLOB NULL,
+  reportExcel LONGBLOB NULL,
   originalFileName VARCHAR(255) NULL,
   createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT pdv_reconciliations_id PRIMARY KEY(id)
 );
+
+CREATE TABLE IF NOT EXISTS pdv_notifications (
+  id INT AUTO_INCREMENT NOT NULL,
+  type VARCHAR(50) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  isRead BOOLEAN NOT NULL DEFAULT false,
+  createdAt TIMESTAMP NOT NULL DEFAULT (now()),
+  CONSTRAINT pdv_notifications_id PRIMARY KEY(id)
+);
+
+CREATE TABLE IF NOT EXISTS pdv_sofia_config (
+  id INT AUTO_INCREMENT NOT NULL,
+  comissaoLoja DECIMAL(10,2) NOT NULL DEFAULT '10.00',
+  updatedAt TIMESTAMP NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT pdv_sofia_config_id PRIMARY KEY(id)
+);
+
+CREATE TABLE IF NOT EXISTS pdv_desconto_folha (
+  id INT AUTO_INCREMENT NOT NULL,
+  sellerId INT NOT NULL,
+  sellerName VARCHAR(255) NOT NULL,
+  pedidoId VARCHAR(50) NULL,
+  descricao VARCHAR(500) NOT NULL,
+  valor DECIMAL(10,2) NOT NULL,
+  quitado BOOLEAN NOT NULL DEFAULT false,
+  quitadoEm TIMESTAMP NULL,
+  quitadoPor VARCHAR(255) NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT (now()),
+  updatedAt TIMESTAMP NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT pdv_desconto_folha_id PRIMARY KEY(id)
+);
 `;
+
+async function safeAlter(connection: mysql.Connection, sql: string): Promise<void> {
+  try {
+    await connection.execute(sql);
+  } catch (e: any) {
+    // 1060 = Duplicate column name
+    if (e?.errno !== 1060 && !String(e?.message || "").includes("Duplicate")) {
+      console.warn("[PDV Migration] alter:", e?.message || e);
+    }
+  }
+}
 
 async function ensurePaymentExtraColumns(connection: mysql.Connection): Promise<void> {
   const alters = [
     `ALTER TABLE pdv_order_payments ADD COLUMN obsPagamento TEXT NULL`,
     `ALTER TABLE pdv_order_payments MODIFY COLUMN nomePix VARCHAR(500) NULL`,
+    `ALTER TABLE pdv_sellers ADD COLUMN pontosOffset DECIMAL(12,2) NOT NULL DEFAULT '0'`,
+    `ALTER TABLE pdv_sellers ADD COLUMN pontosOffsetMes VARCHAR(7) NULL`,
+    `ALTER TABLE pdv_products ADD COLUMN isSofia BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE pdv_products ADD COLUMN fotoUrl VARCHAR(1000) NULL`,
+    `ALTER TABLE pdv_products ADD COLUMN temporada VARCHAR(100) NULL`,
+    `ALTER TABLE pdv_products ADD COLUMN ptAtacado DECIMAL(10,2) NOT NULL DEFAULT '0'`,
+    `ALTER TABLE pdv_products ADD COLUMN ptVarejo DECIMAL(10,2) NOT NULL DEFAULT '0'`,
+    `ALTER TABLE pdv_products ADD COLUMN custo DECIMAL(10,2) NOT NULL DEFAULT '0'`,
+    `ALTER TABLE pdv_orders ADD COLUMN isSofia BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE pdv_orders ADD COLUMN fotoUrl VARCHAR(2000) NULL`,
+    `ALTER TABLE pdv_orders ADD COLUMN notifiedAt TIMESTAMP NULL`,
+    `ALTER TABLE pdv_order_items ADD COLUMN tipo VARCHAR(100) NULL`,
+    `ALTER TABLE pdv_order_items ADD COLUMN isSofia BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE pdv_order_items ADD COLUMN comissaoUnitaria DECIMAL(10,2) NOT NULL DEFAULT '0.50'`,
+    `ALTER TABLE pdv_order_items ADD COLUMN comissaoLojaSofia DECIMAL(10,2) NULL`,
+    `ALTER TABLE pdv_order_items ADD COLUMN ptAtacado DECIMAL(10,2) NOT NULL DEFAULT '0'`,
+    `ALTER TABLE pdv_order_items ADD COLUMN ptVarejo DECIMAL(10,2) NOT NULL DEFAULT '0'`,
+    `ALTER TABLE pdv_order_services ADD COLUMN cep VARCHAR(10) NULL`,
+    `ALTER TABLE pdv_reconciliations ADD COLUMN reportExcel LONGBLOB NULL`,
   ];
   for (const sql of alters) {
+    await safeAlter(connection, sql);
+  }
+  await backfillOrderNotifiedAt(connection);
+}
+
+/**
+ * Pedidos anteriores à coluna `notifiedAt` já foram avisados na época.
+ * Sem esse marco inicial, o reenvio dispararia o histórico inteiro de uma vez.
+ * A última mensagem do WhatsApp indica até quando a bridge estava funcionando —
+ * o que veio depois é justamente o que ficou sem aviso.
+ */
+async function backfillOrderNotifiedAt(connection: mysql.Connection): Promise<void> {
+  const FLAG = "notified_at_backfill";
+  try {
+    const [flagRows] = await connection.execute(
+      "SELECT value FROM pdv_config WHERE `key` = ? LIMIT 1",
+      [FLAG]
+    );
+    if ((flagRows as any[]).length > 0) return;
+
+    let corte: string | null = null;
     try {
-      await connection.execute(sql);
-    } catch (e: any) {
-      // 1060 = Duplicate column name
-      if (e?.errno !== 1060 && !String(e?.message || "").includes("Duplicate")) {
-        console.warn("[PDV Migration] alter payment columns:", e?.message || e);
-      }
+      const [waRows] = await connection.execute(
+        "SELECT MAX(timestamp) AS ultima FROM wa_messages"
+      );
+      corte = (waRows as any[])[0]?.ultima ?? null;
+    } catch {
+      // wa_messages pode não existir em instalações novas
     }
+
+    const [res] = await connection.execute(
+      corte
+        ? "UPDATE pdv_orders SET notifiedAt = createdAt WHERE notifiedAt IS NULL AND createdAt <= ?"
+        : "UPDATE pdv_orders SET notifiedAt = createdAt WHERE notifiedAt IS NULL AND createdAt <= NOW() - INTERVAL 7 DAY",
+      corte ? [corte] : []
+    );
+    const marcados = Number((res as { affectedRows?: number }).affectedRows ?? 0);
+
+    await connection.execute(
+      "INSERT INTO pdv_config (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)",
+      [FLAG, new Date().toISOString()]
+    );
+    console.log(
+      `[PDV Migration] notifiedAt: ${marcados} pedido(s) marcados como já avisados (corte: ${corte ?? "7 dias"}).`
+    );
+  } catch (e: any) {
+    console.warn("[PDV Migration] backfill notifiedAt:", e?.message || e);
   }
 }
 

@@ -9,6 +9,18 @@ import { createPdvMysqlConnection } from "./pdvMysql";
 /** Números padrão quando a config nunca foi salva. */
 export const DEFAULT_NOTIF_PHONES = ["5511981693476", "5511992022928"];
 
+/** Intervalo entre mensagens — o WhatsApp bloqueia rajadas de envio. */
+const INTERVALO_ENTRE_NUMEROS_MS = 1_500;
+const INTERVALO_ENTRE_PEDIDOS_MS = 4_000;
+/** Não reenviar backlog antigo demais (evita avalanche de mensagens históricas). */
+const JANELA_MAXIMA_REENVIO_HORAS = 168;
+/** Teto por rodada para o reenvio não virar spam. */
+const MAX_PEDIDOS_POR_RODADA = 15;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 const PAGAMENTO_LABELS: Record<string, string> = {
   PIX: "PIX",
   DINHEIRO: "Dinheiro",
@@ -60,7 +72,10 @@ async function sendToAllPhones(
 ): Promise<{ enviados: string[]; falhas: string[] }> {
   const enviados: string[] = [];
   const falhas: string[] = [];
+  let primeiro = true;
   for (const phone of phones) {
+    if (!primeiro) await sleep(INTERVALO_ENTRE_NUMEROS_MS);
+    primeiro = false;
     try {
       const ok = await sendWaBridgeText(slot, phoneToJid(phone), content);
       if (ok) {
@@ -83,9 +98,15 @@ export function buildOrderNotificationMessage(params: {
   sellerName: string;
   input: any;
   totalAplicado: number;
+  /** Data do pedido; no reenvio é a data original, não a de agora. */
+  dataPedido?: Date;
+  /** Marca a mensagem como reenvio de um pedido que ficou sem aviso. */
+  reenvio?: boolean;
 }): string {
   const { pedidoId, sellerName, input, totalAplicado } = params;
-  const dataHora = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const dataHora = (params.dataPedido ?? new Date()).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
 
   const statusLabel =
     input.status === "PAGO"
@@ -95,15 +116,24 @@ export function buildOrderNotificationMessage(params: {
         : "❌ CANCELADO";
 
   const lines: string[] = [
-    `🛍️ *JUREMA SPORT — NOVO PEDIDO*`,
+    params.reenvio
+      ? `🔁 *JUREMA SPORT — PEDIDO NÃO AVISADO*`
+      : `🛍️ *JUREMA SPORT — NOVO PEDIDO*`,
     `*${pedidoId}*`,
     ``,
+  ];
+
+  if (params.reenvio) {
+    lines.push(`_Aviso atrasado: o WhatsApp da loja estava desconectado._`);
+  }
+
+  lines.push(
     `🗓️ ${dataHora}`,
     `👤 *Vendedor:* ${sellerName}`,
     `📲 *Canal:* ${input.canal}`,
     `🏷️ *Regime:* ${input.regime}`,
-    `*Status:* ${statusLabel}`,
-  ];
+    `*Status:* ${statusLabel}`
+  );
 
   if (input.clienteNome) {
     lines.push(
@@ -185,6 +215,7 @@ export async function notifyOrderViaWhatsApp(params: {
 }): Promise<void> {
   try {
     const db = await createPdvMysqlConnection();
+    if (!db) return;
     let phones: string[] = [];
     let slot: number | null = null;
     try {
@@ -213,9 +244,25 @@ export async function notifyOrderViaWhatsApp(params: {
       console.log(
         `[notifyOrder] ${params.pedidoId} enviado para ${enviados.join(", ")} (instância ${slot}).`
       );
+      await markOrderNotified(params.pedidoId);
     }
   } catch (err) {
     console.error("[notifyOrder] Falha ao enviar notificação de pedido:", err);
+  }
+}
+
+/** Registra que o pedido já foi avisado, para o reenvio não duplicar. */
+async function markOrderNotified(pedidoId: string): Promise<void> {
+  try {
+    const db = await createPdvMysqlConnection();
+    if (!db) return;
+    try {
+      await db.execute("UPDATE pdv_orders SET notifiedAt = NOW() WHERE pedidoId = ?", [pedidoId]);
+    } finally {
+      await db.end();
+    }
+  } catch (err) {
+    console.error(`[notifyOrder] Não foi possível marcar ${pedidoId} como avisado:`, err);
   }
 }
 
@@ -229,6 +276,7 @@ export async function notifyCashFlowViaWhatsApp(params: {
 }): Promise<void> {
   try {
     const db = await createPdvMysqlConnection();
+    if (!db) return;
     let phones: string[] = [];
     let slot: number | null = null;
     try {
@@ -260,5 +308,171 @@ export async function notifyCashFlowViaWhatsApp(params: {
     }
   } catch (err) {
     console.error("[notifyCashFlow] Falha ao enviar notificação de caixa:", err);
+  }
+}
+
+// ─── Reenvio dos pedidos que ficaram sem aviso ────────────────────────────────
+
+export type PedidoPendente = {
+  pedidoId: string;
+  sellerName: string;
+  createdAt: Date;
+  totalAplicado: number;
+};
+
+/** Pedidos gravados que nunca chegaram a ser avisados por WhatsApp. */
+export async function listPendingOrderNotifications(
+  db: Connection,
+  limite = MAX_PEDIDOS_POR_RODADA
+): Promise<PedidoPendente[]> {
+  const [rows] = await db.execute(
+    `SELECT pedidoId, sellerName, createdAt, totalAplicado
+       FROM pdv_orders
+      WHERE notifiedAt IS NULL
+        AND status <> 'CANCELADO'
+        AND createdAt >= NOW() - INTERVAL ? HOUR
+      ORDER BY createdAt ASC
+      LIMIT ${Math.max(1, Math.min(50, Math.trunc(limite)))}`,
+    [JANELA_MAXIMA_REENVIO_HORAS]
+  );
+  return (rows as any[]).map((r) => ({
+    pedidoId: String(r.pedidoId),
+    sellerName: String(r.sellerName ?? ""),
+    createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
+    totalAplicado: Number(r.totalAplicado) || 0,
+  }));
+}
+
+/** Remonta o pedido gravado no formato esperado pelo template da mensagem. */
+async function loadOrderForMessage(db: Connection, pedidoId: string): Promise<any | null> {
+  const [orderRows] = await db.execute(
+    `SELECT pedidoId, canal, clienteNome, clienteTelefone, regime, status,
+            totalPendente, justificativa
+       FROM pdv_orders WHERE pedidoId = ? LIMIT 1`,
+    [pedidoId]
+  );
+  const order = (orderRows as any[])[0];
+  if (!order) return null;
+
+  const [items] = await db.execute(
+    `SELECT time, descricao, tamanho, quantidade, precoUnitario, isSofia
+       FROM pdv_order_items WHERE pedidoId = ? ORDER BY id ASC`,
+    [pedidoId]
+  );
+  const [services] = await db.execute(
+    `SELECT tipo, descricao, valor, cep FROM pdv_order_services WHERE pedidoId = ? ORDER BY id ASC`,
+    [pedidoId]
+  );
+  const [payments] = await db.execute(
+    `SELECT formaPagamento, valor, taxa, nomePix, obsPagamento
+       FROM pdv_order_payments WHERE pedidoId = ? ORDER BY id ASC`,
+    [pedidoId]
+  );
+
+  return {
+    canal: order.canal,
+    regime: order.regime,
+    status: order.status,
+    clienteNome: order.clienteNome ?? "",
+    clienteTelefone: order.clienteTelefone ?? "",
+    totalPendente: Number(order.totalPendente) || 0,
+    justificativa: order.justificativa ?? "",
+    items: (items as any[]).map((i) => ({
+      time: i.time,
+      descricao: i.descricao,
+      tamanho: i.tamanho,
+      quantidade: Number(i.quantidade) || 0,
+      precoUnitario: Number(i.precoUnitario) || 0,
+      isSofia: !!i.isSofia,
+    })),
+    services: (services as any[]).map((s) => ({
+      tipo: s.tipo,
+      descricao: s.descricao,
+      valor: Number(s.valor) || 0,
+      cep: s.cep,
+    })),
+    payments: (payments as any[]).map((p) => ({
+      formaPagamento: p.formaPagamento,
+      valor: Number(p.valor) || 0,
+      taxa: Number(p.taxa) || 0,
+      nomePix: p.nomePix,
+      obsPagamento: p.obsPagamento,
+    })),
+  };
+}
+
+/**
+ * Reenvia, em ritmo controlado, os pedidos que ficaram sem aviso enquanto o
+ * WhatsApp esteve fora. Sai em silêncio quando não há nada pendente.
+ */
+export async function flushPendingOrderNotifications(opts?: {
+  limite?: number;
+  dryRun?: boolean;
+}): Promise<{ pendentes: number; enviados: string[]; falhas: string[]; motivo?: string }> {
+  const resultado = { pendentes: 0, enviados: [] as string[], falhas: [] as string[] };
+  const db = await createPdvMysqlConnection();
+  if (!db) return { ...resultado, motivo: "sem DATABASE_URL" };
+
+  try {
+    const pendentes = await listPendingOrderNotifications(db, opts?.limite);
+    resultado.pendentes = pendentes.length;
+    if (pendentes.length === 0) return resultado;
+
+    if (opts?.dryRun) return { ...resultado, motivo: "dryRun" };
+
+    const phones = await getNotificationPhones(db);
+    if (phones.length === 0) return { ...resultado, motivo: "nenhum número configurado" };
+
+    const slot = await resolveSenderInstanceSlot(db);
+    if (slot === null) {
+      console.warn(
+        `[notifyOrderBacklog] ${pendentes.length} pedido(s) aguardando: WhatsApp ainda desconectado.`
+      );
+      return { ...resultado, motivo: "WhatsApp desconectado" };
+    }
+
+    console.log(`[notifyOrderBacklog] Reenviando ${pendentes.length} pedido(s) sem aviso.`);
+    let primeiro = true;
+    for (const pedido of pendentes) {
+      if (!primeiro) await sleep(INTERVALO_ENTRE_PEDIDOS_MS);
+      primeiro = false;
+
+      const input = await loadOrderForMessage(db, pedido.pedidoId);
+      if (!input) {
+        resultado.falhas.push(pedido.pedidoId);
+        continue;
+      }
+
+      const content = buildOrderNotificationMessage({
+        pedidoId: pedido.pedidoId,
+        sellerName: pedido.sellerName,
+        input,
+        totalAplicado: pedido.totalAplicado,
+        dataPedido: pedido.createdAt,
+        reenvio: true,
+      });
+
+      const { enviados } = await sendToAllPhones(slot, phones, content);
+      if (enviados.length > 0) {
+        await db.execute("UPDATE pdv_orders SET notifiedAt = NOW() WHERE pedidoId = ?", [
+          pedido.pedidoId,
+        ]);
+        resultado.enviados.push(pedido.pedidoId);
+      } else {
+        resultado.falhas.push(pedido.pedidoId);
+        // Bridge caiu de novo no meio da fila — não insiste com os demais.
+        break;
+      }
+    }
+
+    console.log(
+      `[notifyOrderBacklog] Reenvio concluído: ${resultado.enviados.length} enviado(s), ${resultado.falhas.length} falha(s).`
+    );
+    return resultado;
+  } catch (err) {
+    console.error("[notifyOrderBacklog] Falha no reenvio de pedidos:", err);
+    return { ...resultado, motivo: err instanceof Error ? err.message : String(err) };
+  } finally {
+    await db.end();
   }
 }

@@ -299,6 +299,48 @@ async function startServer() {
     }
   });
 
+  // Pedidos que ficaram sem aviso por WhatsApp. GET lista; POST com secret dispara o reenvio.
+  app.get("/api/diag/wa-pedidos-pendentes", async (_req, res) => {
+    try {
+      const { createPdvMysqlConnection } = await import("../pdvMysql");
+      const db = await createPdvMysqlConnection();
+      if (!db) return res.status(500).json({ ok: false, error: "DATABASE_URL ausente" });
+      try {
+        const { listPendingOrderNotifications } = await import("../pdvWaNotify");
+        const pendentes = await listPendingOrderNotifications(db, 50);
+        res.json({
+          ok: true,
+          total: pendentes.length,
+          pedidos: pendentes.map((p) => ({ pedidoId: p.pedidoId, createdAt: p.createdAt })),
+        });
+      } finally {
+        await db.end();
+      }
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? String(e) });
+    }
+  });
+
+  app.post("/api/admin/wa-flush-pedidos", async (req, res) => {
+    const expected = process.env.SHEETS_WEBHOOK_SECRET || "jurema-pdv-2024";
+    const provided =
+      String(req.headers["x-webhook-secret"] ?? req.query.secret ?? req.body?.secret ?? "");
+    if (provided !== expected) {
+      return res.status(403).json({ ok: false, error: "Unauthorized" });
+    }
+    try {
+      const { flushPendingOrderNotifications } = await import("../pdvWaNotify");
+      const limiteRaw = parseInt(String(req.query.limite ?? ""), 10);
+      const resultado = await flushPendingOrderNotifications({
+        limite: Number.isFinite(limiteRaw) ? limiteRaw : undefined,
+        dryRun: String(req.query.dryRun ?? "") === "1",
+      });
+      res.json({ ok: true, ...resultado });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? String(e) });
+    }
+  });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
@@ -328,7 +370,39 @@ async function startServer() {
     // Substitui a antiga tarefa agendada externa (Manus) que parou após a
     // migração para a Railway. Usa sync SELETIVO (preserva estoque).
     startProductSyncScheduler();
+
+    startOrderNotificationBacklogScheduler();
   });
+}
+
+/**
+ * Reenvia pedidos que ficaram sem aviso (WhatsApp desconectado).
+ * Assim que a sessão volta, a fila sai sozinha em ritmo controlado.
+ */
+function startOrderNotificationBacklogScheduler() {
+  const intervalMin = parseInt(process.env.PDV_NOTIFY_RETRY_MIN || "10", 10);
+  if (!Number.isFinite(intervalMin) || intervalMin <= 0) {
+    console.log("[notifyOrderBacklog] Reenvio automático desativado (PDV_NOTIFY_RETRY_MIN <= 0).");
+    return;
+  }
+
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const { flushPendingOrderNotifications } = await import("../pdvWaNotify");
+      await flushPendingOrderNotifications();
+    } catch (err) {
+      console.error("[notifyOrderBacklog] Erro no ciclo de reenvio:", err);
+    } finally {
+      running = false;
+    }
+  };
+
+  setTimeout(() => void tick(), 60_000);
+  setInterval(() => void tick(), intervalMin * 60_000);
+  console.log(`[notifyOrderBacklog] Reenvio automático a cada ${intervalMin} min.`);
 }
 
 /**
