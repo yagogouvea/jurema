@@ -306,12 +306,16 @@ async function startServer() {
       const db = await createPdvMysqlConnection();
       if (!db) return res.status(500).json({ ok: false, error: "DATABASE_URL ausente" });
       try {
-        const { listPendingOrderNotifications } = await import("../pdvWaNotify");
+        const { listPendingOrderNotifications, countPendingOrderNotifications } = await import(
+          "../pdvWaNotify"
+        );
+        const resumo = await countPendingOrderNotifications(db);
         const pendentes = await listPendingOrderNotifications(db, 50);
         res.json({
           ok: true,
-          total: pendentes.length,
-          pedidos: pendentes.map((p) => ({ pedidoId: p.pedidoId, createdAt: p.createdAt })),
+          total: resumo.total,
+          porDia: resumo.porDia,
+          amostra: pendentes.map((p) => ({ pedidoId: p.pedidoId, createdAt: p.createdAt })),
         });
       } finally {
         await db.end();
@@ -329,13 +333,20 @@ async function startServer() {
       return res.status(403).json({ ok: false, error: "Unauthorized" });
     }
     try {
+      const dryRun = String(req.query.dryRun ?? "") === "1";
+      // modo=resumo → uma mensagem por dia; padrão → uma mensagem por pedido
+      if (String(req.query.modo ?? "") === "resumo") {
+        const { sendPendingOrdersDigest } = await import("../pdvWaNotify");
+        const resultado = await sendPendingOrdersDigest({ dryRun });
+        return res.json({ ok: true, modo: "resumo", ...resultado });
+      }
       const { flushPendingOrderNotifications } = await import("../pdvWaNotify");
       const limiteRaw = parseInt(String(req.query.limite ?? ""), 10);
       const resultado = await flushPendingOrderNotifications({
         limite: Number.isFinite(limiteRaw) ? limiteRaw : undefined,
-        dryRun: String(req.query.dryRun ?? "") === "1",
+        dryRun,
       });
-      res.json({ ok: true, ...resultado });
+      res.json({ ok: true, modo: "detalhado", ...resultado });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e?.message ?? String(e) });
     }
@@ -380,7 +391,9 @@ async function startServer() {
  * Assim que a sessão volta, a fila sai sozinha em ritmo controlado.
  */
 function startOrderNotificationBacklogScheduler() {
-  const intervalMin = parseInt(process.env.PDV_NOTIFY_RETRY_MIN || "10", 10);
+  // Desligado por padrão: uma fila acumulada de dias viraria centenas de
+  // mensagens de uma vez. Ligar com PDV_NOTIFY_RETRY_MIN após conferir a fila.
+  const intervalMin = parseInt(process.env.PDV_NOTIFY_RETRY_MIN || "0", 10);
   if (!Number.isFinite(intervalMin) || intervalMin <= 0) {
     console.log("[notifyOrderBacklog] Reenvio automático desativado (PDV_NOTIFY_RETRY_MIN <= 0).");
     return;

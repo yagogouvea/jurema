@@ -343,6 +343,31 @@ export async function listPendingOrderNotifications(
   }));
 }
 
+/** Quantos pedidos estão sem aviso, e como se distribuem por dia. */
+export async function countPendingOrderNotifications(db: Connection): Promise<{
+  total: number;
+  porDia: { dia: string; pedidos: number; total: number }[];
+}> {
+  const [rows] = await db.execute(
+    `SELECT DATE(CONVERT_TZ(createdAt, '+00:00', '-03:00')) AS dia,
+            COUNT(*) AS pedidos,
+            SUM(totalAplicado) AS total
+       FROM pdv_orders
+      WHERE notifiedAt IS NULL
+        AND status <> 'CANCELADO'
+        AND createdAt >= NOW() - INTERVAL ? HOUR
+      GROUP BY dia
+      ORDER BY dia ASC`,
+    [JANELA_MAXIMA_REENVIO_HORAS]
+  );
+  const porDia = (rows as any[]).map((r) => ({
+    dia: String(r.dia instanceof Date ? r.dia.toISOString().slice(0, 10) : r.dia),
+    pedidos: Number(r.pedidos) || 0,
+    total: Number(r.total) || 0,
+  }));
+  return { total: porDia.reduce((s, d) => s + d.pedidos, 0), porDia };
+}
+
 /** Remonta o pedido gravado no formato esperado pelo template da mensagem. */
 async function loadOrderForMessage(db: Connection, pedidoId: string): Promise<any | null> {
   const [orderRows] = await db.execute(
@@ -399,6 +424,97 @@ async function loadOrderForMessage(db: Connection, pedidoId: string): Promise<an
       obsPagamento: p.obsPagamento,
     })),
   };
+}
+
+/**
+ * Envia um resumo por dia dos pedidos que ficaram sem aviso.
+ * Para uma fila de vários dias isso substitui centenas de mensagens por poucas.
+ */
+export async function sendPendingOrdersDigest(opts?: {
+  dryRun?: boolean;
+}): Promise<{ dias: number; pedidos: number; enviados: string[]; motivo?: string }> {
+  const vazio = { dias: 0, pedidos: 0, enviados: [] as string[] };
+  const db = await createPdvMysqlConnection();
+  if (!db) return { ...vazio, motivo: "sem DATABASE_URL" };
+
+  try {
+    const [rows] = await db.execute(
+      `SELECT pedidoId, sellerName, clienteNome, status, totalAplicado, createdAt,
+              DATE(CONVERT_TZ(createdAt, '+00:00', '-03:00')) AS dia
+         FROM pdv_orders
+        WHERE notifiedAt IS NULL
+          AND status <> 'CANCELADO'
+          AND createdAt >= NOW() - INTERVAL ? HOUR
+        ORDER BY createdAt ASC`,
+      [JANELA_MAXIMA_REENVIO_HORAS]
+    );
+    const pedidos = rows as any[];
+    if (pedidos.length === 0) return vazio;
+
+    const porDia = new Map<string, any[]>();
+    for (const p of pedidos) {
+      const dia = String(p.dia instanceof Date ? p.dia.toISOString().slice(0, 10) : p.dia);
+      if (!porDia.has(dia)) porDia.set(dia, []);
+      porDia.get(dia)!.push(p);
+    }
+
+    const resumo = { dias: porDia.size, pedidos: pedidos.length, enviados: [] as string[] };
+    if (opts?.dryRun) return { ...resumo, motivo: "dryRun" };
+
+    const phones = await getNotificationPhones(db);
+    if (phones.length === 0) return { ...resumo, motivo: "nenhum número configurado" };
+
+    const slot = await resolveSenderInstanceSlot(db);
+    if (slot === null) return { ...resumo, motivo: "WhatsApp desconectado" };
+
+    let primeiro = true;
+    for (const dia of Array.from(porDia.keys())) {
+      const doDia = porDia.get(dia)!;
+      if (!primeiro) await sleep(INTERVALO_ENTRE_PEDIDOS_MS);
+      primeiro = false;
+
+      const [ano, mes, d] = dia.split("-");
+      const totalDia = doDia.reduce((s: number, p: any) => s + (Number(p.totalAplicado) || 0), 0);
+      const linhas = [
+        `🔁 *JUREMA SPORT — PEDIDOS SEM AVISO*`,
+        `*${d}/${mes}/${ano}* — ${doDia.length} pedido(s)`,
+        ``,
+        `_O WhatsApp da loja ficou desconectado e estes pedidos não foram avisados na hora._`,
+        ``,
+      ];
+      for (const p of doDia) {
+        const hora = new Date(p.createdAt).toLocaleTimeString("pt-BR", {
+          timeZone: "America/Sao_Paulo",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const cliente = p.clienteNome ? ` · ${p.clienteNome}` : "";
+        const pend = p.status === "PENDENTE" ? " ⏳" : "";
+        linhas.push(
+          `• ${hora} ${p.pedidoId} — ${fmtBRL(Number(p.totalAplicado) || 0)} · ${p.sellerName}${cliente}${pend}`
+        );
+      }
+      linhas.push(``, `💰 *TOTAL DO DIA:* ${fmtBRL(totalDia)}`);
+
+      const { enviados } = await sendToAllPhones(slot, phones, linhas.join("\n"));
+      if (enviados.length === 0) {
+        return { ...resumo, motivo: "falha no envio — interrompido" };
+      }
+      resumo.enviados.push(dia);
+      const ids = doDia.map((p: any) => p.pedidoId);
+      await db.query("UPDATE pdv_orders SET notifiedAt = NOW() WHERE pedidoId IN (?)", [ids]);
+    }
+
+    console.log(
+      `[notifyOrderBacklog] Resumo enviado: ${resumo.enviados.length} dia(s), ${resumo.pedidos} pedido(s).`
+    );
+    return resumo;
+  } catch (err) {
+    console.error("[notifyOrderBacklog] Falha no resumo de pedidos:", err);
+    return { ...vazio, motivo: err instanceof Error ? err.message : String(err) };
+  } finally {
+    await db.end();
+  }
 }
 
 /**
