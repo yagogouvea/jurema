@@ -6,6 +6,34 @@ import superjson from "superjson";
 import App from "./App";
 import "./index.css";
 
+/**
+ * Chrome Translate / extensões alteram o DOM por fora do React e geram
+ * NotFoundError em removeChild/insertBefore. Torna a operação idempotente.
+ */
+function patchDomMutationsAgainstTranslate() {
+  if (typeof Node !== "function" || !Node.prototype) return;
+
+  const originalRemoveChild = Node.prototype.removeChild;
+  Node.prototype.removeChild = function <T extends Node>(child: T): T {
+    if (child.parentNode !== this) {
+      return child;
+    }
+    return originalRemoveChild.call(this, child) as T;
+  };
+
+  const originalInsertBefore = Node.prototype.insertBefore;
+  Node.prototype.insertBefore = function <T extends Node>(
+    newNode: T,
+    referenceNode: Node | null
+  ): T {
+    if (referenceNode && referenceNode.parentNode !== this) {
+      return originalInsertBefore.call(this, newNode, null) as T;
+    }
+    return originalInsertBefore.call(this, newNode, referenceNode) as T;
+  };
+}
+patchDomMutationsAgainstTranslate();
+
 /** Umami só carrega se VITE_ANALYTICS_ENDPOINT e VITE_ANALYTICS_WEBSITE_ID estiverem definidos no build. */
 const analyticsEndpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT as string | undefined;
 const analyticsWebsiteId = import.meta.env.VITE_ANALYTICS_WEBSITE_ID as string | undefined;

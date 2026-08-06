@@ -9,15 +9,32 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  remountKey: number;
+}
+
+/** Chrome Translate / extensões mexem no DOM e o React estoura removeChild. */
+function isTransientDomError(error: Error | null | undefined): boolean {
+  if (!error) return false;
+  const msg = error.message || "";
+  return (
+    error.name === "NotFoundError" ||
+    msg.includes("removeChild") ||
+    msg.includes("insertBefore") ||
+    msg.includes("The node to be removed is not a child")
+  );
 }
 
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, remountKey: 0 };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
+    if (isTransientDomError(error)) {
+      // Remonta a árvore — não mostra tela vermelha por bug de tradução do Chrome
+      return { hasError: false, error: null, remountKey: Date.now() };
+    }
     return { hasError: true, error };
   }
 
@@ -31,7 +48,9 @@ class ErrorBoundary extends Component<Props, State> {
               className="text-destructive mb-6 flex-shrink-0"
             />
 
-            <h2 className="text-xl mb-4">An unexpected error occurred.</h2>
+            <h2 className="text-xl mb-4 uppercase tracking-wide">
+              Um erro inesperado ocorreu.
+            </h2>
 
             <div className="p-4 w-full rounded bg-muted overflow-auto mb-6">
               <pre className="text-sm text-muted-foreground whitespace-break-spaces">
@@ -48,14 +67,14 @@ class ErrorBoundary extends Component<Props, State> {
               )}
             >
               <RotateCcw size={16} />
-              Reload Page
+              Recarregar página
             </button>
           </div>
         </div>
       );
     }
 
-    return this.props.children;
+    return <div key={this.state.remountKey}>{this.props.children}</div>;
   }
 }
 
