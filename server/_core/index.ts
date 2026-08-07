@@ -334,6 +334,12 @@ async function startServer() {
     }
     try {
       const dryRun = String(req.query.dryRun ?? "") === "1";
+      // modo=descartar → limpa a fila sem enviar nada
+      if (String(req.query.modo ?? "") === "descartar") {
+        const { discardPendingOrderNotifications } = await import("../pdvWaNotify");
+        const resultado = await discardPendingOrderNotifications();
+        return res.json({ ok: true, modo: "descartar", ...resultado });
+      }
       // modo=resumo → uma mensagem por dia; padrão → uma mensagem por pedido
       if (String(req.query.modo ?? "") === "resumo") {
         const { sendPendingOrdersDigest } = await import("../pdvWaNotify");

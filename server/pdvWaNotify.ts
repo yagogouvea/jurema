@@ -343,6 +343,25 @@ export async function listPendingOrderNotifications(
   }));
 }
 
+/**
+ * Marca a fila acumulada como já avisada, sem enviar nada.
+ * Usado quando o backlog é grande demais para valer o reenvio.
+ */
+export async function discardPendingOrderNotifications(): Promise<{ descartados: number }> {
+  const db = await createPdvMysqlConnection();
+  if (!db) return { descartados: 0 };
+  try {
+    const [res] = await db.execute(
+      "UPDATE pdv_orders SET notifiedAt = NOW() WHERE notifiedAt IS NULL"
+    );
+    const descartados = Number((res as { affectedRows?: number }).affectedRows ?? 0);
+    console.log(`[notifyOrderBacklog] ${descartados} pedido(s) marcados como avisados sem envio.`);
+    return { descartados };
+  } finally {
+    await db.end();
+  }
+}
+
 /** Quantos pedidos estão sem aviso, e como se distribuem por dia. */
 export async function countPendingOrderNotifications(db: Connection): Promise<{
   total: number;
