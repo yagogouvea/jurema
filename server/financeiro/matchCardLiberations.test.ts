@@ -42,8 +42,30 @@ function card(
 }
 
 describe("reconcileCardLiberations", () => {
-  it("casa 1:1 por valor líquido", () => {
-    // líquido = 9700 se valor 10000 taxa 3% → wait 10000*0.03=300, liquido=9700
+  it("casa 1:1 preferindo valor da maquininha (taxa 3%/5%)", () => {
+    // valor 10000, crédito 5% → taxa 500, maquininha 10500, líquido 9500
+    const liberacoes = [liberacao(10500, "2026-05-07")];
+    const cards = [
+      card({
+        paymentId: 1,
+        pedidoId: "PED-CARD-1",
+        valorCents: 10000,
+        taxaCents: 500,
+        valorLiquidoCents: 9500,
+        formaPagamento: "CREDITO",
+        pedidoCreatedAt: new Date("2026-05-06T15:00:00-03:00"),
+      }),
+    ];
+    const r = reconcileCardLiberations({ liberacoes, cardPayments: cards });
+    expect(r.matched).toHaveLength(1);
+    expect(r.matched[0].kind).toBe("card_1:1");
+    expect(r.matched[0].payment.matchBasis).toBe("maquininha");
+    expect(r.onlyExtract).toHaveLength(0);
+    expect(r.onlyPdv).toHaveLength(0);
+  });
+
+  it("casa 1:1 por valor líquido quando liberação veio líquida", () => {
+    // líquido = 9700 se valor 10000 taxa 3%
     const liberacoes = [liberacao(9700, "2026-05-07")];
     const cards = [
       card({
@@ -64,7 +86,34 @@ describe("reconcileCardLiberations", () => {
     expect(r.onlyPdv).toHaveLength(0);
   });
 
-  it("casa lote: soma de liquidos = liberação", () => {
+  it("casa lote: soma de maquininhas = liberação", () => {
+    const liberacoes = [liberacao(20600, "2026-05-10")];
+    const cards = [
+      card({
+        paymentId: 1,
+        pedidoId: "PED-A",
+        valorCents: 10000,
+        taxaCents: 300,
+        valorLiquidoCents: 9700,
+        pedidoCreatedAt: new Date("2026-05-08T10:00:00-03:00"),
+      }),
+      card({
+        paymentId: 2,
+        pedidoId: "PED-B",
+        valorCents: 10000,
+        taxaCents: 300,
+        valorLiquidoCents: 9700,
+        pedidoCreatedAt: new Date("2026-05-09T11:00:00-03:00"),
+      }),
+    ];
+    // maquininha 10300+10300 = 20600
+    const r = reconcileCardLiberations({ liberacoes, cardPayments: cards });
+    expect(r.matched.some((m) => m.kind === "card_lote")).toBe(true);
+    expect(r.matched[0].payment.matchBasis).toBe("lote_maquininha");
+    expect(r.matched[0].relatedPayments?.length).toBe(1);
+  });
+
+  it("casa lote: soma de liquidos = liberação (fallback)", () => {
     const liberacoes = [liberacao(15000, "2026-05-10")];
     const cards = [
       card({
@@ -131,5 +180,32 @@ describe("reconcileCardLiberations", () => {
     expect(r.matched).toHaveLength(0);
     expect(r.onlyExtract).toHaveLength(1);
     expect(r.onlyPdv).toHaveLength(1);
+  });
+
+  it("prioriza o pedido mais próximo na data quando valores batem", () => {
+    const liberacoes = [liberacao(10500, "2026-05-07")];
+    const cards = [
+      card({
+        paymentId: 1,
+        pedidoId: "PED-LONGE",
+        valorCents: 10000,
+        taxaCents: 500,
+        valorLiquidoCents: 9500,
+        formaPagamento: "CREDITO",
+        pedidoCreatedAt: new Date("2026-05-01T10:00:00-03:00"),
+      }),
+      card({
+        paymentId: 2,
+        pedidoId: "PED-PERTO",
+        valorCents: 10000,
+        taxaCents: 500,
+        valorLiquidoCents: 9500,
+        formaPagamento: "CREDITO",
+        pedidoCreatedAt: new Date("2026-05-07T11:00:00-03:00"),
+      }),
+    ];
+    const r = reconcileCardLiberations({ liberacoes, cardPayments: cards });
+    expect(r.matched).toHaveLength(1);
+    expect(r.matched[0].payment.pedidoId).toBe("PED-PERTO");
   });
 });

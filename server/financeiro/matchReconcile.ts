@@ -2,7 +2,7 @@
  * Matching determinístico extrato × pagamentos PIX do PDV.
  * Spec: docs/conciliacao-financeira-spec.md
  */
-import { bestNameScore } from "./normalize";
+import { nameMatchSignals } from "./normalize";
 import type {
   ExtractLine,
   MatchedItem,
@@ -13,7 +13,10 @@ import type {
 } from "./types";
 import { DEFAULT_TOLERANCE } from "./types";
 
-function paymentDto(p: PdvPixPayment): MatchedItem["payment"] {
+function paymentDto(
+  p: PdvPixPayment,
+  matchBasis?: MatchedItem["payment"]["matchBasis"]
+): MatchedItem["payment"] {
   return {
     pedidoId: p.pedidoId,
     paymentId: p.paymentId,
@@ -23,6 +26,7 @@ function paymentDto(p: PdvPixPayment): MatchedItem["payment"] {
     clienteNome: p.clienteNome,
     pedidoCreatedAt: p.pedidoCreatedAt.toISOString(),
     status: p.status,
+    matchBasis,
   };
 }
 
@@ -62,9 +66,12 @@ export function scoreMatch(
   if (dt <= 24 * 60 * 60 * 1000) s += 15;
   else if (dt <= 72 * 60 * 60 * 1000) s += 8;
 
-  const ns = bestNameScore(line.payerNameNorm, pay.nomePix, pay.clienteNome);
-  if (ns >= 0.85) s += 25;
-  else if (ns >= 0.55) s += 12;
+  const names = nameMatchSignals(line.payerNameNorm, pay.nomePix, pay.clienteNome);
+  // O titular informado no checkout é mais confiável que o nome do cliente.
+  if (names.payerScore >= 0.85) s += 35;
+  else if (names.payerScore >= 0.55) s += 18;
+  else if (names.customerScore >= 0.85) s += 20;
+  else if (names.customerScore >= 0.55) s += 10;
 
   if (sameValueOthers > 0) s -= 20;
   if (pay.status === "PENDENTE") s -= 10;
@@ -138,7 +145,10 @@ export function reconcileExtractToPayments(input: ReconcileInput): Omit<
             ? "Casado por valor+janela; nome parcial ou ausente"
             : undefined,
         extract: [line],
-        payment: paymentDto(top.pay),
+        payment: paymentDto(
+          top.pay,
+          nameMatchSignals(line.payerNameNorm, top.pay.nomePix, top.pay.clienteNome).basis
+        ),
       });
       poolLines.delete(line.id);
       poolPays.delete(top.pay.paymentId);
@@ -191,7 +201,12 @@ export function reconcileExtractToPayments(input: ReconcileInput): Omit<
       if (!withinWindow(minPix, pay.pedidoCreatedAt, tol) && !withinWindow(maxPix, pay.pedidoCreatedAt, tol)) {
         continue;
       }
-      const ns = bestNameScore(group[0].payerNameNorm, pay.nomePix, pay.clienteNome);
+      const names = nameMatchSignals(
+        group[0].payerNameNorm,
+        pay.nomePix,
+        pay.clienteNome
+      );
+      const ns = names.bestScore;
       // score base split: valor ok + janela + nome
       let sc = 55;
       if (ns >= 0.55) sc += 15;
@@ -209,7 +224,14 @@ export function reconcileExtractToPayments(input: ReconcileInput): Omit<
         score: top.score,
         notes: `Soma de ${group.length} PIX do extrato`,
         extract: group,
-        payment: paymentDto(top.pay),
+        payment: paymentDto(
+          top.pay,
+          nameMatchSignals(
+            group[0].payerNameNorm,
+            top.pay.nomePix,
+            top.pay.clienteNome
+          ).basis
+        ),
       });
       for (const l of group) poolLines.delete(l.id);
       poolPays.delete(top.pay.paymentId);

@@ -26,8 +26,7 @@ type Tab = "confirmed" | "review" | "unmatched" | "extractOnly";
 export default function PdvFinanceiro() {
   const { isAdmin } = usePdvAuth();
   const utils = trpc.useUtils();
-  const [fileName, setFileName] = useState("");
-  const [pdfBase64, setPdfBase64] = useState("");
+  const [files, setFiles] = useState<Array<{ fileName: string; pdfBase64: string }>>([]);
   const [source, setSource] = useState<"auto" | "infinitepay" | "mercado_pago">("auto");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
@@ -95,6 +94,7 @@ export default function PdvFinanceiro() {
         ordersReview: res.ordersReview,
         ordersUnmatched: res.ordersUnmatched,
         extractUnmatched: res.extractUnmatched || res.onlyExtract,
+        hasExcel: data.hasExcel,
       });
       setTab((res.ordersReview?.length ?? data.totals?.reviewCount ?? 0) > 0 ? "review" : "confirmed");
       toast.success(`Conciliação #${data.id} carregada`);
@@ -105,30 +105,43 @@ export default function PdvFinanceiro() {
     }
   };
 
-  const onFile = (file: File | null) => {
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      toast.error("Envie um arquivo PDF");
+  const onFiles = async (selected: FileList | null) => {
+    if (!selected?.length) return;
+    const chosen = Array.from(selected).slice(0, 2);
+    if (selected.length > 2) {
+      toast.error("Selecione no máximo dois extratos");
       return;
     }
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error("PDF maior que 8 MB");
+    if (chosen.some((file) => !file.name.toLowerCase().endsWith(".pdf"))) {
+      toast.error("Envie somente arquivos PDF");
       return;
     }
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => setPdfBase64(String(reader.result || ""));
-    reader.readAsDataURL(file);
+    if (chosen.some((file) => file.size > 8 * 1024 * 1024)) {
+      toast.error("Cada PDF pode ter no máximo 8 MB");
+      return;
+    }
+    const loaded = await Promise.all(
+      chosen.map(
+        (file) =>
+          new Promise<{ fileName: string; pdfBase64: string }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () =>
+              resolve({ fileName: file.name, pdfBase64: String(reader.result || "") });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          })
+      )
+    );
+    setFiles(loaded);
   };
 
   const run = () => {
-    if (!pdfBase64) {
-      toast.error("Anexe o extrato (InfinitePay ou Mercado Pago)");
+    if (!files.length) {
+      toast.error("Anexe um ou dois extratos");
       return;
     }
     reconcile.mutate({
-      pdfBase64,
-      fileName,
+      files,
       source,
       periodStart: periodStart || undefined,
       periodEnd: periodEnd || undefined,
@@ -159,10 +172,44 @@ export default function PdvFinanceiro() {
     a.click();
   };
 
+  const downloadExcel = async () => {
+    try {
+      let base64 = result?.reportExcelBase64;
+      if (!base64 && result?.reconciliationId) {
+        const saved = await utils.pdvFinanceiro.getReportExcel.fetch({
+          id: result.reconciliationId,
+        });
+        base64 = saved.base64;
+      }
+      if (!base64) {
+        toast.error("Planilha ainda não disponível");
+        return;
+      }
+      const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+      const url = URL.createObjectURL(
+        new Blob([bytes], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        })
+      );
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `conciliacao-${result.period?.start || "extrato"}-${result.period?.end || ""}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.error(e?.message || "Não foi possível baixar a planilha");
+    }
+  };
+
   const confirmed = result?.ordersConfirmed || [];
   const reviews = result?.ordersReview || [];
   const unmatched = result?.ordersUnmatched || [];
   const extractOnly = result?.extractUnmatched || result?.onlyExtract || [];
+  // Um pedido pode ter mais de um pagamento; o card conta pedidos.
+  const unmatchedPedidos = useMemo(
+    () => new Set(unmatched.map((p: any) => p.order?.pedidoId).filter(Boolean)).size,
+    [unmatched]
+  );
 
   const q = search.trim().toLowerCase();
   const filterConfirmed = useMemo(() => {
@@ -188,10 +235,10 @@ export default function PdvFinanceiro() {
       [
         { id: "confirmed" as const, label: "Confirmados", n: confirmed.length },
         { id: "review" as const, label: "Dúvidas", n: reviews.length },
-        { id: "unmatched" as const, label: "Pedidos sem extrato", n: unmatched.length },
+        { id: "unmatched" as const, label: "Pedidos sem extrato", n: unmatchedPedidos },
         { id: "extractOnly" as const, label: "Extrato sem pedido", n: extractOnly.length },
       ] as const,
-    [confirmed.length, reviews.length, unmatched.length, extractOnly.length]
+    [confirmed.length, reviews.length, unmatchedPedidos, extractOnly.length]
   );
 
   if (!isAdmin) {
@@ -212,7 +259,8 @@ export default function PdvFinanceiro() {
           <div>
             <h1 className="text-xl font-bold text-white">Financeiro</h1>
             <p className="text-sm text-gray-400">
-              Conciliação por pedidos do período × extrato InfinitePay / Mercado Pago
+              InfinitePay = Pix · Mercado Pago = débito/crédito (liberação, sem nome —
+              casa por valor com taxa 3%/5% e data)
             </p>
           </div>
         </div>
@@ -220,17 +268,28 @@ export default function PdvFinanceiro() {
         <div className="rounded-2xl border border-gray-800 bg-gray-900/60 p-4 md:p-6 space-y-4">
           <div className="flex flex-wrap items-end gap-4">
             <label className="flex-1 min-w-[220px]">
-              <span className="text-xs text-gray-500 block mb-1">PDF do extrato</span>
+              <span className="text-xs text-gray-500 block mb-1">
+                Extratos PDF (até 2 — InfinitePay e/ou Mercado Pago)
+              </span>
               <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-sm text-gray-200 hover:border-emerald-600">
                 <Upload className="w-4 h-4" />
-                {fileName || "Escolher PDF"}
+                {files.length
+                  ? `${files.length} extrato${files.length > 1 ? "s" : ""} selecionado${files.length > 1 ? "s" : ""}`
+                  : "Escolher 1 ou 2 PDFs"}
                 <input
                   type="file"
                   accept="application/pdf,.pdf"
+                  multiple
                   className="hidden"
-                  onChange={(e) => onFile(e.target.files?.[0] || null)}
+                  aria-label="Selecionar até dois extratos em PDF"
+                  onChange={(e) => onFiles(e.target.files)}
                 />
               </label>
+              {files.length > 0 && (
+                <span className="block mt-1 text-[11px] text-gray-500 truncate">
+                  {files.map((file) => file.fileName).join(" + ")}
+                </span>
+              )}
             </label>
             <label>
               <span className="text-xs text-gray-500 block mb-1">Origem</span>
@@ -286,7 +345,7 @@ export default function PdvFinanceiro() {
             </label>
             <button
               onClick={run}
-              disabled={reconcile.isPending || !pdfBase64}
+              disabled={reconcile.isPending || !files.length}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium"
             >
               {reconcile.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
@@ -294,8 +353,10 @@ export default function PdvFinanceiro() {
             </button>
           </div>
           <p className="text-xs text-gray-400">
-            Use o <strong className="text-gray-200">extrato do banco</strong> (não o Relatório de Vendas do PDV).
-            O sistema lista os pedidos do período e marca o que bateu com certeza; dúvidas ficam para você confirmar.
+            InfinitePay casa Pix por valor + nome (<strong className="text-gray-200">Quem pagou</strong>).
+            Mercado Pago casa só débito/crédito pela <strong className="text-gray-200">Liberação de dinheiro</strong>
+            {" "}(sem nome) — compara o valor da maquininha com a taxa de 3% (débito) ou 5% (crédito) e a data do pedido.
+            O mesmo pagamento não é usado duas vezes.
           </p>
           <p className="text-xs text-gray-500 flex items-start gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -319,13 +380,42 @@ export default function PdvFinanceiro() {
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {[
-                ["Confirmados", confirmed.length, fmtBRL(result.totals?.matchedCents || 0)],
-                ["Dúvidas", reviews.length, "—"],
-                ["Sem extrato", unmatched.length, fmtBRL(result.totals?.onlyPdvCents || 0)],
-                ["Só extrato", extractOnly.length, fmtBRL(result.totals?.onlyExtractCents || 0)],
-                ["Entradas extrato", "—", fmtBRL(result.totals?.extractInCents || 0)],
-              ].map(([label, n, money]) => (
-                <div key={String(label)} className="rounded-xl border border-gray-800 bg-gray-900/50 p-3">
+                {
+                  label: "Confirmados",
+                  n: confirmed.length,
+                  money: fmtBRL(result.totals?.matchedCents || 0),
+                  hint: "Pagamentos do período localizados no extrato",
+                },
+                {
+                  label: "Dúvidas",
+                  n: reviews.length,
+                  money: "—",
+                  hint: "Precisam de confirmação manual",
+                },
+                {
+                  label: "Pedidos sem extrato",
+                  n: unmatchedPedidos,
+                  money: fmtBRL(result.totals?.onlyPdvCents || 0),
+                  hint: `Pedidos de ${result.period?.start || "?"} a ${result.period?.end || "?"} sem lançamento correspondente`,
+                },
+                {
+                  label: "Extrato sem pedido",
+                  n: extractOnly.length,
+                  money: fmtBRL(result.totals?.onlyExtractCents || 0),
+                  hint: "Entradas do extrato sem pedido no PDV",
+                },
+                {
+                  label: "Entradas extrato",
+                  n: "—",
+                  money: fmtBRL(result.totals?.extractInCents || 0),
+                  hint: "Total creditado no extrato do período",
+                },
+              ].map(({ label, n, money, hint }) => (
+                <div
+                  key={label}
+                  title={hint}
+                  className="rounded-xl border border-gray-800 bg-gray-900/50 p-3"
+                >
                   <div className="text-[11px] text-gray-500 uppercase tracking-wide">{label}</div>
                   <div className="text-lg font-semibold text-white mt-1">
                     {n}
@@ -333,6 +423,7 @@ export default function PdvFinanceiro() {
                       <span className="block text-xs font-normal text-gray-400 mt-0.5">{money}</span>
                     )}
                   </div>
+                  <div className="text-[10px] leading-snug text-gray-600 mt-1">{hint}</div>
                 </div>
               ))}
             </div>
@@ -347,6 +438,12 @@ export default function PdvFinanceiro() {
                   className="w-full pl-9 pr-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-sm text-white"
                 />
               </div>
+              <button
+                onClick={downloadExcel}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-700 text-sm text-white hover:bg-emerald-600"
+              >
+                <Download className="w-4 h-4" /> Excel
+              </button>
               <button
                 onClick={downloadPdf}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-700 text-sm text-gray-200 hover:bg-gray-800"
@@ -604,6 +701,12 @@ export default function PdvFinanceiro() {
 
               {tab === "unmatched" && (
                 <div className="overflow-x-auto">
+                  <p className="px-3 py-2 text-[11px] text-gray-500">
+                    {unmatchedPedidos} pedido{unmatchedPedidos === 1 ? "" : "s"} de{" "}
+                    {result.period?.start || "?"} a {result.period?.end || "?"} ·{" "}
+                    {unmatched.length} pagamento{unmatched.length === 1 ? "" : "s"} sem
+                    lançamento correspondente no extrato
+                  </p>
                   <table className="w-full text-sm min-w-[720px]">
                     <thead className="bg-gray-900 text-gray-500 text-xs">
                       <tr>

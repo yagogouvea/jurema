@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildOrderCentricView, sheetsLabelForStatus } from "./orderView";
+import {
+  buildOrderCentricView,
+  filterOnlyPdvToPeriod,
+  sheetsLabelForStatus,
+} from "./orderView";
 import type { OrderSnapshot } from "./types";
 
 describe("orderView", () => {
@@ -78,5 +82,21 @@ describe("orderView", () => {
     expect(view.ordersReview[0].candidates[0].order.itemsSummary).toBe("1x Camisa");
     expect(sheetsLabelForStatus("confirmed")).toBe("Localizado");
     expect(sheetsLabelForStatus("pending")).toBe("Dúvida");
+  });
+
+  it("mantém em 'sem extrato' apenas pedidos do período selecionado", () => {
+    const onlyPdv = [
+      { paymentId: 1, pedidoCreatedAt: "2026-07-06T20:00:00.000Z" }, // 06/07 SP
+      { paymentId: 2, pedidoCreatedAt: "2026-07-10T14:00:00.000Z" }, // dentro
+      { paymentId: 3, pedidoCreatedAt: "2026-07-16T03:00:00.000Z" }, // 16/07 SP → fora
+      { paymentId: 4, pedidoCreatedAt: "2026-07-14T02:30:00.000Z" }, // 13/07 SP → dentro
+    ];
+    const kept = filterOnlyPdvToPeriod(onlyPdv, "2026-07-07", "2026-07-13");
+    expect(kept.map((p) => p.paymentId)).toEqual([2, 4]);
+  });
+
+  it("sem período definido não descarta nada", () => {
+    const onlyPdv = [{ paymentId: 1, pedidoCreatedAt: "2026-07-06T20:00:00.000Z" }];
+    expect(filterOnlyPdvToPeriod(onlyPdv, null, null)).toHaveLength(1);
   });
 });

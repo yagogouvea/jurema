@@ -17,9 +17,11 @@ import {
 } from "../financeiro/matchCardLiberations";
 import { generateReconcileNarrative } from "../financeiro/narrative";
 import { buildReconcileReportPdf } from "../financeiro/reportPdf";
+import { buildReconcileReportExcel } from "../financeiro/reportExcel";
 import {
   buildOrderCentricView,
   collectPedidoIdsFromCore,
+  filterOnlyPdvToPeriod,
   loadOrderSnapshots,
   sheetsLabelForStatus,
 } from "../financeiro/orderView";
@@ -58,6 +60,7 @@ CREATE TABLE IF NOT EXISTS pdv_reconciliations (
   resultJson LONGTEXT NOT NULL,
   narrativeText MEDIUMTEXT NULL,
   reportPdf LONGBLOB NULL,
+  reportExcel LONGBLOB NULL,
   originalFileName VARCHAR(255) NULL,
   createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT pdv_reconciliations_id PRIMARY KEY(id)
@@ -93,6 +96,15 @@ export async function ensureFinanceiroTables(): Promise<void> {
     try {
       await db.execute(CREATE_TABLE_SQL);
       await ensurePaymentReconcileColumns(db);
+      try {
+        await db.execute(
+          `ALTER TABLE pdv_reconciliations ADD COLUMN reportExcel LONGBLOB NULL`
+        );
+      } catch (e: any) {
+        if (e?.errno !== 1060 && !String(e?.message || "").includes("Duplicate")) {
+          console.warn("[financeiro] alter reconciliation excel:", e?.message || e);
+        }
+      }
     } finally {
       await db.end();
     }
@@ -207,6 +219,9 @@ async function attachOrderViews(
   core.totals.orderConfirmedCount = view.ordersConfirmed.length;
   core.totals.orderReviewCount = view.ordersReview.length;
   core.totals.orderUnmatchedCount = view.ordersUnmatched.length;
+  core.totals.orderUnmatchedPedidoCount = new Set(
+    view.ordersUnmatched.map((o) => o.order.pedidoId)
+  ).size;
   return view;
 }
 
@@ -340,8 +355,20 @@ export const pdvFinanceiroRouter = router({
   reconcile: publicProcedure
     .input(
       z.object({
-        pdfBase64: z.string().min(20).max(12_000_000),
+        /** Legado: um único PDF. */
+        pdfBase64: z.string().min(20).max(12_000_000).optional(),
         fileName: z.string().max(255).optional(),
+        /** Um ou dois extratos analisados como um único conjunto. */
+        files: z
+          .array(
+            z.object({
+              pdfBase64: z.string().min(20).max(12_000_000),
+              fileName: z.string().max(255).optional(),
+            })
+          )
+          .min(1)
+          .max(2)
+          .optional(),
         source: z.enum(["auto", "infinitepay", "mercado_pago"]).default("auto"),
         /** Override do período (YYYY-MM-DD); se omitido, usa o do PDF. */
         periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -350,47 +377,103 @@ export const pdvFinanceiroRouter = router({
         afterHours: z.number().min(0).max(168).default(72),
         persist: z.boolean().default(true),
         generatePdf: z.boolean().default(true),
+      }).refine((value) => Boolean(value.pdfBase64 || value.files?.length), {
+        message: "Anexe ao menos um extrato",
       })
     )
     .mutation(async ({ input, ctx }) => {
       const admin = await requirePdvAdmin(ctx);
       await ensureFinanceiroTables();
 
-      let buffer: Buffer;
-      try {
-        const raw = input.pdfBase64.includes(",")
-          ? input.pdfBase64.split(",").pop()!
-          : input.pdfBase64;
-        buffer = Buffer.from(raw, "base64");
-      } catch {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "PDF inválido (base64)" });
-      }
-      if (buffer.length < 100 || buffer.length > 8_000_000) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Tamanho do PDF fora do limite (máx. 8 MB)" });
-      }
-      if (buffer.slice(0, 4).toString("utf8") !== "%PDF") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Arquivo não parece ser PDF" });
+      const uploadedFiles = input.files?.length
+        ? input.files
+        : [{ pdfBase64: input.pdfBase64!, fileName: input.fileName }];
+      const parsedFiles: Array<Awaited<ReturnType<typeof parseExtratoPdf>> & {
+        fileName: string;
+      }> = [];
+
+      for (const [index, file] of uploadedFiles.entries()) {
+        let buffer: Buffer;
+        try {
+          const raw = file.pdfBase64.includes(",")
+            ? file.pdfBase64.split(",").pop()!
+            : file.pdfBase64;
+          buffer = Buffer.from(raw, "base64");
+        } catch {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "PDF inválido (base64)" });
+        }
+        if (buffer.length < 100 || buffer.length > 8_000_000) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `O extrato ${index + 1} está fora do limite de 8 MB`,
+          });
+        }
+        if (buffer.slice(0, 4).toString("utf8") !== "%PDF") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `O arquivo ${index + 1} não parece ser PDF`,
+          });
+        }
+
+        try {
+          const fileName = file.fileName || `extrato-${index + 1}.pdf`;
+          const one = await parseExtratoPdf(buffer, input.source);
+          parsedFiles.push({
+            ...one,
+            fileName,
+            lines: one.lines.map((line) => ({
+              ...line,
+              // Evita colisão de IDs entre dois arquivos, mantendo conciliação 1:1 global.
+              id: `arquivo-${index + 1}|${line.id}`,
+              extractFileName: fileName,
+            })),
+          });
+        } catch (e: any) {
+          console.error("[financeiro] parse PDF:", e);
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Não foi possível ler o extrato ${index + 1}: ${e?.message || e}`,
+          });
+        }
       }
 
-      let parsed;
-      try {
-        parsed = await parseExtratoPdf(buffer, input.source);
-      } catch (e: any) {
-        console.error("[financeiro] parse PDF:", e);
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Não foi possível ler o extrato: ${e?.message || e}`,
-        });
-      }
+      const starts = parsedFiles.map((p) => p.period?.start).filter(Boolean).sort() as string[];
+      const ends = parsedFiles.map((p) => p.period?.end).filter(Boolean).sort() as string[];
+      const sources = [...new Set(parsedFiles.map((p) => p.source))];
+      const accountLabels = [
+        ...new Set(parsedFiles.map((p) => p.accountLabel).filter(Boolean)),
+      ] as string[];
+      const parsed = {
+        source: sources.length === 1 ? sources[0] : ("generic" as const),
+        period:
+          starts.length && ends.length
+            ? { start: starts[0], end: ends[ends.length - 1] }
+            : null,
+        accountLabel: accountLabels.join(" + ") || null,
+        companyLabel: null,
+        lines: parsedFiles.flatMap((p) => p.lines),
+        ignoredOutCount: parsedFiles.reduce((sum, p) => sum + p.ignoredOutCount, 0),
+        ignoredOtherCount: parsedFiles.reduce(
+          (sum, p) => sum + (p.ignoredOtherCount || 0),
+          0
+        ),
+      };
 
+      // Mercado Pago = só cartão (liberação). Pix do MP não casa com PIX do PDV
+      // (não traz nome confiável e a conta mistura transferências).
       const liberacoes = parsed.lines.filter((l) => l.kindLabel === "liberacao");
-      const matchableLines = parsed.lines.filter((l) => l.kindLabel !== "liberacao");
+      const mpIgnoredLines = parsed.lines.filter(
+        (l) => l.source === "mercado_pago" && l.kindLabel !== "liberacao"
+      );
+      const matchableLines = parsed.lines.filter(
+        (l) => l.kindLabel !== "liberacao" && l.source !== "mercado_pago"
+      );
 
       if (matchableLines.length === 0 && liberacoes.length === 0) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message:
-            "Nenhuma entrada útil encontrada (Pix / liberação). Confirme InfinitePay ou Mercado Pago.",
+            "Nenhuma entrada útil encontrada. InfinitePay: Pix recebido · Mercado Pago: Liberação de dinheiro (débito/crédito).",
         });
       }
 
@@ -416,15 +499,17 @@ export const pdvFinanceiroRouter = router({
       let payments: PdvPixPayment[] = [];
       let cardPayments: PdvCardPayment[] = [];
       try {
-        // Pedidos do PDV só no período do extrato (+ tolerância de match PIX/cartão)
-        payments = await loadPdvPixPayments(
-          db,
-          period.start,
-          period.end,
-          tolerance.beforeMs,
-          tolerance.afterMs
-        );
-        // Cartão: janela mais larga (liquidação pode demorar)
+        // PIX só entra se houver linhas de InfinitePay (MP não casa Pix por nome)
+        if (matchableLines.length > 0) {
+          payments = await loadPdvPixPayments(
+            db,
+            period.start,
+            period.end,
+            tolerance.beforeMs,
+            tolerance.afterMs
+          );
+        }
+        // Cartão: casa com liberação MP (considera taxa 3% débito / 5% crédito)
         cardPayments = await loadPdvCardPayments(
           db,
           period.start,
@@ -445,7 +530,14 @@ export const pdvFinanceiroRouter = router({
         tolerance,
       });
 
-      // Liberação de dinheiro × DÉBITO/CRÉDITO
+      // Pix/outros do Mercado Pago não entram no match de pedidos
+      if (mpIgnoredLines.length > 0) {
+        core.onlyExtract = [...core.onlyExtract, ...mpIgnoredLines].sort((a, b) =>
+          a.datetimeIso.localeCompare(b.datetimeIso)
+        );
+      }
+
+      // Liberação de dinheiro × DÉBITO/CRÉDITO (valor ± taxa + data/hora)
       if (liberacoes.length > 0) {
         const cardResult = reconcileCardLiberations({
           liberacoes,
@@ -465,7 +557,7 @@ export const pdvFinanceiroRouter = router({
           ...cardPayments.map((p) => ({
             pedidoId: p.pedidoId,
             paymentId: p.paymentId,
-            valorCents: p.valorLiquidoCents,
+            valorCents: p.valorMaquininhaCents || p.valorCents,
             clienteNome: p.clienteNome,
             nomePix: null as string | null,
             pedidoCreatedAt: p.pedidoCreatedAt.toISOString(),
@@ -474,6 +566,8 @@ export const pdvFinanceiroRouter = router({
           })),
         ];
       }
+
+      core.onlyPdv = filterOnlyPdvToPeriod(core.onlyPdv, period.start, period.end);
 
       core.totals.extractInCents =
         matchableLines.reduce((s, l) => s + l.amountCents, 0) +
@@ -520,6 +614,10 @@ export const pdvFinanceiroRouter = router({
         narrativeText,
         reportPdfBase64,
       };
+      const reportExcel = await buildReconcileReportExcel(full, {
+        generatedBy: admin.name,
+      });
+      full.reportExcelBase64 = reportExcel.toString("base64");
       let reconciliationId: number | null = null;
 
       if (input.persist) {
@@ -527,8 +625,8 @@ export const pdvFinanceiroRouter = router({
         try {
           const [ins] = await db2.execute(
             `INSERT INTO pdv_reconciliations
-              (source, periodStart, periodEnd, accountLabel, createdBy, totalsJson, resultJson, narrativeText, reportPdf, originalFileName)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              (source, periodStart, periodEnd, accountLabel, createdBy, totalsJson, resultJson, narrativeText, reportPdf, reportExcel, originalFileName)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               full.source,
               period.start,
@@ -551,7 +649,8 @@ export const pdvFinanceiroRouter = router({
               }),
               narrativeText || null,
               reportPdf ?? null,
-              input.fileName || null,
+              reportExcel,
+              uploadedFiles.map((file) => file.fileName).filter(Boolean).join(" + ") || null,
             ]
           );
           reconciliationId = Number((ins as any).insertId || 0) || null;
@@ -568,6 +667,11 @@ export const pdvFinanceiroRouter = router({
         extractLineCount: parsed.lines.length,
         pdvPaymentCount: payments.length,
         pdvCardPaymentCount: cardPayments.length,
+        extractFiles: parsedFiles.map((file) => ({
+          fileName: file.fileName,
+          source: file.source,
+          lineCount: file.lines.length,
+        })),
         ...full,
       };
     }),
@@ -695,7 +799,8 @@ export const pdvFinanceiroRouter = router({
       try {
         const [rows] = await db.execute(
           `SELECT id, source, periodStart, periodEnd, accountLabel, createdBy, totalsJson, resultJson, narrativeText, originalFileName, createdAt,
-                  (reportPdf IS NOT NULL) AS hasPdf
+                  (reportPdf IS NOT NULL) AS hasPdf,
+                  (reportExcel IS NOT NULL) AS hasExcel
            FROM pdv_reconciliations WHERE id = ? LIMIT 1`,
           [input.id]
         );
@@ -735,6 +840,7 @@ export const pdvFinanceiroRouter = router({
           originalFileName: r.originalFileName,
           createdAt: r.createdAt,
           hasPdf: Boolean(r.hasPdf),
+          hasExcel: Boolean(r.hasExcel),
         };
       } finally {
         await db.end();
@@ -755,6 +861,33 @@ export const pdvFinanceiroRouter = router({
         if (!r?.reportPdf) throw new TRPCError({ code: "NOT_FOUND", message: "PDF não disponível" });
         const buf: Buffer = Buffer.isBuffer(r.reportPdf) ? r.reportPdf : Buffer.from(r.reportPdf);
         return { base64: buf.toString("base64"), mimeType: "application/pdf" };
+      } finally {
+        await db.end();
+      }
+    }),
+
+  getReportExcel: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      try {
+        const [rows] = await db.execute(
+          `SELECT reportExcel FROM pdv_reconciliations WHERE id = ? LIMIT 1`,
+          [input.id]
+        );
+        const r = (rows as any[])[0];
+        if (!r?.reportExcel) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Planilha não disponível" });
+        }
+        const buf: Buffer = Buffer.isBuffer(r.reportExcel)
+          ? r.reportExcel
+          : Buffer.from(r.reportExcel);
+        return {
+          base64: buf.toString("base64"),
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        };
       } finally {
         await db.end();
       }
@@ -937,6 +1070,9 @@ export const pdvFinanceiroRouter = router({
           orderConfirmedCount: orderView.ordersConfirmed.length,
           orderReviewCount: orderView.ordersReview.length,
           orderUnmatchedCount: orderView.ordersUnmatched.length,
+          orderUnmatchedPedidoCount: new Set(
+            orderView.ordersUnmatched.map((o) => o.order.pedidoId)
+          ).size,
         };
 
         const newResult = {
@@ -955,11 +1091,39 @@ export const pdvFinanceiroRouter = router({
           narrativeText += `\n\n[Manual] ${admin.name} dispensou um item da revisão.`;
         }
 
+        const updatedFull: ReconcileResult = {
+          source: row.source,
+          period:
+            row.periodStart && row.periodEnd
+              ? {
+                  start: String(row.periodStart).slice(0, 10),
+                  end: String(row.periodEnd).slice(0, 10),
+                }
+              : null,
+          accountLabel: row.accountLabel,
+          totals,
+          matched,
+          review,
+          onlyExtract,
+          onlyPdv,
+          ...orderView,
+          narrativeText,
+        };
+        const reportExcel = await buildReconcileReportExcel(updatedFull, {
+          generatedBy: admin.name,
+        });
+
         await db.execute(
           `UPDATE pdv_reconciliations
-           SET totalsJson = ?, resultJson = ?, narrativeText = ?
+           SET totalsJson = ?, resultJson = ?, narrativeText = ?, reportExcel = ?
            WHERE id = ?`,
-          [JSON.stringify(totals), JSON.stringify(newResult), narrativeText, input.reconciliationId]
+          [
+            JSON.stringify(totals),
+            JSON.stringify(newResult),
+            narrativeText,
+            reportExcel,
+            input.reconciliationId,
+          ]
         );
 
         return {
@@ -980,6 +1144,7 @@ export const pdvFinanceiroRouter = router({
           onlyPdv,
           ...orderView,
           narrativeText,
+          reportExcelBase64: reportExcel.toString("base64"),
         };
       } finally {
         await db.end();

@@ -16,6 +16,33 @@ type DbConn = {
   execute: (sql: string, params?: any[]) => Promise<[any, any]>;
 };
 
+/** Dia do pedido no fuso de São Paulo — o extrato usa datas locais, não UTC. */
+export function spDateKey(value: string | Date): string {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+export function isWithinPeriod(value: string | Date, start: string, end: string): boolean {
+  const dia = spDateKey(value);
+  if (!dia) return false;
+  return dia >= start && dia <= end;
+}
+
+/**
+ * A busca de pagamentos usa uma janela maior que o período para conseguir casar
+ * lançamentos na borda do extrato. Já a lista "sem extrato" precisa conter só
+ * pedidos do período pedido, senão aparecem vendas de semanas vizinhas.
+ */
+export function filterOnlyPdvToPeriod<T extends { pedidoCreatedAt: string }>(
+  onlyPdv: T[],
+  start: string | null,
+  end: string | null
+): T[] {
+  if (!start || !end) return onlyPdv;
+  return onlyPdv.filter((p) => isWithinPeriod(p.pedidoCreatedAt, start, end));
+}
+
 export async function loadOrderSnapshots(
   db: DbConn,
   pedidoIds: string[]
@@ -88,6 +115,8 @@ function fallbackOrder(pedidoId: string, partial?: Partial<OrderSnapshot>): Orde
 function extractBrief(lines: ExtractLine[]) {
   return (lines || []).map((e) => ({
     id: e.id,
+    source: e.source,
+    extractFileName: e.extractFileName,
     payerNameRaw: e.payerNameRaw,
     amountCents: e.amountCents,
     datetimeIso: e.datetimeIso,

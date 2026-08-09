@@ -18,6 +18,8 @@ export type ExtractLine = {
   operationId?: string;
   /** pix_in | liberacao | … */
   kindLabel?: string;
+  /** Arquivo de origem quando a análise reúne mais de um extrato. */
+  extractFileName?: string;
 };
 
 export type PdvPixPayment = {
@@ -87,6 +89,8 @@ export type ReconcileTotals = {
   orderConfirmedCount?: number;
   orderReviewCount?: number;
   orderUnmatchedCount?: number;
+  /** Pedidos distintos sem extrato (um pedido pode ter mais de um pagamento). */
+  orderUnmatchedPedidoCount?: number;
 };
 
 export type OrderSnapshot = {
@@ -111,6 +115,8 @@ export type OrderConfirmedRow = {
   order: OrderSnapshot;
   extract: Array<{
     id: string;
+    source: ExtractSource;
+    extractFileName?: string;
     payerNameRaw: string;
     amountCents: number;
     datetimeIso: string;
@@ -176,6 +182,7 @@ export type ReconcileResult = {
   extractUnmatched?: ExtractLine[];
   narrativeText: string;
   reportPdfBase64?: string;
+  reportExcelBase64?: string;
 };
 
 export type ToleranceMs = {

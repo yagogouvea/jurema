@@ -1,11 +1,19 @@
 /**
  * Casa "Liberação de dinheiro" (Mercado Pago) com pagamentos DÉBITO/CRÉDITO do PDV.
  *
- * Âncoras de valor (nessa ordem de preferência):
- *  1) valorLiquido  (o que a loja costuma receber após taxa)
- *  2) valor         (digitado no PDV como “recebido”)
- *  3) valor+taxa    (valorMaquininha)
- *  4) lote: soma de vários liquidos = liberação
+ * No Mercado Pago não vem o nome de quem pagou — o match é por valor (+ data/hora).
+ *
+ * No PDV, débito (+3%) e crédito (+5%) gravam:
+ *  - valor           → o que a loja digitou (recebe)
+ *  - taxa            → 3% ou 5% sobre o valor
+ *  - valorLiquido    → valor − taxa
+ *  - valorMaquininha → valor + taxa (o que passou na maquininha)
+ *
+ * Âncoras de valor (nessa ordem — a maquininha reflete a taxa do pedido):
+ *  1) valorMaquininha
+ *  2) valor (bruto digitado)
+ *  3) valorLiquido
+ *  4) lote: soma de vários (maquininha / bruto / líquido) = liberação
  *
  * Janela típica de liquidação: pedido até 30 dias antes da liberação (e 48h depois).
  */
@@ -38,7 +46,9 @@ export type PdvCardPayment = {
 
 export { DEFAULT_CARD_TOLERANCE };
 
-type ValueBasis = "liquido" | "bruto" | "maquininha";
+type ValueBasis = "maquininha" | "bruto" | "liquido";
+
+const BASIS_ORDER: ValueBasis[] = ["maquininha", "bruto", "liquido"];
 
 function withinCardWindow(
   liberacaoAt: Date,
@@ -51,9 +61,16 @@ function withinCardWindow(
 }
 
 function basisCents(p: PdvCardPayment, basis: ValueBasis): number {
-  if (basis === "liquido") return p.valorLiquidoCents;
+  if (basis === "maquininha") return p.valorMaquininhaCents;
   if (basis === "bruto") return p.valorCents;
-  return p.valorMaquininhaCents;
+  return p.valorLiquidoCents;
+}
+
+function basisScoreBoost(basis: ValueBasis): number {
+  // maquininha = valor + 3%/5% → o que tipicamente bate com a liquidação
+  if (basis === "maquininha") return 70;
+  if (basis === "bruto") return 60;
+  return 50;
 }
 
 function cardPaymentDto(
@@ -63,7 +80,7 @@ function cardPaymentDto(
   return {
     pedidoId: p.pedidoId,
     paymentId: p.paymentId,
-    valorCents: opts?.displayCents ?? p.valorLiquidoCents,
+    valorCents: opts?.displayCents ?? p.valorMaquininhaCents,
     nomePix: p.nomePix,
     obsPagamento: p.obsPagamento ?? null,
     clienteNome: p.clienteNome,
@@ -74,6 +91,17 @@ function cardPaymentDto(
     taxaCents: p.taxaCents,
     matchBasis: opts?.matchBasis,
   };
+}
+
+function dateTimeBoost(liberacaoAt: Date, pedidoAt: Date): number {
+  const dt = Math.abs(liberacaoAt.getTime() - pedidoAt.getTime());
+  const hour = 60 * 60 * 1000;
+  if (dt <= 2 * hour) return 20; // mesmo horário (~)
+  if (dt <= 24 * hour) return 15; // mesmo dia
+  if (dt <= 3 * 24 * hour) return 12;
+  if (dt <= 7 * 24 * hour) return 8;
+  if (dt <= 30 * 24 * hour) return 4;
+  return 0;
 }
 
 function scoreCard1to1(
@@ -89,18 +117,17 @@ function scoreCard1to1(
   }
   if (basisCents(pay, basis) !== line.amountCents) return Number.NEGATIVE_INFINITY;
 
-  let s = basis === "liquido" ? 60 : basis === "bruto" ? 50 : 45;
-  const dt = Math.abs(liberacaoAt.getTime() - pay.pedidoCreatedAt.getTime());
-  if (dt <= 24 * 60 * 60 * 1000) s += 15;
-  else if (dt <= 7 * 24 * 60 * 60 * 1000) s += 10;
-  else if (dt <= 30 * 24 * 60 * 60 * 1000) s += 5;
+  let s = basisScoreBoost(basis);
+  s += dateTimeBoost(liberacaoAt, pay.pedidoCreatedAt);
+  // Formas com taxa esperada reforçam a base maquininha
+  if (basis === "maquininha" && pay.taxaCents > 0) s += 5;
   if (sameValueOthers > 0) s -= 20;
   if (pay.status === "PENDENTE") s -= 10;
   return s;
 }
 
 function confidenceFor(score: number): MatchConfidence {
-  return score >= 70 ? "high" : "medium";
+  return score >= 75 ? "high" : "medium";
 }
 
 /** Subset sum (ids) que soma exatamente target; N pequeno. */
@@ -109,12 +136,11 @@ function findSubsetSum(
   target: number
 ): number[] | null {
   if (target <= 0 || items.length === 0) return null;
-  // DP: map sum -> list of ids
   let dp = new Map<number, number[]>();
   dp.set(0, []);
   for (const it of items) {
     const next = new Map(dp);
-    for (const [sum, ids] of dp) {
+    for (const [sum, ids] of Array.from(dp.entries())) {
       const ns = sum + it.cents;
       if (ns > target) continue;
       if (!next.has(ns)) next.set(ns, [...ids, it.id]);
@@ -143,7 +169,7 @@ export type CardLiberacaoResult = {
 };
 
 /**
- * @param liberacoes linhas kindLabel=liberacao
+ * @param liberacoes linhas kindLabel=liberacao (Mercado Pago / cartão)
  * @param cardPayments pagamentos DEBITO/CREDITO candidatos
  */
 export function reconcileCardLiberations(params: {
@@ -160,22 +186,22 @@ export function reconcileCardLiberations(params: {
 
   const countSameBasis = (payId: number, cents: number, basis: ValueBasis) => {
     let n = 0;
-    for (const p of poolPays.values()) {
+    for (const p of Array.from(poolPays.values())) {
       if (p.paymentId !== payId && basisCents(p, basis) === cents) n++;
     }
     return n;
   };
 
-  const sorted = [...poolLines.values()].sort((a, b) => b.amountCents - a.amountCents);
+  const sorted = Array.from(poolLines.values()).sort((a, b) => b.amountCents - a.amountCents);
 
-  // Passada 1 — 1:1 por liquido / bruto / maquininha
+  // Passada 1 — 1:1 por maquininha / bruto / líquido (valor é âncora; sem nome)
   for (const line of sorted) {
     if (!poolLines.has(line.id)) continue;
 
     type Scored = { pay: PdvCardPayment; score: number; basis: ValueBasis };
     const scored: Scored[] = [];
-    for (const basis of ["liquido", "bruto", "maquininha"] as ValueBasis[]) {
-      for (const pay of poolPays.values()) {
+    for (const basis of BASIS_ORDER) {
+      for (const pay of Array.from(poolPays.values())) {
         const sc = scoreCard1to1(
           line,
           pay,
@@ -196,7 +222,7 @@ export function reconcileCardLiberations(params: {
       const prev = bestByPay.get(s.pay.paymentId);
       if (!prev || s.score > prev.score) bestByPay.set(s.pay.paymentId, s);
     }
-    const unique = [...bestByPay.values()].sort((a, b) => b.score - a.score);
+    const unique = Array.from(bestByPay.values()).sort((a, b) => b.score - a.score);
     const top = unique[0];
     const tied = unique.filter((s) => s.score === top.score);
 
@@ -205,7 +231,7 @@ export function reconcileCardLiberations(params: {
         kind: "card_1:1",
         confidence: confidenceFor(top.score),
         score: top.score,
-        notes: `Liberação × ${top.pay.formaPagamento} (base ${top.basis})`,
+        notes: `Liberação × ${top.pay.formaPagamento} (base ${top.basis}; taxa PDV ${top.pay.taxaCents / 100})`,
         extract: [line],
         payment: cardPaymentDto(top.pay, {
           matchBasis: top.basis,
@@ -231,17 +257,16 @@ export function reconcileCardLiberations(params: {
     }
   }
 
-  // Passada 2 — lote: soma de liquidos = liberação
-  for (const line of [...poolLines.values()].sort((a, b) => b.amountCents - a.amountCents)) {
+  // Passada 2 — lote: soma (maquininha → bruto → líquido) = liberação
+  for (const line of Array.from(poolLines.values()).sort((a, b) => b.amountCents - a.amountCents)) {
     if (!poolLines.has(line.id)) continue;
     const liberacaoAt = new Date(line.datetimeIso);
 
-    const cands = [...poolPays.values()].filter((p) =>
+    const cands = Array.from(poolPays.values()).filter((p) =>
       withinCardWindow(liberacaoAt, p.pedidoCreatedAt, tol)
     );
     if (cands.length < 2) continue;
 
-    // Limita DP a 18 pagamentos mais próximos da data da liberação
     const nearest = [...cands]
       .sort(
         (a, b) =>
@@ -250,11 +275,19 @@ export function reconcileCardLiberations(params: {
       )
       .slice(0, 18);
 
-    const subset = findSubsetSum(
-      nearest.map((p) => ({ id: p.paymentId, cents: p.valorLiquidoCents })),
-      line.amountCents
-    );
-    if (!subset || subset.length < 2) continue;
+    let subset: number[] | null = null;
+    let loteBasis: ValueBasis | null = null;
+    for (const basis of BASIS_ORDER) {
+      subset = findSubsetSum(
+        nearest.map((p) => ({ id: p.paymentId, cents: basisCents(p, basis) })),
+        line.amountCents
+      );
+      if (subset && subset.length >= 2) {
+        loteBasis = basis;
+        break;
+      }
+    }
+    if (!subset || !loteBasis || subset.length < 2) continue;
 
     const pays = subset.map((id) => poolPays.get(id)!).filter(Boolean);
     if (pays.length < 2) continue;
@@ -263,29 +296,32 @@ export function reconcileCardLiberations(params: {
       kind: "card_lote",
       confidence: "medium",
       score: 65,
-      notes: `Liberação = soma de ${pays.length} cartões (líquido): ${pays
+      notes: `Liberação = soma de ${pays.length} cartões (${loteBasis}): ${pays
         .map((p) => p.pedidoId)
         .join(", ")}`,
       extract: [line],
       payment: cardPaymentDto(pays[0], {
-        matchBasis: "lote_liquido",
+        matchBasis: `lote_${loteBasis}`,
         displayCents: line.amountCents,
       }),
       relatedPayments: pays.slice(1).map((p) =>
-        cardPaymentDto(p, { matchBasis: "lote_liquido", displayCents: p.valorLiquidoCents })
+        cardPaymentDto(p, {
+          matchBasis: `lote_${loteBasis}`,
+          displayCents: basisCents(p, loteBasis!),
+        })
       ),
     });
     poolLines.delete(line.id);
     for (const p of pays) poolPays.delete(p.paymentId);
   }
 
-  const onlyExtract = [...poolLines.values()].sort((a, b) =>
+  const onlyExtract = Array.from(poolLines.values()).sort((a, b) =>
     a.datetimeIso.localeCompare(b.datetimeIso)
   );
-  const onlyPdv = [...poolPays.values()].map((p) => ({
+  const onlyPdv = Array.from(poolPays.values()).map((p) => ({
     pedidoId: p.pedidoId,
     paymentId: p.paymentId,
-    valorCents: p.valorLiquidoCents,
+    valorCents: p.valorMaquininhaCents || p.valorCents,
     clienteNome: p.clienteNome,
     nomePix: p.nomePix,
     obsPagamento: p.obsPagamento ?? null,

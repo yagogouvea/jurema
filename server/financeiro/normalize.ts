@@ -95,6 +95,39 @@ export function bestNameScore(
   return best;
 }
 
+/**
+ * "Quem pagou" é o sinal nominal principal. O cliente fica como fallback,
+ * pois o titular da conta/cartão pode ser outra pessoa.
+ */
+export function nameMatchSignals(
+  extractName: string,
+  nomePix: string | null | undefined,
+  clienteNome: string | null | undefined
+): {
+  payerScore: number;
+  customerScore: number;
+  bestScore: number;
+  basis: "quem_pagou" | "cliente" | "sem_nome";
+} {
+  let payerScore = 0;
+  for (const part of splitPayerNames(nomePix)) {
+    payerScore = Math.max(payerScore, nameSimilarity(extractName, part));
+  }
+  const customerScore = nameSimilarity(extractName, clienteNome || "");
+  const bestScore = Math.max(payerScore, customerScore);
+  return {
+    payerScore,
+    customerScore,
+    bestScore,
+    basis:
+      bestScore === 0
+        ? "sem_nome"
+        : payerScore >= customerScore
+          ? "quem_pagou"
+          : "cliente",
+  };
+}
+
 export function formatCentsBRL(cents: number): string {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }

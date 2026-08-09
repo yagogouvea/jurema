@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { parseInfinitePayText } from "./infinitePayParser";
 import { ensurePeriodFromLines } from "./parseExtrato";
 import { reconcileExtractToPayments, scoreMatch, withinWindow } from "./matchReconcile";
-import { bestNameScore, normalizeName, parseBrlAmountToCents, toCents } from "./normalize";
+import {
+  bestNameScore,
+  nameMatchSignals,
+  normalizeName,
+  parseBrlAmountToCents,
+  toCents,
+} from "./normalize";
 import type { ExtractLine, PdvPixPayment } from "./types";
 import { DEFAULT_TOLERANCE } from "./types";
 
@@ -85,6 +91,16 @@ describe("normalize", () => {
     const multi = "M&M Store, Olympia Store e Flavio Silva";
     expect(bestNameScore("FLAVIO SILVA", multi, null)).toBeGreaterThanOrEqual(0.55);
     expect(bestNameScore("OLYMPIA STORE", multi, null)).toBeGreaterThanOrEqual(0.55);
+  });
+
+  it("prioriza quem pagou e mantém o cliente como fallback", () => {
+    const payer = nameMatchSignals("JOAO DA SILVA", "João da Silva", "Maria Souza");
+    expect(payer.basis).toBe("quem_pagou");
+    expect(payer.payerScore).toBe(1);
+
+    const customer = nameMatchSignals("MARIA SOUZA", "João da Silva", "Maria Souza");
+    expect(customer.basis).toBe("cliente");
+    expect(customer.customerScore).toBe(1);
   });
 });
 
