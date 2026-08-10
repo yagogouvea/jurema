@@ -400,6 +400,18 @@ export async function seedPdvData(): Promise<void> {
       console.log("[PDV Seed] notif_pedido_telefone criado com os dois números padrão.");
     }
 
+    const RESUMO_DIARIO_DEFAULT = "5511981693476";
+    const [resumoRows] = await connection.execute(
+      "SELECT value FROM pdv_config WHERE `key` = 'notif_resumo_diario_telefone' LIMIT 1"
+    );
+    if ((resumoRows as { value?: string }[]).length === 0) {
+      await connection.execute(
+        "INSERT INTO pdv_config (`key`, value) VALUES ('notif_resumo_diario_telefone', ?)",
+        [RESUMO_DIARIO_DEFAULT]
+      );
+      console.log("[PDV Seed] notif_resumo_diario_telefone criado (resumo diário 17h).");
+    }
+
     await connection.end();
   } catch (error) {
     console.error("[PDV Seed] Error:", error);

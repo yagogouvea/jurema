@@ -325,6 +325,23 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/wa-resumo-diario", async (req, res) => {
+    const expected = process.env.SHEETS_WEBHOOK_SECRET || "jurema-pdv-2024";
+    const provided =
+      String(req.headers["x-webhook-secret"] ?? req.query.secret ?? req.body?.secret ?? "");
+    if (provided !== expected) {
+      return res.status(403).json({ ok: false, error: "Unauthorized" });
+    }
+    try {
+      const dia = String(req.query.dia ?? req.body?.dia ?? "").slice(0, 10) || undefined;
+      const { sendDailySalesSummaryWhatsApp } = await import("../pdvDailySummary");
+      const result = await sendDailySalesSummaryWhatsApp(dia);
+      res.json({ ok: result.ok, ...result });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? String(e) });
+    }
+  });
+
   app.post("/api/admin/wa-flush-pedidos", async (req, res) => {
     const expected = process.env.SHEETS_WEBHOOK_SECRET || "jurema-pdv-2024";
     const provided =
@@ -389,6 +406,7 @@ async function startServer() {
     startProductSyncScheduler();
 
     startOrderNotificationBacklogScheduler();
+    startDailySalesSummaryScheduler();
   });
 }
 
@@ -429,6 +447,64 @@ function startOrderNotificationBacklogScheduler() {
  * - Intervalo via PDV_SYNC_INTERVAL_MIN (padrão 15 min). 0 = desliga.
  * - Lock simples para não sobrepor execuções.
  */
+/**
+ * Resumo de vendas via WhatsApp (seg–sáb, 17h SP).
+ * PDV_DAILY_SUMMARY=0 desliga. PDV_DAILY_SUMMARY_HOUR altera o horário (padrão 17).
+ */
+function startDailySalesSummaryScheduler() {
+  if (process.env.PDV_DAILY_SUMMARY === "0") {
+    console.log("[pdvDailySummary] Agendador desativado (PDV_DAILY_SUMMARY=0).");
+    return;
+  }
+  const hour = parseInt(process.env.PDV_DAILY_SUMMARY_HOUR || "17", 10);
+  if (!Number.isFinite(hour) || hour < 0 || hour > 23) {
+    console.warn("[pdvDailySummary] PDV_DAILY_SUMMARY_HOUR inválido — usando 17.");
+  }
+  const targetHour = Number.isFinite(hour) && hour >= 0 && hour <= 23 ? hour : 17;
+
+  let lastSentYmd = "";
+  let running = false;
+
+  const tick = async () => {
+    const now = new Date();
+    const spParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Sao_Paulo",
+      weekday: "short",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: false,
+    }).formatToParts(now);
+    const weekday = spParts.find((p) => p.type === "weekday")?.value || "";
+    const spHour = parseInt(spParts.find((p) => p.type === "hour")?.value || "0", 10);
+    const spMinute = parseInt(spParts.find((p) => p.type === "minute")?.value || "0", 10);
+    if (weekday === "Sun") return;
+    if (spHour !== targetHour || spMinute !== 0) return;
+
+    const dia = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+    if (lastSentYmd === dia) return;
+    if (running) return;
+
+    running = true;
+    try {
+      const { sendDailySalesSummaryWhatsApp } = await import("../pdvDailySummary");
+      const result = await sendDailySalesSummaryWhatsApp(dia);
+      if (result.ok) lastSentYmd = dia;
+    } catch (err) {
+      console.error("[pdvDailySummary] Erro no envio agendado:", err);
+    } finally {
+      running = false;
+    }
+  };
+
+  setInterval(() => void tick(), 60_000);
+  console.log(`[pdvDailySummary] Agendador ativo — seg–sáb às ${targetHour}:00 (SP).`);
+}
+
 function startProductSyncScheduler() {
   if (!process.env.GOOGLE_SHEETS_API_KEY) {
     console.warn("[AutoSync] GOOGLE_SHEETS_API_KEY ausente — agendador desativado.");
