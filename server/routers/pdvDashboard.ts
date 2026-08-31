@@ -21,6 +21,7 @@ import {
   spLocalDateTimeExpr,
 } from "../pdvMysql";
 import { notifyCashFlowViaWhatsApp } from "../pdvWaNotify";
+import { buildCashFlowExcel } from "../pdv/cashFlowExcel";
 
 async function getDb() {
   return createPdvMysqlConnection();
@@ -809,6 +810,98 @@ export const pdvDashboardRouter = router({
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     }
   }),
+
+  /** Gera Excel (.xlsx) do fluxo de caixa no período (download local, não vai para o Google). */
+  exportCashFlowExcel: publicProcedure
+    .input(
+      z.object({
+        startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const seller = await requirePdvAdmin(ctx);
+      if (input.startDate > input.endDate) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Data inicial maior que a final" });
+      }
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      try {
+        const dayExpr = `DATE(${spLocalDateTimeExpr("createdAt")})`;
+        const dtExpr = `COALESCE(CONVERT_TZ(createdAt, '+00:00', '-03:00'), DATE_ADD(createdAt, INTERVAL 3 HOUR))`;
+        const [entryRows] = await db.execute(
+          `SELECT id, tipo, descricao, valor, usuario, createdAt,
+                  DATE_FORMAT(${dtExpr}, '%Y-%m-%d') AS dia,
+                  DATE_FORMAT(${dtExpr}, '%H:%i:%s') AS hora
+           FROM pdv_cash_flow
+           WHERE ${dayExpr} >= ? AND ${dayExpr} <= ?
+           ORDER BY createdAt ASC, id ASC`,
+          [input.startDate, input.endDate]
+        );
+        const [antesRows] = await db.execute(
+          `SELECT COALESCE(SUM(CASE WHEN tipo = 'SUPRIMENTO' THEN valor ELSE -valor END), 0) AS saldo
+           FROM pdv_cash_flow
+           WHERE ${dayExpr} < ?`,
+          [input.startDate]
+        );
+        const [geralRows] = await db.execute(
+          `SELECT COALESCE(SUM(CASE WHEN tipo = 'SUPRIMENTO' THEN valor ELSE -valor END), 0) AS saldo
+           FROM pdv_cash_flow`
+        );
+        const [closureRows] = await db.execute(
+          `SELECT dia, saldoSistema, valorContado, diferenca, justificativa, usuario
+           FROM pdv_cash_closures
+           WHERE dia >= ? AND dia <= ?
+           ORDER BY dia ASC`,
+          [input.startDate, input.endDate]
+        );
+        await db.end();
+
+        const entries = (entryRows as any[]).map((r) => ({
+          id: Number(r.id),
+          tipo: r.tipo as "SUPRIMENTO" | "SANGRIA",
+          descricao: String(r.descricao || ""),
+          valor: parseFloat(r.valor),
+          usuario: r.usuario ? String(r.usuario) : null,
+          createdAt: r.createdAt,
+          dia: String(r.dia || "").slice(0, 10),
+          hora: String(r.hora || ""),
+        }));
+        const closures = (closureRows as any[]).map((c) => ({
+          dia:
+            c.dia instanceof Date
+              ? c.dia.toISOString().slice(0, 10)
+              : String(c.dia || "").slice(0, 10),
+          saldoSistema: parseFloat(c.saldoSistema),
+          valorContado: parseFloat(c.valorContado),
+          diferenca: parseFloat(c.diferenca),
+          justificativa: c.justificativa ? String(c.justificativa) : null,
+          usuario: c.usuario ? String(c.usuario) : null,
+        }));
+
+        const buf = await buildCashFlowExcel({
+          startDate: input.startDate,
+          endDate: input.endDate,
+          saldoAnterior: parseFloat((antesRows as any[])[0]?.saldo || "0") || 0,
+          saldoGeral: parseFloat((geralRows as any[])[0]?.saldo || "0") || 0,
+          entries,
+          closures,
+          geradoPor: seller.name,
+        });
+
+        return {
+          fileName: `fluxo-caixa-${input.startDate}_${input.endDate}.xlsx`,
+          mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          base64: buf.toString("base64"),
+          count: entries.length,
+        };
+      } catch (err) {
+        await db.end().catch(() => {});
+        if (err instanceof TRPCError) throw err;
+        console.error("[PDV Dashboard] exportCashFlowExcel:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao gerar o Excel" });
+      }
+    }),
 
   /** Exporta TODOS os pedidos fechados para a aba VENDAS_CAIXA da planilha */
   syncSalesToSheet: publicProcedure.mutation(async ({ ctx }) => {

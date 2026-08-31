@@ -10,7 +10,7 @@ import {
 import {
   TrendingUp, ShoppingBag, Users, DollarSign, Plus, Minus,
   Target, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Box, ChevronRight,
-  Lock
+  Lock, Download
 } from "lucide-react";
 import { toast } from "sonner";
 import { firstOfMonthYmdSaoPaulo, todayYmdSaoPaulo } from "@shared/spCalendar";
@@ -90,7 +90,26 @@ export default function PdvDashboard() {
   });
 
   const syncCashFlowToSheetMutation = trpc.pdvDashboard.syncCashFlowToSheet.useMutation({
-    onSuccess: (res) => toast.success(`${res.count} movimentações exportadas para a planilha`),
+    onSuccess: (res) =>
+      toast.success(`${res.count} movimentações enviadas à planilha Google (aba FLUXO_CAIXA)`),
+    onError: (err) => toast.error(err.message),
+  });
+
+  const exportCashExcelMutation = trpc.pdvDashboard.exportCashFlowExcel.useMutation({
+    onSuccess: (res) => {
+      const bytes = Uint8Array.from(atob(res.base64), (char) => char.charCodeAt(0));
+      const url = URL.createObjectURL(
+        new Blob([bytes], {
+          type: res.mimeType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        })
+      );
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`${res.count} movimentações baixadas no Excel`);
+    },
     onError: (err) => toast.error(err.message),
   });
 
@@ -670,9 +689,32 @@ export default function PdvDashboard() {
               </button>
               <div className="flex-1" />
               <button
+                onClick={() => {
+                  if (!startDate || !endDate) {
+                    toast.error("Selecione o período no topo do dashboard");
+                    return;
+                  }
+                  if (startDate > endDate) {
+                    toast.error("A data inicial não pode ser maior que a final");
+                    return;
+                  }
+                  exportCashExcelMutation.mutate({ startDate, endDate });
+                }}
+                disabled={exportCashExcelMutation.isPending}
+                title="Baixa um arquivo Excel no computador, com o período escolhido no topo"
+                className="bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+              >
+                {exportCashExcelMutation.isPending ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                Baixar Excel
+              </button>
+              <button
                 onClick={() => syncCashFlowFromSheetMutation.mutate()}
                 disabled={syncCashFlowFromSheetMutation.isPending}
-                title="Importar movimentações novas da planilha para o sistema"
+                title="Importar movimentações novas da planilha Google para o sistema"
                 className="bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${syncCashFlowFromSheetMutation.isPending ? 'animate-spin' : ''}`} />
@@ -681,11 +723,11 @@ export default function PdvDashboard() {
               <button
                 onClick={() => syncCashFlowToSheetMutation.mutate()}
                 disabled={syncCashFlowToSheetMutation.isPending}
-                title="Exportar todo o histórico de suprimentos/sangrias para a planilha"
+                title="Envia o histórico para a aba FLUXO_CAIXA da planilha Google (não baixa arquivo)"
                 className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${syncCashFlowToSheetMutation.isPending ? 'animate-spin' : ''}`} />
-                Exportar Planilha
+                Enviar à planilha
               </button>
               <button
                 onClick={() => syncSalesToSheetMutation.mutate()}
