@@ -1,11 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import {
   FileText, Download, Calendar, Filter, TrendingUp, Package, Wallet,
   Image as ImageIcon, Loader2, Truck, PiggyBank, Mail, Receipt, Search,
-  DollarSign, ShoppingBag, BarChart3, Share2
+  DollarSign, ShoppingBag, BarChart3, Share2, Boxes
 } from "lucide-react";
 import PdvLayout from "./PdvLayout";
 import {
@@ -403,6 +403,155 @@ export default function PdvRelatorio() {
       printWindow.print();
     } finally {
       setPrintingSales(false);
+    }
+  };
+
+  // ── Relatório por Produto (admin) ──────────────────────────────────
+  type ProductSel =
+    | { tipo: "sku"; codigo: string; label: string }
+    | { tipo: "familia"; time: string; modelo: string; linha?: string | null; label: string };
+
+  const [prodStart, setProdStart] = useState(() => firstOfMonthYmdSaoPaulo());
+  const [prodEnd, setProdEnd] = useState(() => todayYmdSaoPaulo());
+  const [prodQuick, setProdQuick] = useState<SalesQuickKey | "custom">("mes");
+  const [prodSearch, setProdSearch] = useState("");
+  const [prodSearchDebounced, setProdSearchDebounced] = useState("");
+  const [prodSelected, setProdSelected] = useState<ProductSel | null>(null);
+  const [showProdPreview, setShowProdPreview] = useState(false);
+  const [printingProd, setPrintingProd] = useState(false);
+  const [showProdDropdown, setShowProdDropdown] = useState(false);
+  const prodPrintRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setProdSearchDebounced(prodSearch.trim()), 280);
+    return () => clearTimeout(t);
+  }, [prodSearch]);
+
+  const { data: prodSearchData, isFetching: prodSearching } = trpc.pdvRelatorio.searchProducts.useQuery(
+    { q: prodSearchDebounced },
+    { enabled: isAdmin && prodSearchDebounced.length >= 1, staleTime: 20_000 }
+  );
+
+  const prodQueryInput =
+    prodSelected?.tipo === "sku"
+      ? {
+          startDate: prodStart,
+          endDate: prodEnd,
+          modo: "sku" as const,
+          codigo: prodSelected.codigo,
+        }
+      : prodSelected?.tipo === "familia"
+        ? {
+            startDate: prodStart,
+            endDate: prodEnd,
+            modo: "familia" as const,
+            time: prodSelected.time,
+            modelo: prodSelected.modelo,
+            linha: prodSelected.linha || undefined,
+          }
+        : null;
+
+  const {
+    data: prodReport,
+    isFetching: prodLoading,
+    isError: prodIsError,
+    error: prodError,
+  } = trpc.pdvRelatorio.byProduct.useQuery(prodQueryInput!, {
+    enabled: isAdmin && showProdPreview && !!prodQueryInput,
+    retry: false,
+  });
+
+  const applyProdQuick = (key: SalesQuickKey) => {
+    const { start, end } = salesQuickRange(key);
+    setProdStart(start);
+    setProdEnd(end);
+    setProdQuick(key);
+    setShowProdPreview(false);
+  };
+
+  const handleSelectProduct = (item: ProductSel) => {
+    setProdSelected(item);
+    setProdSearch(item.label);
+    setShowProdDropdown(false);
+    setShowProdPreview(false);
+  };
+
+  const handleGenerateProduct = () => {
+    if (!prodSelected) {
+      toast.error("Selecione um SKU ou uma família na busca");
+      return;
+    }
+    if (!prodStart || !prodEnd) {
+      toast.error("Selecione o período");
+      return;
+    }
+    if (prodStart > prodEnd) {
+      toast.error("A data inicial não pode ser maior que a final");
+      return;
+    }
+    setShowProdPreview(true);
+  };
+
+  const handlePrintProduct = async () => {
+    if (!prodPrintRef.current) return;
+    const printContent = prodPrintRef.current.innerHTML;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Popup bloqueado. Permita popups para imprimir.");
+      return;
+    }
+    setPrintingProd(true);
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Relatório por Produto — ${prodSelected?.label ?? ""}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; padding: 24px; font-size: 12px; }
+          .report-header { text-align: center; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 2px solid #16a34a; }
+          .report-header h1 { font-size: 20px; color: #16a34a; margin-bottom: 2px; }
+          .report-header .sub { font-size: 12px; color: #666; }
+          .section { margin-bottom: 18px; }
+          .section-title { font-size: 14px; font-weight: 700; color: #16a34a; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid #e5e7eb; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+          th { background: #f0fdf4; color: #166534; font-weight: 600; text-align: left; padding: 7px 9px; border: 1px solid #d1d5db; font-size: 11px; }
+          td { padding: 6px 9px; border: 1px solid #e5e7eb; font-size: 11px; }
+          tr:nth-child(even) td { background: #fafafa; }
+          tr.sofia-row td { background: #faf5ff !important; border-color: #e9d5ff; }
+          .sofia-badge { display: inline-block; background: #7c3aed; color: #fff; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: 4px; letter-spacing: 0.02em; }
+          .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 6px; }
+          .kpi { border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: 8px; padding: 10px 14px; }
+          .kpi.sofia { border-color: #e9d5ff; background: #faf5ff; }
+          .kpi .k { font-size: 11px; color: #666; }
+          .kpi .v { font-size: 18px; font-weight: 800; color: #16a34a; margin-top: 2px; }
+          .kpi.sofia .v { color: #7c3aed; }
+          .legend { font-size: 11px; color: #6b21a8; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
+          .footer { text-align: center; margin-top: 28px; padding-top: 12px; border-top: 1px solid #e5e7eb; color: #999; font-size: 10px; }
+          @media print { body { padding: 12px; } table { page-break-inside: auto; } tr { page-break-inside: avoid; } }
+        </style>
+      </head>
+      <body>
+        ${printContent}
+        <div class="footer">
+          Relatório gerado em ${new Date().toLocaleString("pt-BR")} — ${cfgNomeLoja?.value || "Jurema Sport"} PDV
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    try {
+      const win: any = printWindow;
+      if (win.document.readyState !== "complete") {
+        await new Promise<void>((resolve) => {
+          win.addEventListener("load", () => resolve(), { once: true });
+          setTimeout(resolve, 3000);
+        });
+      }
+      printWindow.focus();
+      printWindow.print();
+    } finally {
+      setPrintingProd(false);
     }
   };
 
@@ -896,6 +1045,235 @@ export default function PdvRelatorio() {
                   orders={salesOrders?.orders || []}
                   totalOrders={salesOrders?.total ?? 0}
                   periodo={periodoLabel(salesStart, salesEnd)}
+                  storeName={cfgNomeLoja?.value || "Jurema Sport"}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Relatório por Produto */}
+          <div className="flex items-center gap-3 mt-10 mb-4">
+            <div className="w-10 h-10 bg-amber-700 rounded-xl flex items-center justify-center shadow-lg shadow-amber-700/20">
+              <Boxes className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">Relatório por Produto</h2>
+              <p className="text-gray-400 text-sm">
+                Busque por SKU, nome ou família (time + modelo). Itens Sofia entram sinalizados em roxo.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-6">
+            <div className="flex flex-wrap gap-2 mb-4">
+              {SALES_QUICK.map((q) => (
+                <button
+                  key={q.key}
+                  onClick={() => applyProdQuick(q.key)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                    prodQuick === q.key
+                      ? "bg-amber-700 border-amber-600 text-white"
+                      : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-white"
+                  }`}
+                >
+                  {q.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mb-4 relative">
+              <label className="text-gray-400 text-xs mb-1 block">Produto (SKU, nome ou família)</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <input
+                  type="text"
+                  value={prodSearch}
+                  onChange={(e) => {
+                    setProdSearch(e.target.value);
+                    setProdSelected(null);
+                    setShowProdPreview(false);
+                    setShowProdDropdown(true);
+                  }}
+                  onFocus={() => setShowProdDropdown(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleGenerateProduct();
+                    }
+                    if (e.key === "Escape") setShowProdDropdown(false);
+                  }}
+                  placeholder="Ex: código, Flamengo, modelo…"
+                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg pl-10 pr-10 py-2.5 text-sm focus:border-amber-600 focus:ring-1 focus:ring-amber-600 outline-none"
+                  autoComplete="off"
+                />
+                {prodSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500 animate-spin" />
+                )}
+              </div>
+
+              {showProdDropdown && prodSearchDebounced.length >= 1 && (
+                <div className="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto bg-gray-950 border border-gray-700 rounded-xl shadow-xl">
+                  {(prodSearchData?.familias?.length ?? 0) > 0 && (
+                    <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-amber-500/80 font-semibold border-b border-gray-800">
+                      Famílias (todos os tamanhos)
+                    </div>
+                  )}
+                  {(prodSearchData?.familias || []).map((f) => (
+                    <button
+                      key={`fam-${f.time}-${f.modelo}`}
+                      type="button"
+                      onClick={() =>
+                        handleSelectProduct({
+                          tipo: "familia",
+                          time: f.time,
+                          modelo: f.modelo,
+                          linha: f.linha,
+                          label: f.label,
+                        })
+                      }
+                      className="w-full text-left px-3 py-2.5 hover:bg-amber-900/30 border-b border-gray-800/80"
+                    >
+                      <div className="text-sm text-white font-medium">{f.label}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {[f.descricao, f.linha].filter(Boolean).join(" · ") || "—"}
+                        {" · "}estoque {f.estoque}
+                      </div>
+                    </button>
+                  ))}
+                  {(prodSearchData?.skus?.length ?? 0) > 0 && (
+                    <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-gray-500 font-semibold border-b border-gray-800">
+                      SKUs / códigos
+                    </div>
+                  )}
+                  {(prodSearchData?.skus || []).map((s) => (
+                    <button
+                      key={`sku-${s.codigo}`}
+                      type="button"
+                      onClick={() =>
+                        handleSelectProduct({
+                          tipo: "sku",
+                          codigo: s.codigo,
+                          label: s.label,
+                        })
+                      }
+                      className="w-full text-left px-3 py-2.5 hover:bg-gray-800 border-b border-gray-800/80 last:border-0"
+                    >
+                      <div className="text-sm text-white font-medium">{s.label}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {[s.linha, s.tipoProduto].filter(Boolean).join(" · ") || "—"}
+                        {" · "}est. {s.estoque}
+                      </div>
+                    </button>
+                  ))}
+                  {!prodSearching &&
+                    (prodSearchData?.skus?.length ?? 0) === 0 &&
+                    (prodSearchData?.familias?.length ?? 0) === 0 && (
+                      <div className="px-3 py-4 text-sm text-gray-500 text-center">Nenhum produto encontrado</div>
+                    )}
+                </div>
+              )}
+
+              {prodSelected && (
+                <p className="text-amber-400/90 text-xs mt-2">
+                  Selecionado:{" "}
+                  <span className="font-semibold text-amber-300">{prodSelected.label}</span>
+                  {prodSelected.tipo === "familia" ? " (todos os tamanhos)" : " (SKU único)"}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <div>
+                <label className="text-gray-400 text-xs mb-1 block">Data Início</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                  <input
+                    type="date"
+                    value={prodStart}
+                    onChange={(e) => {
+                      setProdStart(e.target.value);
+                      setProdQuick("custom");
+                      setShowProdPreview(false);
+                    }}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg pl-10 pr-3 py-2.5 text-sm focus:border-amber-600 focus:ring-1 focus:ring-amber-600 outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-gray-400 text-xs mb-1 block">Data Fim</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                  <input
+                    type="date"
+                    value={prodEnd}
+                    onChange={(e) => {
+                      setProdEnd(e.target.value);
+                      setProdQuick("custom");
+                      setShowProdPreview(false);
+                    }}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg pl-10 pr-3 py-2.5 text-sm focus:border-amber-600 focus:ring-1 focus:ring-amber-600 outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 flex-wrap">
+              <button
+                onClick={handleGenerateProduct}
+                disabled={prodLoading}
+                className="flex items-center gap-2 bg-amber-700 hover:bg-amber-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {prodLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                Gerar Relatório
+              </button>
+              {showProdPreview && prodReport && !prodLoading && (
+                <button
+                  onClick={handlePrintProduct}
+                  disabled={printingProd}
+                  className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-60"
+                >
+                  {printingProd ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  {printingProd ? "Preparando PDF…" : "Imprimir / PDF"}
+                </button>
+              )}
+            </div>
+
+            {showProdPreview && prodIsError && (
+              <p className="text-red-400 text-sm mt-3">
+                {prodError?.data?.code === "NOT_FOUND"
+                  ? prodError.message
+                  : `Não foi possível gerar o relatório (${prodError?.message ?? "erro"}).`}
+              </p>
+            )}
+          </div>
+
+          {showProdPreview && prodLoading && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-12 flex items-center justify-center mb-6">
+              <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+              <span className="text-gray-400 ml-3">Gerando relatório do produto...</span>
+            </div>
+          )}
+
+          {showProdPreview && prodReport && !prodLoading && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-6">
+              <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+                <h2 className="text-white font-semibold text-sm">
+                  Preview — Produto · {periodoLabel(prodStart, prodEnd)}
+                </h2>
+                <button
+                  onClick={handlePrintProduct}
+                  disabled={printingProd}
+                  className="flex items-center gap-2 bg-amber-700 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60"
+                >
+                  {printingProd ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  {printingProd ? "Preparando PDF…" : "Imprimir / PDF"}
+                </button>
+              </div>
+
+              <div ref={prodPrintRef} className="bg-white rounded-xl p-6 text-gray-900">
+                <ProductReportContent
+                  data={prodReport}
+                  periodo={periodoLabel(prodStart, prodEnd)}
                   storeName={cfgNomeLoja?.value || "Jurema Sport"}
                 />
               </div>
@@ -1737,6 +2115,430 @@ function SalesReportContent({
             {totalOrders > orders.length && (
               <div style={{ fontSize: 10, color: "#999", marginTop: 4 }}>
                 Exibindo os primeiros {orders.length} de {totalOrders} pedidos.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Relatório por Produto (SKU / família) — preview e impressão
+// ============================================================
+function ProductReportContent({
+  data,
+  periodo,
+  storeName,
+}: {
+  data: any;
+  periodo: string;
+  storeName: string;
+}) {
+  const p = data?.produto ?? {};
+  const r = data?.resumo ?? {};
+  const titulo =
+    p.modo === "familia"
+      ? `Família: ${[p.time, p.modelo].filter(Boolean).join(" / ")}`
+      : `SKU ${p.codigo}`;
+  const subtitulo = [
+    p.descricao,
+    p.linha,
+    p.tamanho ? `Tam. ${p.tamanho}` : null,
+    p.modo === "familia" && Array.isArray(p.variantes)
+      ? `${p.variantes.length} tamanhos`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const fmtDia = (ymd: string) => {
+    if (!ymd) return "—";
+    const part = String(ymd).slice(0, 10).split("-");
+    return part.length === 3 ? `${part[2]}/${part[1]}/${part[0]}` : ymd;
+  };
+
+  const Kpi = ({
+    label,
+    value,
+    sofia,
+  }: {
+    label: string;
+    value: string;
+    sofia?: boolean;
+  }) => (
+    <div
+      className={`kpi${sofia ? " sofia" : ""}`}
+      style={{
+        border: sofia ? "1px solid #e9d5ff" : "1px solid #bbf7d0",
+        background: sofia ? "#faf5ff" : "#f0fdf4",
+        borderRadius: 8,
+        padding: "10px 14px",
+      }}
+    >
+      <div className="k" style={{ fontSize: 11, color: "#666" }}>
+        {label}
+      </div>
+      <div
+        className="v"
+        style={{
+          fontSize: 18,
+          fontWeight: 800,
+          color: sofia ? "#7c3aed" : "#16a34a",
+          marginTop: 2,
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div
+        className="report-header"
+        style={{
+          textAlign: "center",
+          marginBottom: 20,
+          paddingBottom: 14,
+          borderBottom: "2px solid #16a34a",
+        }}
+      >
+        <h1 style={{ fontSize: 20, color: "#16a34a", marginBottom: 2, fontWeight: 700 }}>
+          {storeName} — Relatório por Produto
+        </h1>
+        <div className="sub" style={{ fontSize: 13, color: "#333", fontWeight: 600, marginTop: 4 }}>
+          {titulo}
+        </div>
+        {subtitulo && (
+          <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>{subtitulo}</div>
+        )}
+        <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>Período: {periodo}</div>
+        <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
+          Estoque atual: {Math.round(toNum(p.estoque))}
+          {p.precoAtacado != null ? ` · Atacado ${formatCurrency(toNum(p.precoAtacado))}` : ""}
+          {p.precoVarejo != null ? ` · Varejo ${formatCurrency(toNum(p.precoVarejo))}` : ""}
+        </div>
+      </div>
+
+      {(toNum(r.pecasSofia) > 0 || toNum(r.faturamentoSofia) > 0) && (
+        <div
+          className="legend"
+          style={{
+            fontSize: 11,
+            color: "#6b21a8",
+            background: "#faf5ff",
+            border: "1px solid #e9d5ff",
+            borderRadius: 6,
+            padding: "8px 12px",
+            marginBottom: 12,
+          }}
+        >
+          Linhas em roxo / badge <strong>SOFIA</strong> são itens Sofia — não confundir com vendas
+          normais do estoque.
+        </div>
+      )}
+
+      <div
+        className="kpis"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        <Kpi label="Pedidos" value={String(Math.round(toNum(r.pedidos)))} />
+        <Kpi label="Peças" value={String(Math.round(toNum(r.pecas)))} />
+        <Kpi label="Faturamento" value={formatCurrency(toNum(r.faturamento))} />
+        <Kpi label="Ticket / peça" value={formatCurrency(toNum(r.ticketPeca))} />
+        <Kpi
+          label="Peças normais"
+          value={`${Math.round(toNum(r.pecasNormais))} · ${formatCurrency(toNum(r.faturamentoNormal))}`}
+        />
+        <Kpi
+          label="Peças Sofia"
+          value={`${Math.round(toNum(r.pecasSofia))} · ${formatCurrency(toNum(r.faturamentoSofia))}`}
+          sofia
+        />
+      </div>
+
+      {Array.isArray(p.variantes) && p.variantes.length > 0 && (
+        <div className="section" style={{ marginBottom: 18 }}>
+          <div
+            className="section-title"
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#16a34a",
+              marginBottom: 8,
+              paddingBottom: 5,
+              borderBottom: "1px solid #e5e7eb",
+            }}
+          >
+            Variantes da família
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Código</th>
+                <th style={thStyle}>Tamanho</th>
+                <th style={thRight}>Estoque</th>
+                <th style={thStyle}>Ativo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.variantes.map((v: any, i: number) => (
+                <tr key={i}>
+                  <td style={tdStyle}>{v.codigo}</td>
+                  <td style={tdStyleCenter}>{v.tamanho || "—"}</td>
+                  <td style={tdRight}>{Math.round(toNum(v.estoque))}</td>
+                  <td style={tdStyleCenter}>{v.isActive ? "Sim" : "Não"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {(data.porVendedor?.length ?? 0) > 0 && (
+        <div className="section" style={{ marginBottom: 18 }}>
+          <div
+            className="section-title"
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#16a34a",
+              marginBottom: 8,
+              paddingBottom: 5,
+              borderBottom: "1px solid #e5e7eb",
+            }}
+          >
+            Por vendedor
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Vendedor</th>
+                <th style={thRight}>Pedidos</th>
+                <th style={thRight}>Peças</th>
+                <th style={thRight}>Sofia</th>
+                <th style={thRight}>Faturamento</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.porVendedor.map((s: any, i: number) => (
+                <tr key={i}>
+                  <td style={tdStyle}>{s.sellerName}</td>
+                  <td style={tdRight}>{Math.round(toNum(s.pedidos))}</td>
+                  <td style={tdRight}>{Math.round(toNum(s.pecas))}</td>
+                  <td style={{ ...tdRight, color: toNum(s.pecasSofia) > 0 ? "#7c3aed" : undefined }}>
+                    {Math.round(toNum(s.pecasSofia))}
+                  </td>
+                  <td style={tdRight}>{formatCurrency(toNum(s.faturamento))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 16,
+          marginBottom: 18,
+        }}
+      >
+        {(data.porCanal?.length ?? 0) > 0 && (
+          <div className="section">
+            <div
+              className="section-title"
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#16a34a",
+                marginBottom: 8,
+                paddingBottom: 5,
+                borderBottom: "1px solid #e5e7eb",
+              }}
+            >
+              Por canal
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Canal</th>
+                  <th style={thRight}>Peças</th>
+                  <th style={thRight}>Fat.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.porCanal.map((c: any, i: number) => (
+                  <tr key={i}>
+                    <td style={tdStyle}>{c.canal}</td>
+                    <td style={tdRight}>{Math.round(toNum(c.pecas))}</td>
+                    <td style={tdRight}>{formatCurrency(toNum(c.faturamento))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {(data.porRegime?.length ?? 0) > 0 && (
+          <div className="section">
+            <div
+              className="section-title"
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#16a34a",
+                marginBottom: 8,
+                paddingBottom: 5,
+                borderBottom: "1px solid #e5e7eb",
+              }}
+            >
+              Por regime
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Regime</th>
+                  <th style={thRight}>Peças</th>
+                  <th style={thRight}>Fat.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.porRegime.map((c: any, i: number) => (
+                  <tr key={i}>
+                    <td style={tdStyle}>{c.regime}</td>
+                    <td style={tdRight}>{Math.round(toNum(c.pecas))}</td>
+                    <td style={tdRight}>{formatCurrency(toNum(c.faturamento))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {(data.porDia?.length ?? 0) > 1 && (
+        <div className="section" style={{ marginBottom: 18 }}>
+          <div
+            className="section-title"
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#16a34a",
+              marginBottom: 8,
+              paddingBottom: 5,
+              borderBottom: "1px solid #e5e7eb",
+            }}
+          >
+            Por dia
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Dia</th>
+                <th style={thRight}>Peças</th>
+                <th style={thRight}>Sofia</th>
+                <th style={thRight}>Faturamento</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.porDia.map((d: any, i: number) => (
+                <tr key={i}>
+                  <td style={tdStyle}>{fmtDia(d.dia)}</td>
+                  <td style={tdRight}>{Math.round(toNum(d.pecas))}</td>
+                  <td style={{ ...tdRight, color: toNum(d.pecasSofia) > 0 ? "#7c3aed" : undefined }}>
+                    {Math.round(toNum(d.pecasSofia))}
+                  </td>
+                  <td style={tdRight}>{formatCurrency(toNum(d.faturamento))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="section" style={{ marginBottom: 8 }}>
+        <div
+          className="section-title"
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#16a34a",
+            marginBottom: 8,
+            paddingBottom: 5,
+            borderBottom: "1px solid #e5e7eb",
+          }}
+        >
+          Vendas no período ({data.vendas?.length ?? 0}
+          {data.vendasTruncadas ? "+" : ""})
+        </div>
+        {(data.vendas?.length ?? 0) === 0 ? (
+          <div style={{ fontSize: 11, color: "#888" }}>Nenhuma venda deste produto no período.</div>
+        ) : (
+          <>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Data</th>
+                  <th style={thStyle}>Pedido</th>
+                  <th style={thStyle}>SKU</th>
+                  <th style={thStyle}>Tam.</th>
+                  <th style={thRight}>Qtd</th>
+                  <th style={thStyle}>Vendedor</th>
+                  <th style={thStyle}>Canal</th>
+                  <th style={thRight}>Total</th>
+                  <th style={thStyle}>Tipo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.vendas.map((v: any, i: number) => {
+                  const sofia = !!v.isSofia;
+                  const rowBg = sofia ? "#faf5ff" : undefined;
+                  return (
+                    <tr key={i} className={sofia ? "sofia-row" : undefined}>
+                      <td style={{ ...tdStyle, background: rowBg }}>{fmtDia(v.dia)}</td>
+                      <td style={{ ...tdStyle, background: rowBg }}>{v.pedidoId}</td>
+                      <td style={{ ...tdStyle, background: rowBg }}>{v.codigo || "—"}</td>
+                      <td style={{ ...tdStyleCenter, background: rowBg }}>{v.tamanho || "—"}</td>
+                      <td style={{ ...tdRight, background: rowBg }}>{Math.round(toNum(v.quantidade))}</td>
+                      <td style={{ ...tdStyle, background: rowBg }}>{v.sellerName}</td>
+                      <td style={{ ...tdStyleCenter, background: rowBg }}>{v.canal}</td>
+                      <td style={{ ...tdRight, background: rowBg }}>{formatCurrency(toNum(v.totalItem))}</td>
+                      <td style={{ ...tdStyleCenter, background: rowBg }}>
+                        {sofia ? (
+                          <span
+                            className="sofia-badge"
+                            style={{
+                              display: "inline-block",
+                              background: "#7c3aed",
+                              color: "#fff",
+                              fontSize: 9,
+                              fontWeight: 700,
+                              padding: "1px 6px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            SOFIA
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 10, color: "#6b7280" }}>Normal</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {data.vendasTruncadas && (
+              <div style={{ fontSize: 10, color: "#999", marginTop: 4 }}>
+                Exibindo as primeiras 500 linhas de venda.
               </div>
             )}
           </>

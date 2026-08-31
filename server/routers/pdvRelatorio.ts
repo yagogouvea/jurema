@@ -339,6 +339,291 @@ async function fetchRelatorioData(db: Connection, startDate: string, endDate: st
   return result;
 }
 
+function rowNum(v: unknown): number {
+  if (v === null || v === undefined) return 0;
+  if (typeof v === "bigint") return Number(v);
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const n = parseFloat(String(v).trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Relatório por produto (SKU ou família time+modelo). Inclui Sofia com flag. */
+async function fetchProductReport(
+  db: Connection,
+  input: {
+    startDate: string;
+    endDate: string;
+    modo: "sku" | "familia";
+    codigo?: string;
+    time?: string;
+    modelo?: string;
+    linha?: string;
+  }
+) {
+  const dayCmp = orderDayDateExpr("o");
+  let productFilter = "";
+  const productParams: any[] = [];
+  let produtoMeta: any = null;
+  let codigosEscopo: string[] = [];
+
+  if (input.modo === "sku") {
+    const codigo = String(input.codigo || "").trim();
+    if (!codigo) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o código do produto" });
+    const [prodRows] = await db.execute(
+      `SELECT codigo, linha, modelo, time, descricao, tamanho, tipo, estoque,
+              precoAtacado, precoVarejo, custo, ptAtacado, ptVarejo, isActive
+       FROM pdv_products WHERE codigo = ? LIMIT 1`,
+      [codigo]
+    );
+    const p = (prodRows as any[])[0];
+    if (!p) throw new TRPCError({ code: "NOT_FOUND", message: `Produto "${codigo}" não encontrado` });
+    produtoMeta = {
+      modo: "sku" as const,
+      codigo: String(p.codigo),
+      linha: p.linha ? String(p.linha) : null,
+      modelo: p.modelo ? String(p.modelo) : null,
+      time: p.time ? String(p.time) : null,
+      descricao: p.descricao ? String(p.descricao) : null,
+      tamanho: p.tamanho ? String(p.tamanho) : null,
+      tipo: p.tipo ? String(p.tipo) : null,
+      estoque: rowNum(p.estoque),
+      precoAtacado: rowNum(p.precoAtacado),
+      precoVarejo: rowNum(p.precoVarejo),
+      custo: rowNum(p.custo),
+      ptAtacado: rowNum(p.ptAtacado),
+      ptVarejo: rowNum(p.ptVarejo),
+      isActive: !!p.isActive,
+    };
+    productFilter = " AND oi.codigo = ?";
+    productParams.push(codigo);
+    codigosEscopo = [codigo];
+  } else {
+    const time = String(input.time || "").trim();
+    const modelo = String(input.modelo || "").trim();
+    if (!time || !modelo) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Informe time e modelo da família" });
+    }
+    let q =
+      `SELECT codigo, linha, modelo, time, descricao, tamanho, tipo, estoque,
+              precoAtacado, precoVarejo, custo, ptAtacado, ptVarejo, isActive
+       FROM pdv_products
+       WHERE UPPER(TRIM(time)) = UPPER(?) AND UPPER(TRIM(modelo)) = UPPER(?)`;
+    const qp: any[] = [time, modelo];
+    if (input.linha?.trim()) {
+      q += " AND UPPER(TRIM(linha)) = UPPER(?)";
+      qp.push(input.linha.trim());
+    }
+    q += " ORDER BY tamanho ASC, codigo ASC";
+    const [famRows] = await db.execute(q, qp);
+    const produtos = famRows as any[];
+    if (!produtos.length) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Nenhum produto nessa família" });
+    }
+    codigosEscopo = produtos.map((p) => String(p.codigo));
+    produtoMeta = {
+      modo: "familia" as const,
+      codigo: null,
+      linha: input.linha?.trim() || (produtos[0].linha ? String(produtos[0].linha) : null),
+      modelo,
+      time,
+      descricao: produtos[0].descricao ? String(produtos[0].descricao) : null,
+      tamanho: null,
+      tipo: produtos[0].tipo ? String(produtos[0].tipo) : null,
+      estoque: produtos.reduce((s, p) => s + rowNum(p.estoque), 0),
+      precoAtacado: rowNum(produtos[0].precoAtacado),
+      precoVarejo: rowNum(produtos[0].precoVarejo),
+      custo: rowNum(produtos[0].custo),
+      ptAtacado: rowNum(produtos[0].ptAtacado),
+      ptVarejo: rowNum(produtos[0].ptVarejo),
+      isActive: produtos.some((p) => !!p.isActive),
+      variantes: produtos.map((p) => ({
+        codigo: String(p.codigo),
+        tamanho: p.tamanho ? String(p.tamanho) : null,
+        estoque: rowNum(p.estoque),
+        isActive: !!p.isActive,
+      })),
+    };
+    const placeholders = codigosEscopo.map(() => "?").join(",");
+    productFilter = ` AND oi.codigo IN (${placeholders})`;
+    productParams.push(...codigosEscopo);
+  }
+
+  const baseWhere = `o.status <> 'CANCELADO' AND ${dayCmp} >= ? AND ${dayCmp} <= ?${productFilter}`;
+  const baseParams = [input.startDate, input.endDate, ...productParams];
+
+  const [summaryRows] = await db.execute(
+    `SELECT
+       COUNT(DISTINCT o.pedidoId) AS pedidos,
+       COALESCE(SUM(oi.quantidade), 0) AS pecas,
+       COALESCE(SUM(oi.totalItem), 0) AS faturamento,
+       COALESCE(SUM(CASE WHEN COALESCE(oi.isSofia, 0) = 1 THEN oi.quantidade ELSE 0 END), 0) AS pecasSofia,
+       COALESCE(SUM(CASE WHEN COALESCE(oi.isSofia, 0) = 1 THEN oi.totalItem ELSE 0 END), 0) AS faturamentoSofia,
+       COALESCE(SUM(CASE WHEN COALESCE(oi.isSofia, 0) = 0 THEN oi.quantidade ELSE 0 END), 0) AS pecasNormais,
+       COALESCE(SUM(CASE WHEN COALESCE(oi.isSofia, 0) = 0 THEN oi.totalItem ELSE 0 END), 0) AS faturamentoNormal
+     FROM pdv_order_items oi
+     INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+     WHERE ${baseWhere}`,
+    baseParams
+  );
+  const sum = (summaryRows as any[])[0] || {};
+
+  const [sellerRows] = await db.execute(
+    `SELECT
+       o.sellerName,
+       COUNT(DISTINCT o.pedidoId) AS pedidos,
+       COALESCE(SUM(oi.quantidade), 0) AS pecas,
+       COALESCE(SUM(oi.totalItem), 0) AS faturamento,
+       COALESCE(SUM(CASE WHEN COALESCE(oi.isSofia, 0) = 1 THEN oi.quantidade ELSE 0 END), 0) AS pecasSofia
+     FROM pdv_order_items oi
+     INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+     WHERE ${baseWhere}
+     GROUP BY o.sellerId, o.sellerName
+     ORDER BY faturamento DESC`,
+    baseParams
+  );
+
+  const [canalRows] = await db.execute(
+    `SELECT
+       o.canal,
+       COUNT(DISTINCT o.pedidoId) AS pedidos,
+       COALESCE(SUM(oi.quantidade), 0) AS pecas,
+       COALESCE(SUM(oi.totalItem), 0) AS faturamento
+     FROM pdv_order_items oi
+     INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+     WHERE ${baseWhere}
+     GROUP BY o.canal
+     ORDER BY faturamento DESC`,
+    baseParams
+  );
+
+  const [regimeRows] = await db.execute(
+    `SELECT
+       o.regime,
+       COUNT(DISTINCT o.pedidoId) AS pedidos,
+       COALESCE(SUM(oi.quantidade), 0) AS pecas,
+       COALESCE(SUM(oi.totalItem), 0) AS faturamento
+     FROM pdv_order_items oi
+     INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+     WHERE ${baseWhere}
+     GROUP BY o.regime
+     ORDER BY faturamento DESC`,
+    baseParams
+  );
+
+  const [dayRows] = await db.execute(
+    `SELECT
+       ${dayCmp} AS dia,
+       COALESCE(SUM(oi.quantidade), 0) AS pecas,
+       COALESCE(SUM(oi.totalItem), 0) AS faturamento,
+       COALESCE(SUM(CASE WHEN COALESCE(oi.isSofia, 0) = 1 THEN oi.quantidade ELSE 0 END), 0) AS pecasSofia
+     FROM pdv_order_items oi
+     INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+     WHERE ${baseWhere}
+     GROUP BY ${dayCmp}
+     ORDER BY dia ASC`,
+    baseParams
+  );
+
+  const [saleRows] = await db.execute(
+    `SELECT
+       o.pedidoId,
+       o.createdAt,
+       ${dayCmp} AS dia,
+       o.clienteNome,
+       o.sellerName,
+       o.canal,
+       o.regime,
+       o.status,
+       oi.codigo,
+       oi.tamanho,
+       oi.quantidade,
+       oi.precoUnitario,
+       oi.totalItem,
+       oi.descricao,
+       oi.time,
+       oi.modelo,
+       COALESCE(oi.isSofia, 0) AS isSofia
+     FROM pdv_order_items oi
+     INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+     WHERE ${baseWhere}
+     ORDER BY o.createdAt ASC, oi.id ASC
+     LIMIT 500`,
+    baseParams
+  );
+
+  const pecas = rowNum(sum.pecas);
+  const faturamento = rowNum(sum.faturamento);
+
+  return {
+    periodo: { startDate: input.startDate, endDate: input.endDate },
+    geradoEm: new Date().toISOString(),
+    produto: produtoMeta,
+    codigosEscopo,
+    resumo: {
+      pedidos: rowNum(sum.pedidos),
+      pecas,
+      faturamento,
+      ticketPeca: pecas > 0 ? faturamento / pecas : 0,
+      pecasNormais: rowNum(sum.pecasNormais),
+      faturamentoNormal: rowNum(sum.faturamentoNormal),
+      pecasSofia: rowNum(sum.pecasSofia),
+      faturamentoSofia: rowNum(sum.faturamentoSofia),
+    },
+    porVendedor: (sellerRows as any[]).map((r) => ({
+      sellerName: String(r.sellerName || "—"),
+      pedidos: rowNum(r.pedidos),
+      pecas: rowNum(r.pecas),
+      faturamento: rowNum(r.faturamento),
+      pecasSofia: rowNum(r.pecasSofia),
+    })),
+    porCanal: (canalRows as any[]).map((r) => ({
+      canal: String(r.canal || "—"),
+      pedidos: rowNum(r.pedidos),
+      pecas: rowNum(r.pecas),
+      faturamento: rowNum(r.faturamento),
+    })),
+    porRegime: (regimeRows as any[]).map((r) => ({
+      regime: String(r.regime || "—"),
+      pedidos: rowNum(r.pedidos),
+      pecas: rowNum(r.pecas),
+      faturamento: rowNum(r.faturamento),
+    })),
+    porDia: (dayRows as any[]).map((r) => ({
+      dia:
+        r.dia instanceof Date
+          ? r.dia.toISOString().slice(0, 10)
+          : String(r.dia ?? "").slice(0, 10),
+      pecas: rowNum(r.pecas),
+      faturamento: rowNum(r.faturamento),
+      pecasSofia: rowNum(r.pecasSofia),
+    })),
+    vendas: (saleRows as any[]).map((r) => ({
+      pedidoId: String(r.pedidoId),
+      createdAt:
+        r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt || ""),
+      dia:
+        r.dia instanceof Date
+          ? r.dia.toISOString().slice(0, 10)
+          : String(r.dia ?? "").slice(0, 10),
+      clienteNome: r.clienteNome ? String(r.clienteNome) : null,
+      sellerName: String(r.sellerName || "—"),
+      canal: String(r.canal || "—"),
+      regime: String(r.regime || "—"),
+      status: String(r.status || ""),
+      codigo: r.codigo ? String(r.codigo) : null,
+      tamanho: r.tamanho ? String(r.tamanho) : null,
+      quantidade: rowNum(r.quantidade),
+      precoUnitario: rowNum(r.precoUnitario),
+      totalItem: rowNum(r.totalItem),
+      descricao: r.descricao ? String(r.descricao) : null,
+      time: r.time ? String(r.time) : null,
+      modelo: r.modelo ? String(r.modelo) : null,
+      isSofia: Number(r.isSofia) === 1,
+    })),
+    vendasTruncadas: (saleRows as any[]).length >= 500,
+  };
+}
+
 export const pdvRelatorioRouter = router({
   // Buscar dados do relatório (para preview no frontend e geração de PDF)
   getData: publicProcedure
@@ -369,6 +654,122 @@ export const pdvRelatorioRouter = router({
         if (err instanceof TRPCError) throw err;
         console.error("[PDV Relatório] Error:", err);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao gerar relatório" });
+      }
+    }),
+
+  /** Autocomplete: SKU, nome (time/descrição/modelo) e famílias (time+modelo). */
+  searchProducts: publicProcedure
+    .input(z.object({ q: z.string().min(1).max(120) }))
+    .query(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      try {
+        const terms = input.q.toLowerCase().trim().split(/\s+/).filter(Boolean).slice(0, 6);
+        if (!terms.length) {
+          await db.end();
+          return { skus: [], familias: [] };
+        }
+
+        let where = "WHERE isActive = 1";
+        const params: any[] = [];
+        for (const term of terms) {
+          const s = `%${term}%`;
+          where +=
+            " AND (LOWER(codigo) LIKE ? OR LOWER(time) LIKE ? OR LOWER(descricao) LIKE ? OR LOWER(modelo) LIKE ? OR LOWER(linha) LIKE ?)";
+          params.push(s, s, s, s, s);
+        }
+
+        const [skuRows] = await db.execute(
+          `SELECT codigo, linha, modelo, time, descricao, tamanho, tipo, estoque, precoAtacado, precoVarejo
+           FROM pdv_products ${where}
+           ORDER BY time ASC, modelo ASC, tamanho ASC
+           LIMIT 40`,
+          params
+        );
+
+        const [famRows] = await db.execute(
+          `SELECT
+             time, modelo, MAX(linha) AS linha, MAX(descricao) AS descricao,
+             COUNT(*) AS variantes, SUM(estoque) AS estoqueTotal,
+             MIN(precoAtacado) AS precoAtacado, MIN(precoVarejo) AS precoVarejo
+           FROM pdv_products ${where}
+           GROUP BY time, modelo
+           HAVING COUNT(*) >= 1
+           ORDER BY time ASC, modelo ASC
+           LIMIT 25`,
+          params
+        );
+
+        await db.end();
+        return {
+          skus: (skuRows as any[]).map((r) => ({
+            tipo: "sku" as const,
+            codigo: String(r.codigo),
+            linha: r.linha ? String(r.linha) : null,
+            modelo: r.modelo ? String(r.modelo) : null,
+            time: r.time ? String(r.time) : null,
+            descricao: r.descricao ? String(r.descricao) : null,
+            tamanho: r.tamanho ? String(r.tamanho) : null,
+            tipoProduto: r.tipo ? String(r.tipo) : null,
+            estoque: rowNum(r.estoque),
+            precoAtacado: rowNum(r.precoAtacado),
+            precoVarejo: rowNum(r.precoVarejo),
+            label: [
+              r.codigo,
+              [r.time, r.descricao || r.modelo].filter(Boolean).join(" "),
+              r.tamanho ? `(${r.tamanho})` : null,
+            ]
+              .filter(Boolean)
+              .join(" — "),
+          })),
+          familias: (famRows as any[]).map((r) => ({
+            tipo: "familia" as const,
+            time: String(r.time || ""),
+            modelo: String(r.modelo || ""),
+            linha: r.linha ? String(r.linha) : null,
+            descricao: r.descricao ? String(r.descricao) : null,
+            variantes: rowNum(r.variantes),
+            estoque: rowNum(r.estoqueTotal),
+            precoAtacado: rowNum(r.precoAtacado),
+            precoVarejo: rowNum(r.precoVarejo),
+            label: `Família: ${[r.time, r.modelo].filter(Boolean).join(" / ")} (${rowNum(r.variantes)} tamanhos)`,
+          })),
+        };
+      } catch (err) {
+        await db.end().catch(() => {});
+        if (err instanceof TRPCError) throw err;
+        console.error("[PDV Relatório] searchProducts:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro na busca de produtos" });
+      }
+    }),
+
+  /** Relatório por produto (SKU ou família). Sofia entra sinalizada. */
+  byProduct: publicProcedure
+    .input(
+      z.object({
+        startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        modo: z.enum(["sku", "familia"]),
+        codigo: z.string().min(1).max(120).optional(),
+        time: z.string().min(1).max(120).optional(),
+        modelo: z.string().min(1).max(120).optional(),
+        linha: z.string().max(80).optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      await requirePdvAdmin(ctx);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      try {
+        const data = await fetchProductReport(db, input);
+        await db.end();
+        return data;
+      } catch (err) {
+        await db.end().catch(() => {});
+        if (err instanceof TRPCError) throw err;
+        console.error("[PDV Relatório] byProduct:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao gerar relatório do produto" });
       }
     }),
 
