@@ -57,6 +57,13 @@ function parseCategoria(tipo: string, desc: string): string {
   return "Suprimento";
 }
 
+/** ExcelJS trata `row.values` como 1-indexado: o item [0] é ignorado. */
+function fillRow(row: ExcelJS.Row, values: Array<string | number | null>): void {
+  values.forEach((value, i) => {
+    row.getCell(i + 1).value = value;
+  });
+}
+
 function styleHeader(row: ExcelJS.Row, fill: string): void {
   row.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: COLORS.white } };
@@ -155,7 +162,7 @@ export async function buildCashFlowExcel(input: {
     }
     const row = mov.getRow(5 + idx);
     const isSan = e.tipo === "SANGRIA";
-    row.values = [
+    fillRow(row, [
       e.dia ? fmtYmd(e.dia) : "",
       e.hora || "",
       e.tipo === "SUPRIMENTO" ? "Suprimento" : "Sangria",
@@ -168,7 +175,7 @@ export async function buildCashFlowExcel(input: {
       saida || null,
       saldo,
       e.id,
-    ];
+    ]);
     row.eachCell((cell, col) => {
       cell.border = {
         top: { style: "thin", color: { argb: "FFD9D9D9" } },
@@ -270,14 +277,14 @@ export async function buildCashFlowExcel(input: {
     styleHeader(fh, COLORS.navy);
     input.closures.forEach((c, i) => {
       const row = fech.getRow(4 + i);
-      row.values = [
+      fillRow(row, [
         fmtYmd(c.dia),
         money(c.saldoSistema),
         money(c.valorContado),
         money(c.diferenca),
         c.usuario || "",
         c.justificativa || "",
-      ];
+      ]);
       row.getCell(2).numFmt = '"R$" #,##0.00';
       row.getCell(3).numFmt = '"R$" #,##0.00';
       row.getCell(4).numFmt = '"R$" #,##0.00';
