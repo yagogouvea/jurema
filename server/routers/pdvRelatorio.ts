@@ -370,8 +370,8 @@ async function fetchProductReport(
     const codigo = String(input.codigo || "").trim();
     if (!codigo) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o código do produto" });
     const [prodRows] = await db.execute(
-      `SELECT codigo, linha, modelo, time, descricao, tamanho, tipo, estoque,
-              precoAtacado, precoVarejo, custo, ptAtacado, ptVarejo, isActive
+      `SELECT id, codigo, linha, modelo, time, descricao, tamanho, tipo, estoque,
+              precoAtacado, precoVarejo, isActive
        FROM pdv_products WHERE codigo = ? LIMIT 1`,
       [codigo]
     );
@@ -389,13 +389,19 @@ async function fetchProductReport(
       estoque: rowNum(p.estoque),
       precoAtacado: rowNum(p.precoAtacado),
       precoVarejo: rowNum(p.precoVarejo),
-      custo: rowNum(p.custo),
-      ptAtacado: rowNum(p.ptAtacado),
-      ptVarejo: rowNum(p.ptVarejo),
       isActive: !!p.isActive,
     };
-    productFilter = " AND oi.codigo = ?";
-    productParams.push(codigo);
+    // pdv_order_items não tem coluna codigo — casa por productId e, se faltar, por time/modelo/tamanho.
+    const skuParts: string[] = [];
+    if (p.id != null) {
+      skuParts.push("oi.productId = ?");
+      productParams.push(p.id);
+    }
+    skuParts.push(
+      "(UPPER(TRIM(COALESCE(oi.time,''))) = UPPER(?) AND UPPER(TRIM(COALESCE(oi.modelo,''))) = UPPER(?) AND UPPER(TRIM(COALESCE(oi.tamanho,''))) = UPPER(?))"
+    );
+    productParams.push(String(p.time || ""), String(p.modelo || ""), String(p.tamanho || ""));
+    productFilter = ` AND (${skuParts.join(" OR ")})`;
     codigosEscopo = [codigo];
   } else {
     const time = String(input.time || "").trim();
@@ -403,27 +409,23 @@ async function fetchProductReport(
     if (!time || !modelo) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Informe time e modelo da família" });
     }
-    let q =
-      `SELECT codigo, linha, modelo, time, descricao, tamanho, tipo, estoque,
-              precoAtacado, precoVarejo, custo, ptAtacado, ptVarejo, isActive
+    const q =
+      `SELECT id, codigo, linha, modelo, time, descricao, tamanho, tipo, estoque,
+              precoAtacado, precoVarejo, isActive
        FROM pdv_products
-       WHERE UPPER(TRIM(time)) = UPPER(?) AND UPPER(TRIM(modelo)) = UPPER(?)`;
-    const qp: any[] = [time, modelo];
-    if (input.linha?.trim()) {
-      q += " AND UPPER(TRIM(linha)) = UPPER(?)";
-      qp.push(input.linha.trim());
-    }
-    q += " ORDER BY tamanho ASC, codigo ASC";
-    const [famRows] = await db.execute(q, qp);
+       WHERE UPPER(TRIM(time)) = UPPER(?) AND UPPER(TRIM(modelo)) = UPPER(?)
+       ORDER BY tamanho ASC, codigo ASC`;
+    const [famRows] = await db.execute(q, [time, modelo]);
     const produtos = famRows as any[];
     if (!produtos.length) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Nenhum produto nessa família" });
     }
-    codigosEscopo = produtos.map((p) => String(p.codigo));
+    codigosEscopo = produtos.map((p) => String(p.codigo || "").trim()).filter(Boolean);
+    const idsEscopo = produtos.map((p) => Number(p.id)).filter((n) => Number.isFinite(n) && n > 0);
     produtoMeta = {
       modo: "familia" as const,
       codigo: null,
-      linha: input.linha?.trim() || (produtos[0].linha ? String(produtos[0].linha) : null),
+      linha: produtos[0].linha ? String(produtos[0].linha) : null,
       modelo,
       time,
       descricao: produtos[0].descricao ? String(produtos[0].descricao) : null,
@@ -432,20 +434,24 @@ async function fetchProductReport(
       estoque: produtos.reduce((s, p) => s + rowNum(p.estoque), 0),
       precoAtacado: rowNum(produtos[0].precoAtacado),
       precoVarejo: rowNum(produtos[0].precoVarejo),
-      custo: rowNum(produtos[0].custo),
-      ptAtacado: rowNum(produtos[0].ptAtacado),
-      ptVarejo: rowNum(produtos[0].ptVarejo),
       isActive: produtos.some((p) => !!p.isActive),
       variantes: produtos.map((p) => ({
-        codigo: String(p.codigo),
+        codigo: String(p.codigo || ""),
         tamanho: p.tamanho ? String(p.tamanho) : null,
         estoque: rowNum(p.estoque),
         isActive: !!p.isActive,
       })),
     };
-    const placeholders = codigosEscopo.map(() => "?").join(",");
-    productFilter = ` AND oi.codigo IN (${placeholders})`;
-    productParams.push(...codigosEscopo);
+    const orParts: string[] = [
+      "(UPPER(TRIM(COALESCE(oi.time,''))) = UPPER(?) AND UPPER(TRIM(COALESCE(oi.modelo,''))) = UPPER(?))",
+    ];
+    productParams.push(time, modelo);
+    if (idsEscopo.length) {
+      const placeholders = idsEscopo.map(() => "?").join(",");
+      orParts.push(`oi.productId IN (${placeholders})`);
+      productParams.push(...idsEscopo);
+    }
+    productFilter = ` AND (${orParts.join(" OR ")})`;
   }
 
   const baseWhere = `o.status <> 'CANCELADO' AND ${dayCmp} >= ? AND ${dayCmp} <= ?${productFilter}`;
@@ -478,7 +484,7 @@ async function fetchProductReport(
      INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
      WHERE ${baseWhere}
      GROUP BY o.sellerId, o.sellerName
-     ORDER BY faturamento DESC`,
+     ORDER BY COALESCE(SUM(oi.totalItem), 0) DESC`,
     baseParams
   );
 
@@ -492,7 +498,7 @@ async function fetchProductReport(
      INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
      WHERE ${baseWhere}
      GROUP BY o.canal
-     ORDER BY faturamento DESC`,
+     ORDER BY COALESCE(SUM(oi.totalItem), 0) DESC`,
     baseParams
   );
 
@@ -506,7 +512,7 @@ async function fetchProductReport(
      INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
      WHERE ${baseWhere}
      GROUP BY o.regime
-     ORDER BY faturamento DESC`,
+     ORDER BY COALESCE(SUM(oi.totalItem), 0) DESC`,
     baseParams
   );
 
@@ -519,8 +525,8 @@ async function fetchProductReport(
      FROM pdv_order_items oi
      INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
      WHERE ${baseWhere}
-     GROUP BY ${dayCmp}
-     ORDER BY dia ASC`,
+     GROUP BY 1
+     ORDER BY 1 ASC`,
     baseParams
   );
 
@@ -534,7 +540,7 @@ async function fetchProductReport(
        o.canal,
        o.regime,
        o.status,
-       oi.codigo,
+       p.codigo AS codigo,
        oi.tamanho,
        oi.quantidade,
        oi.precoUnitario,
@@ -545,8 +551,9 @@ async function fetchProductReport(
        COALESCE(oi.isSofia, 0) AS isSofia
      FROM pdv_order_items oi
      INNER JOIN pdv_orders o ON o.pedidoId = oi.pedidoId
+     LEFT JOIN pdv_products p ON p.id = oi.productId
      WHERE ${baseWhere}
-     ORDER BY o.createdAt ASC, oi.id ASC
+     ORDER BY o.createdAt ASC, oi.pedidoId ASC
      LIMIT 500`,
     baseParams
   );
@@ -769,7 +776,10 @@ export const pdvRelatorioRouter = router({
         await db.end().catch(() => {});
         if (err instanceof TRPCError) throw err;
         console.error("[PDV Relatório] byProduct:", err);
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao gerar relatório do produto" });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: err instanceof Error ? `Erro ao gerar relatório do produto: ${err.message}` : "Erro ao gerar relatório do produto",
+        });
       }
     }),
 

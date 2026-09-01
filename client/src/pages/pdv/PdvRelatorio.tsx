@@ -447,7 +447,6 @@ export default function PdvRelatorio() {
             modo: "familia" as const,
             time: prodSelected.time,
             modelo: prodSelected.modelo,
-            linha: prodSelected.linha || undefined,
           }
         : null;
 
