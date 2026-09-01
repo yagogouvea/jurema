@@ -671,7 +671,7 @@ export const pdvRelatorioRouter = router({
           return { skus: [], familias: [] };
         }
 
-        let where = "WHERE isActive = 1";
+        let where = "WHERE 1=1";
         const params: any[] = [];
         for (const term of terms) {
           const s = `%${term}%`;
@@ -683,7 +683,7 @@ export const pdvRelatorioRouter = router({
         const [skuRows] = await db.execute(
           `SELECT codigo, linha, modelo, time, descricao, tamanho, tipo, estoque, precoAtacado, precoVarejo
            FROM pdv_products ${where}
-           ORDER BY time ASC, modelo ASC, tamanho ASC
+           ORDER BY isActive DESC, time ASC, modelo ASC, tamanho ASC
            LIMIT 40`,
           params
         );
@@ -696,7 +696,7 @@ export const pdvRelatorioRouter = router({
            FROM pdv_products ${where}
            GROUP BY time, modelo
            HAVING COUNT(*) >= 1
-           ORDER BY time ASC, modelo ASC
+           ORDER BY MAX(isActive) DESC, time ASC, modelo ASC
            LIMIT 25`,
           params
         );

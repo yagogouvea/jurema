@@ -476,11 +476,39 @@ export default function PdvRelatorio() {
     setShowProdPreview(false);
   };
 
+  const resolveProductSelection = (): ProductSel | null => {
+    if (prodSelected) return prodSelected;
+    const q = prodSearch.trim();
+    if (!q) return null;
+    const skus = prodSearchData?.skus || [];
+    const fams = prodSearchData?.familias || [];
+    const exactSku = skus.find((s) => s.codigo.toLowerCase() === q.toLowerCase());
+    if (exactSku) return { tipo: "sku", codigo: exactSku.codigo, label: exactSku.label };
+    if (fams[0]) {
+      return {
+        tipo: "familia",
+        time: fams[0].time,
+        modelo: fams[0].modelo,
+        linha: fams[0].linha,
+        label: fams[0].label,
+      };
+    }
+    if (skus[0]) return { tipo: "sku", codigo: skus[0].codigo, label: skus[0].label };
+    if (/^[A-Za-z0-9._-]{2,}$/.test(q)) return { tipo: "sku", codigo: q, label: q };
+    return null;
+  };
+
   const handleGenerateProduct = () => {
-    if (!prodSelected) {
-      toast.error("Selecione um SKU ou uma família na busca");
+    const resolved = resolveProductSelection();
+    if (!resolved) {
+      if (prodSearching) {
+        toast.error("Aguarde a busca terminar e clique no produto da lista");
+        return;
+      }
+      toast.error("Digite o nome ou código e clique no produto da lista");
       return;
     }
+    if (!prodSelected) setProdSelected(resolved);
     if (!prodStart || !prodEnd) {
       toast.error("Selecione o período");
       return;
@@ -654,6 +682,22 @@ export default function PdvRelatorio() {
           <p className="text-gray-400 text-sm">Gere relatórios por período com bônus, Sofia e descontos</p>
         </div>
       </div>
+      {isAdmin && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          <a
+            href="#relatorio-produto"
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-800/80 text-amber-100 hover:bg-amber-700"
+          >
+            Ir para Relatório por Produto
+          </a>
+          <a
+            href="#relatorio-vendas"
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700"
+          >
+            Relatório de Vendas
+          </a>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-6">
@@ -940,7 +984,7 @@ export default function PdvRelatorio() {
       {/* ════════════════════════════════════════════════════════════ */}
       {isAdmin && (
         <>
-          <div className="flex items-center gap-3 mt-10 mb-4">
+          <div id="relatorio-vendas" className="flex items-center gap-3 mt-10 mb-4">
             <div className="w-10 h-10 bg-green-700 rounded-xl flex items-center justify-center shadow-lg shadow-green-700/20">
               <BarChart3 className="w-5 h-5 text-white" />
             </div>
@@ -1052,14 +1096,14 @@ export default function PdvRelatorio() {
           )}
 
           {/* Relatório por Produto */}
-          <div className="flex items-center gap-3 mt-10 mb-4">
+          <div id="relatorio-produto" className="flex items-center gap-3 mt-10 mb-4">
             <div className="w-10 h-10 bg-amber-700 rounded-xl flex items-center justify-center shadow-lg shadow-amber-700/20">
               <Boxes className="w-5 h-5 text-white" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Relatório por Produto</h2>
               <p className="text-gray-400 text-sm">
-                Busque por SKU, nome ou família (time + modelo). Itens Sofia entram sinalizados em roxo.
+                Digite o nome ou código, clique no resultado da lista e depois em Gerar Relatório. Sofia aparece em roxo.
               </p>
             </div>
           </div>
@@ -1082,7 +1126,9 @@ export default function PdvRelatorio() {
             </div>
 
             <div className="mb-4 relative">
-              <label className="text-gray-400 text-xs mb-1 block">Produto (SKU, nome ou família)</label>
+              <label className="text-gray-400 text-xs mb-1 block">
+                Produto — digite e clique na lista (família = todos os tamanhos)
+              </label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <input
