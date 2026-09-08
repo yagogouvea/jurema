@@ -17,11 +17,13 @@ import { manusStoragePublicPath, resolveStoredMediaToViewUrl } from "../waMediaR
 import {
   WA_MAX_SLOTS,
   ensureInstanceSlots,
+  guessSlotFromLegacyId,
   parseBridgeSlot,
   resolveAiConfigPk,
   resolveConversationInstanceIds,
   syncNameToBridge,
 } from "../waInstanceDb";
+import { isValidYmd, WA_HISTORY_EXPORT_MAX, ymdRangeToUtcBounds } from "@shared/waConversationHistory";
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -657,6 +659,185 @@ export const waRouter = router({
           };
         });
       } finally { await db.end(); }
+    }),
+
+  /**
+   * Mensagens de uma conversa num período (calendário de São Paulo).
+   * Sem datas: as mais recentes. Teto baixo de propósito — export pontual, sem dump geral.
+   */
+  listConversationHistory: publicProcedure
+    .input(z.object({
+      conversationId: z.number().int().positive(),
+      fromYmd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+      toYmd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const hasFrom = isValidYmd(input.fromYmd);
+      const hasTo = isValidYmd(input.toYmd);
+      if ((input.fromYmd || input.toYmd) && !(hasFrom && hasTo)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o período completo (de e até)." });
+      }
+      const range = hasFrom && hasTo
+        ? ymdRangeToUtcBounds(input.fromYmd!, input.toYmd!)
+        : null;
+
+      const db = await getDb();
+      try {
+        const [convRows] = await db.execute(
+          `SELECT c.id, c.contactName, c.contactPhone, c.instanceId, i.name AS instanceName
+           FROM wa_conversations c
+           LEFT JOIN wa_instances i ON i.instanceId = c.instanceId
+           WHERE c.id = ?
+           LIMIT 1`,
+          [input.conversationId]
+        ) as any;
+        const conv = (convRows as any[])[0];
+        if (!conv) throw new TRPCError({ code: "NOT_FOUND", message: "Conversa não encontrada" });
+
+        let sql = `
+          SELECT
+            id, conversationId, instanceId, messageId, fromMe, senderType, senderName,
+            type, content, mediaUrl, mediaStorageKey, mediaCaption, quotedMessageId,
+            status, timestamp, createdAt,
+            (mediaBlob IS NOT NULL AND OCTET_LENGTH(mediaBlob) > 0) AS hasBlob,
+            mediaMimeType, mediaSizeBytes
+          FROM wa_messages
+          WHERE conversationId=?`;
+        const params: any[] = [input.conversationId];
+        if (range) {
+          sql += " AND timestamp >= ? AND timestamp < ?";
+          params.push(range.from, range.toExclusive);
+        }
+        const cap = WA_HISTORY_EXPORT_MAX + 1;
+        sql += ` ORDER BY timestamp DESC LIMIT ${cap}`;
+        const [rows] = await db.execute(sql, params);
+        const newestFirst = rows as any[];
+        const truncated = newestFirst.length > WA_HISTORY_EXPORT_MAX;
+        const sliced = truncated ? newestFirst.slice(0, WA_HISTORY_EXPORT_MAX) : newestFirst;
+        const messages = sliced.reverse().map((r) => {
+          const base = normalizeWaMessageRow(r);
+          const hasBlobRaw = getMysqlRowField(r, "hasBlob");
+          const hasBlob = hasBlobRaw === 1 || hasBlobRaw === true || hasBlobRaw === "1";
+          const mime = getMysqlRowField(r, "mediaMimeType");
+          return {
+            ...base,
+            hasBlob,
+            mediaMimeType: mime == null ? null : String(mime),
+          };
+        });
+
+        return {
+          conversation: {
+            id: Number(conv.id),
+            contactName: conv.contactName == null ? null : String(conv.contactName),
+            contactPhone: conv.contactPhone == null ? null : String(conv.contactPhone),
+            instanceId: Number(conv.instanceId) || 0,
+            instanceName: conv.instanceName == null ? null : String(conv.instanceName),
+          },
+          fromYmd: range ? (input.fromYmd! <= input.toYmd! ? input.fromYmd! : input.toYmd!) : null,
+          toYmd: range ? (input.fromYmd! <= input.toYmd! ? input.toYmd! : input.fromYmd!) : null,
+          messages,
+          count: messages.length,
+          truncated,
+          limit: WA_HISTORY_EXPORT_MAX,
+        };
+      } finally {
+        await db.end();
+      }
+    }),
+
+  /**
+   * Pede ao WhatsApp o histórico desta conversa (com mídia) e devolve no mesmo chat.
+   * O WhatsApp manda no máximo ~50 msgs por pedido; o que já estava no banco aparece na hora.
+   */
+  pullConversationHistory: publicProcedure
+    .input(z.object({
+      conversationId: z.number().int().positive(),
+      days: z.number().int().min(1).max(14).default(7),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAccess(ctx);
+      const db = await getDb();
+      try {
+        const [convRows] = await db.execute(
+          `SELECT c.id, c.remoteJid, c.contactPhone, c.instanceId, i.instanceId AS bridgeSlot
+           FROM wa_conversations c
+           LEFT JOIN wa_instances i ON i.instanceId = c.instanceId OR i.id = c.instanceId
+           WHERE c.id = ?
+           LIMIT 1`,
+          [input.conversationId]
+        ) as any;
+        const conv = (convRows as any[])[0];
+        if (!conv) throw new TRPCError({ code: "NOT_FOUND", message: "Conversa não encontrada" });
+
+        const slot =
+          parseBridgeSlot(conv.bridgeSlot)
+          ?? parseBridgeSlot(conv.instanceId)
+          ?? guessSlotFromLegacyId(conv.instanceId);
+        if (!slot) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Instância desta conversa não encontrada" });
+        }
+
+        const remoteJid = String(conv.remoteJid || "").trim()
+          || (conv.contactPhone ? `${String(conv.contactPhone).replace(/\D/g, "")}@s.whatsapp.net` : "");
+        if (!remoteJid) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Esta conversa não tem número do WhatsApp" });
+        }
+
+        const [anchorRows] = await db.execute(
+          `SELECT messageId, fromMe, timestamp
+           FROM wa_messages
+           WHERE conversationId=? AND messageId IS NOT NULL AND TRIM(messageId) <> ''
+           ORDER BY timestamp ASC
+           LIMIT 1`,
+          [input.conversationId]
+        ) as any;
+        const anchor = (anchorRows as any[])[0];
+        if (!anchor) {
+          return {
+            ok: false,
+            requested: false,
+            reason: "need_anchor",
+            message: "Ainda não há mensagem desta conversa para o WhatsApp usar de referência.",
+          };
+        }
+
+        const ts = new Date(anchor.timestamp).getTime();
+        const bridgeUrl = process.env.WA_BRIDGE_URL?.replace(/\/+$/, "");
+        const bridgeKey = process.env.WA_BRIDGE_API_KEY ?? "";
+        if (!bridgeUrl) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "WA_BRIDGE_URL não configurado" });
+        }
+
+        const res = await fetch(`${bridgeUrl}/history`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-wa-bridge-key": bridgeKey,
+          },
+          body: JSON.stringify({
+            instanceId: slot,
+            remoteJid,
+            oldestMsgId: String(anchor.messageId),
+            oldestFromMe: anchor.fromMe === true || anchor.fromMe === 1 || anchor.fromMe === "1",
+            oldestTimestampMs: ts,
+            count: 50,
+            days: input.days,
+          }),
+          signal: AbortSignal.timeout(20_000),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new TRPCError({
+            code: "BAD_GATEWAY",
+            message: text.slice(0, 180) || "WhatsApp não aceitou o pedido de histórico",
+          });
+        }
+        return { ok: true, requested: true, slot, remoteJid };
+      } finally {
+        await db.end();
+      }
     }),
 
   /**

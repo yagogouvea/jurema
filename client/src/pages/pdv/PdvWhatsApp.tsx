@@ -20,7 +20,11 @@ import {
 import { toast } from "sonner";
 import { Link } from "wouter";
 import InstanceRenameField from "@/components/wa/InstanceRenameField";
+import ConversationHistoryExport, {
+  type ChatHistoryFilter,
+} from "@/components/wa/ConversationHistoryExport";
 import { findInstanceForConversation, instanceSlotOf } from "@shared/waInstanceSlots";
+import { formatYmdBr } from "@shared/waConversationHistory";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -298,8 +302,12 @@ function AudioPlayer({ url, duration }: { url?: string | null; duration?: number
   function toggle() {
     const a = audioRef.current;
     if (!a) return;
-    if (playing) { a.pause(); setPlaying(false); }
-    else { a.play(); setPlaying(true); }
+    if (playing) {
+      a.pause();
+      setPlaying(false);
+      return;
+    }
+    void a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
   }
 
   function fmt(s: number) {
@@ -330,8 +338,13 @@ function AudioPlayer({ url, duration }: { url?: string | null; duration?: number
         onLoadedMetadata={e => setTotalDuration(e.currentTarget.duration)}
         onEnded={() => { setPlaying(false); setProgress(0); setCurrentTime(0); }}
       />
-      <button onClick={toggle} className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all"
-        style={{ background: "#25D366", color: "#000" }}>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={playing ? "Pausar áudio" : "Ouvir áudio"}
+        className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all"
+        style={{ background: "#25D366", color: "#000" }}
+      >
         {playing ? <Pause size={12} /> : <Play size={12} />}
       </button>
       <div className="flex-1 flex flex-col gap-0.5">
@@ -378,7 +391,7 @@ function resolveWaMediaUrl(mediaUrl: string | null | undefined): string | null {
  */
 function waPanelMediaSrc(msg: any, mediaJwt?: string | null): string | null {
   const type = String(msg?.type ?? "text");
-  const binaryTypes = new Set(["image", "video", "audio", "document", "sticker"]);
+  const binaryTypes = new Set(["image", "video", "audio", "ptt", "document", "sticker"]);
 
   if (binaryTypes.has(type)) {
     const id = waMessageNumericId(msg);
@@ -677,6 +690,53 @@ function ImageLightbox({
   );
 }
 
+function VideoLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.92)" }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Vídeo"
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        aria-label="Fechar"
+        className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center"
+        style={{ background: "#1a1a1a", color: "#fff", border: "1px solid #333" }}
+      >
+        <X size={20} />
+      </button>
+      <video
+        src={src}
+        controls
+        autoPlay
+        className="rounded-lg"
+        style={{ maxWidth: "92vw", maxHeight: "88vh", background: "#000" }}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
 function TranscribeAudioButton({
   messageId,
   conversationId,
@@ -756,7 +816,7 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
   const [imgFailed, setImgFailed] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
-  if (type === "audio") {
+  if (type === "audio" || type === "ptt") {
     const hasTranscription =
       typeof content === "string"
         && content.trim().length > 0
@@ -767,7 +827,9 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
       <div>
         <AudioPlayer url={mediaUrl} />
         {hasTranscription ? (
-          <p className="text-[11px] mt-1" style={{ color: "#aaa" }}>{content}</p>
+          <p className="text-[11px] mt-1" style={{ color: "#aaa" }}>
+            “{String(content).replace(/^\[(?:á|a)udio\]\s*/i, "")}”
+          </p>
         ) : (
           mediaUrl && hasNumericId && Number.isFinite(convId) && (
             <TranscribeAudioButton messageId={numericId} conversationId={convId} />
@@ -817,15 +879,32 @@ function MessageContent({ msg, mediaAccessToken }: { msg: any; mediaAccessToken?
     return (
       <div>
         {mediaUrl ? (
-          <video src={mediaUrl} controls className="rounded-lg max-w-full" style={{ maxHeight: 220 }} />
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            className="block p-0 m-0 border-0 bg-transparent w-full text-left"
+            aria-label="Abrir vídeo"
+          >
+            <video
+              src={mediaUrl}
+              controls
+              preload="metadata"
+              className="rounded-lg max-w-full"
+              style={{ maxHeight: 240, background: "#000" }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </button>
         ) : (
           <div className="flex items-center gap-2 px-2 py-2 rounded-lg" style={{ background: "#ffffff10" }}>
             <Video size={16} style={{ color: "#888" }} />
-            <span className="text-[11px]" style={{ color: "#888" }}>Vídeo</span>
+            <span className="text-[11px]" style={{ color: "#888" }}>Vídeo indisponível</span>
           </div>
         )}
         {(caption || (content && content !== "[video]")) && (
           <p className="text-[11px] mt-1" style={{ wordBreak: "break-word" }}>{caption || content}</p>
+        )}
+        {lightboxOpen && mediaUrl && (
+          <VideoLightbox src={mediaUrl} onClose={() => setLightboxOpen(false)} />
         )}
       </div>
     );
@@ -920,6 +999,7 @@ export default function PdvWhatsApp() {
   const [messageInput, setMessageInput] = useState("");
   const [showDetails, setShowDetails] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [historyFilter, setHistoryFilter] = useState<ChatHistoryFilter | null>(null);
 
   // Refs para scroll interno do painel de mensagens
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -962,13 +1042,24 @@ export default function PdvWhatsApp() {
 
   const messagesQuery = trpc.wa.listMessages.useQuery(
     { conversationId: selectedConvId! },
-    { enabled: selectedConvId !== null, refetchInterval: 2000, refetchOnWindowFocus: true }
+    { enabled: selectedConvId !== null && historyFilter == null, refetchInterval: 2000, refetchOnWindowFocus: true }
   );
-  const messages: any[] = messagesQuery.data ?? [];
+  const historyQuery = trpc.wa.listConversationHistory.useQuery(
+    {
+      conversationId: selectedConvId!,
+      fromYmd: historyFilter?.mode === "range" ? historyFilter.fromYmd : undefined,
+      toYmd: historyFilter?.mode === "range" ? historyFilter.toYmd : undefined,
+    },
+    { enabled: selectedConvId !== null && historyFilter != null, refetchInterval: 4000, refetchOnWindowFocus: true }
+  );
+  const messages: any[] = historyFilter
+    ? (historyQuery.data?.messages ?? [])
+    : (messagesQuery.data ?? []);
+  const messagesLoading = historyFilter ? historyQuery.isLoading : messagesQuery.isLoading;
 
   /** Todas as mensagens de mídia com URL ou chave no storage — resolve no servidor para URL presignada (evita falha de <img> com /manus-storage ou redirect). */
   const mediaPanelResolveIds = useMemo(() => {
-    const types = new Set(["image", "video", "audio", "document", "sticker"]);
+    const types = new Set(["image", "video", "audio", "ptt", "document", "sticker"]);
     const ids = messages
       .filter((m) => {
         if (!types.has(m.type)) return false;
@@ -1085,6 +1176,7 @@ export default function PdvWhatsApp() {
     onSuccess: () => {
       setMessageInput("");
       utils.wa.listMessages.invalidate({ conversationId: selectedConvId! });
+      utils.wa.listConversationHistory.invalidate();
       utils.wa.listConversations.invalidate();
     },
     onError: (e) => toast.error(e.message),
@@ -1128,6 +1220,7 @@ export default function PdvWhatsApp() {
 
   // Marcar como lida e invalidar mensagens ao abrir conversa
   useEffect(() => {
+    setHistoryFilter(null);
     if (selectedConvId) {
       // Invalidar imediatamente para buscar mensagens sem esperar o intervalo
       utils.wa.listMessages.invalidate({ conversationId: selectedConvId });
@@ -1626,6 +1719,18 @@ export default function PdvWhatsApp() {
 
                 <AiAttemptsButton conversationId={selectedConv.id} />
 
+                <ConversationHistoryExport
+                  conversationId={selectedConv.id}
+                  contactName={getDisplayName(selectedConv)}
+                  contactPhone={selectedConv.contactPhone}
+                  instanceName={
+                    selectedConv.instanceName
+                    || findInstanceForConversation(instances as any[], Number(selectedConv.instanceId))?.name
+                  }
+                  filter={historyFilter}
+                  onFilterChange={setHistoryFilter}
+                />
+
                 {/* Botão de detalhes */}
                 <button
                   onClick={() => setShowDetails(v => !v)}
@@ -1649,14 +1754,37 @@ export default function PdvWhatsApp() {
                   className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-1.5"
                   style={{ background: "#0d0d0d" }}
                 >
-                  {messagesQuery.isLoading && (
+                  {historyFilter && (
+                    <div
+                      className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg mb-1"
+                      style={{ background: "#14261b", border: "1px solid #25D36622" }}
+                    >
+                      <p className="text-[11px]" style={{ color: "#8fdfb0" }}>
+                        {historyFilter.mode === "all"
+                          ? `Histórico nesta conversa · até ${historyQuery.data?.limit ?? 1500} msgs`
+                          : `Histórico nesta conversa · ${formatYmdBr(historyFilter.fromYmd)} a ${formatYmdBr(historyFilter.toYmd)}`}
+                        {historyQuery.data?.truncated ? " · recorte das mais recentes" : ""}
+                        {typeof historyQuery.data?.count === "number" ? ` · ${historyQuery.data.count} msg` : ""}
+                        {" · áudio, vídeo e foto tocam aqui"}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryFilter(null)}
+                        className="text-[10px] font-bold px-2 py-1 rounded-md"
+                        style={{ color: "#25D366", background: "#25D36614" }}
+                      >
+                        Voltar ao vivo
+                      </button>
+                    </div>
+                  )}
+                  {messagesLoading && (
                     <div className="flex items-center justify-center h-16 text-xs" style={{ color: "#444" }}>
                       Carregando mensagens...
                     </div>
                   )}
-                  {displayMessages.length === 0 && !messagesQuery.isLoading && (
+                  {displayMessages.length === 0 && !messagesLoading && (
                     <div className="flex items-center justify-center h-16 text-xs" style={{ color: "#333" }}>
-                      Nenhuma mensagem ainda
+                      {historyFilter ? "Nenhuma mensagem neste período" : "Nenhuma mensagem ainda"}
                     </div>
                   )}
 

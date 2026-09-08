@@ -123,8 +123,22 @@ export function registerWaMessageMediaRoute(app: Express): void {
         const buf = Buffer.isBuffer(blobRaw) ? blobRaw : Buffer.from(blobRaw as any);
         if (buf.length > 0) {
           const ct = (mimeRaw ? String(mimeRaw) : "") || guessContentTypeFromWaType(type);
-          res.setHeader("Content-Type", ct);
+          res.setHeader("Content-Type", ct.split(";")[0].trim() || ct);
           res.setHeader("Cache-Control", "private, max-age=300");
+          res.setHeader("Accept-Ranges", "bytes");
+          const range = String(req.headers.range || "");
+          const m = range.match(/^bytes=(\d+)-(\d*)$/);
+          if (m) {
+            const start = Number(m[1]);
+            const end = m[2] ? Number(m[2]) : buf.length - 1;
+            if (start >= 0 && end >= start && end < buf.length) {
+              res.status(206);
+              res.setHeader("Content-Range", `bytes ${start}-${end}/${buf.length}`);
+              res.setHeader("Content-Length", String(end - start + 1));
+              res.end(buf.subarray(start, end + 1));
+              return;
+            }
+          }
           res.setHeader("Content-Length", String(buf.length));
           res.end(buf);
           return;
