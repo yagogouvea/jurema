@@ -959,6 +959,7 @@ export const waRouter = router({
       timestamp: z.number(),
       contactName: z.string().optional(),
       contactPhone: z.string().optional(),
+      fromHistory: z.boolean().optional(),
     }).passthrough())
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -1036,33 +1037,35 @@ export const waRouter = router({
         ) as any;
 
         const msgTimestamp = new Date(input.timestamp * 1000);
+        const fromHistory = input.fromHistory === true;
         let conversationId: number;
 
         if (!convRows[0]) {
-          // Nova conversa — status inicial 'novo', classificado por IA
+          // Histórico antigo não deve aparecer como "não lida" nem disparar IA.
           const [newConv] = await db.execute(
             "INSERT INTO wa_conversations (instanceId, remoteJid, contactName, contactPhone, lastMessage, lastMessageAt, unreadCount, aiEnabled, status, statusSetBy) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            // Só usa contactName/Phone do payload quando a mensagem é do cliente (fromMe=false)
-            [input.instanceId, normalizedJid, input.fromMe ? null : (input.contactName ?? null), input.fromMe ? null : (input.contactPhone ?? null), input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? 0 : 1, true, "novo", "ai"]
+            [input.instanceId, normalizedJid, input.fromMe ? null : (input.contactName ?? null), input.fromMe ? null : (input.contactPhone ?? null), input.content?.substring(0, 100) ?? null, msgTimestamp, fromHistory || input.fromMe ? 0 : 1, true, "novo", "ai"]
           ) as any;
           conversationId = newConv.insertId;
         } else {
           const conv = convRows[0];
           conversationId = conv.id;
-          // Se o JID armazenado não está normalizado, atualizar
           if (conv.remoteJid !== normalizedJid) {
             await db.execute("UPDATE wa_conversations SET remoteJid=? WHERE id=?", [normalizedJid, conv.id]);
           }
-          // Atualizar nome: só atualiza contactName quando a mensagem é do CLIENTE (fromMe=false)
-          // Mensagens do próprio número (fromMe=true) trazem o nome do atendente, não do contato
           const newName = !input.fromMe && input.contactName && input.contactName.trim() ? input.contactName.trim() : null;
+          const prevLast = conv.lastMessageAt ? new Date(conv.lastMessageAt) : null;
+          const historyOlder = fromHistory && prevLast && msgTimestamp < prevLast;
+          const nextLastMessage = historyOlder ? conv.lastMessage : (input.content?.substring(0, 100) ?? null);
+          const nextLastAt = historyOlder ? prevLast : msgTimestamp;
+          const nextUnread = fromHistory || input.fromMe ? conv.unreadCount : conv.unreadCount + 1;
           await db.execute(
             `UPDATE wa_conversations SET lastMessage=?, lastMessageAt=?, unreadCount=?,
              contactName=${newName ? '?' : 'COALESCE(?,contactName)'},
              contactPhone=${!input.fromMe && input.contactPhone ? '?' : 'COALESCE(?,contactPhone)'} WHERE id=?`,
             newName
-              ? [input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? conv.unreadCount : conv.unreadCount + 1, newName, !input.fromMe && input.contactPhone ? input.contactPhone : null, conv.id]
-              : [input.content?.substring(0, 100) ?? null, msgTimestamp, input.fromMe ? conv.unreadCount : conv.unreadCount + 1, null, !input.fromMe && input.contactPhone ? input.contactPhone : null, conv.id]
+              ? [nextLastMessage, nextLastAt, nextUnread, newName, !input.fromMe && input.contactPhone ? input.contactPhone : null, conv.id]
+              : [nextLastMessage, nextLastAt, nextUnread, null, !input.fromMe && input.contactPhone ? input.contactPhone : null, conv.id]
           );
         }
 
@@ -1207,7 +1210,7 @@ export const waRouter = router({
         // Transcrição assíncrona de áudio:
         //  - Prefere os bytes em memória (mediaBlob recém-decodificado/baixado).
         //  - Cai para URL https se existir (storage Manus configurado).
-        if (msgType === "audio" && (mediaBlob || transcribeAudioUrl)) {
+        if (!fromHistory && msgType === "audio" && (mediaBlob || transcribeAudioUrl)) {
           const blobCopy = mediaBlob ? Buffer.from(mediaBlob) : null;
           const mimeCopy = mediaMimeFinal ?? null;
           setImmediate(async () => {
@@ -1245,7 +1248,7 @@ export const waRouter = router({
         const capturedContent = input.content ?? "";
         // Retornar imediatamente e processar de forma assíncrona com nova conexão
         setImmediate(async () => {
-          if (capturedFromMe) return;
+          if (fromHistory || capturedFromMe) return;
           const asyncDb = await getDb();
           try {
             // Detecção de indicação de influenciador (rapido, antes da IA).
