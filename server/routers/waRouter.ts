@@ -401,12 +401,11 @@ export const waRouter = router({
 
   listConversations: publicProcedure
     .input(z.object({
-      instanceId: z.number().optional(), // 0 ou undefined = todos os números
-      // status agora é livre (preset key — pode ser custom).
-      status: z.string().max(50).optional(),
-      aiEnabled: z.boolean().optional(),
-      unreadOnly: z.boolean().optional(),
-      search: z.string().optional(),
+      instanceId: z.number().nullish(),
+      status: z.string().max(50).nullish(),
+      aiEnabled: z.boolean().nullish(),
+      unreadOnly: z.boolean().nullish(),
+      search: z.string().nullish(),
       limit: z.number().min(1).max(200).default(100),
       offset: z.number().default(0),
     }))
@@ -417,7 +416,7 @@ export const waRouter = router({
         let sql = `
           SELECT c.*, i.name AS instanceName, i.phone AS instancePhone
           FROM wa_conversations c
-          LEFT JOIN wa_instances i ON (i.instanceId = CAST(c.instanceId AS CHAR) OR i.id = c.instanceId)
+          LEFT JOIN wa_instances i ON i.instanceId = c.instanceId
           WHERE 1=1
         `;
         const params: any[] = [];
@@ -427,7 +426,7 @@ export const waRouter = router({
           params.push(...keys);
         }
         if (input.status) { sql += " AND c.status=?"; params.push(input.status); }
-        if (input.aiEnabled !== undefined) { sql += " AND c.aiEnabled=?"; params.push(input.aiEnabled); }
+        if (typeof input.aiEnabled === "boolean") { sql += " AND c.aiEnabled=?"; params.push(input.aiEnabled); }
         if (input.unreadOnly) { sql += " AND c.unreadCount > 0"; }
         if (input.search) {
           sql += " AND (c.contactName LIKE ? OR c.contactPhone LIKE ?)";
@@ -436,8 +435,16 @@ export const waRouter = router({
         const safeLimit = Math.max(1, Math.min(200, Math.floor(input.limit)));
         const safeOffset = Math.max(0, Math.floor(input.offset ?? 0));
         sql += ` ORDER BY c.lastMessageAt DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
-        const [rows] = await db.execute(sql, params);
-        return rows as any[];
+        try {
+          const [rows] = await db.execute(sql, params);
+          return rows as any[];
+        } catch (e) {
+          console.error("[listConversations] SQL falhou:", e);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Erro ao listar conversas. Tente atualizar a página.",
+          });
+        }
       } finally { await db.end(); }
     }),
 
