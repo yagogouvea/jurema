@@ -4,10 +4,11 @@ import { trpc } from "@/lib/trpc";
 import { usePdvAuth } from "@/contexts/PdvAuthContext";
 import { toast } from "sonner";
 import {
-  Bot, Save, Plus, Wifi, WifiOff, Settings,
+  Bot, Save, Plus, WifiOff, Settings,
   Clock, Zap, Brain, Link2, Users, Trash2,
   ChevronLeft, Eye, RefreshCw, AlertCircle,
-  QrCode, RotateCcw, CheckCircle2, Radio, ExternalLink, ChevronDown, Sparkles, Loader2,
+  QrCode, RotateCcw, CheckCircle2, ExternalLink, ChevronDown, Sparkles, Loader2,
+  Smartphone, Pencil,
 } from "lucide-react";
 import InstanceRenameField from "@/components/wa/InstanceRenameField";
 import { WA_MAX_SLOTS, parseBridgeSlot } from "@shared/waInstanceSlots";
@@ -481,13 +482,34 @@ function buildAwaySchedulePayload(
 type Tab = "instancias" | "treinamento" | "respostas" | "horarios";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: "instancias", label: "Instâncias", icon: <Wifi className="w-4 h-4" /> },
+  { id: "instancias", label: "Números", icon: <Smartphone className="w-4 h-4" /> },
   { id: "treinamento", label: "Treinamento IA", icon: <Brain className="w-4 h-4" /> },
   { id: "respostas", label: "Respostas Rápidas", icon: <Zap className="w-4 h-4" /> },
   { id: "horarios", label: "Horários", icon: <Clock className="w-4 h-4" /> },
 ];
 
-/** QR por instância wa-bridge — monta só quando status=qr, sem precisar clicar em “Ver QR”. */
+const INSTANCE_COLORS = ["#25D366", "#3B82F6", "#F59E0B", "#EC4899", "#8B5CF6"];
+
+function formatPhoneDisplay(phone?: string | null): string | null {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits || digits === "00000000000") return null;
+  if (digits.startsWith("55") && digits.length >= 12) {
+    const ddd = digits.slice(2, 4);
+    const rest = digits.slice(4);
+    if (rest.length === 9) return `+55 (${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
+    if (rest.length === 8) return `+55 (${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
+  }
+  return `+${digits}`;
+}
+
+const QR_STEPS = [
+  "No celular deste número, abra o WhatsApp",
+  "Toque em Configurações (ou nos três pontinhos)",
+  "Toque em Aparelhos conectados → Conectar aparelho",
+  "Aponte a câmera para o QR ao lado",
+];
+
+/** QR por instância — aparece sozinho quando o WhatsApp pede pareamento. */
 function BridgeWaQrPanel({ bridgeInstanceId }: { bridgeInstanceId: number }) {
   const { data: qrImageData, refetch: refetchQrImage, isFetching: qrFetching } = trpc.wa.bridgeQrImage.useQuery(
     { bridgeInstanceId },
@@ -509,16 +531,24 @@ function BridgeWaQrPanel({ bridgeInstanceId }: { bridgeInstanceId: number }) {
     return () => clearInterval(t);
   }, [qrLastUpdated]);
 
+  const dashboardUrl = (qrImageData as { status?: string; dashboardUrl?: string } | undefined)?.status === "use_dashboard"
+    ? (qrImageData as { dashboardUrl?: string }).dashboardUrl
+    : undefined;
+
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+      <p className="text-amber-200 text-sm font-semibold mb-3 flex items-center gap-2">
+        <QrCode className="w-4 h-4" />
+        Escaneie o QR com o celular deste número
+      </p>
       {qrImageData?.ok && qrImageData.qr ? (
-        <>
-          <div className="relative">
-            <div className="bg-white p-2 rounded-xl">
-              <img src={qrImageData.qr} alt="QR Code" className="w-48 h-48" />
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+          <div className="relative shrink-0">
+            <div className="bg-white p-3 rounded-2xl shadow-lg">
+              <img src={qrImageData.qr} alt="QR Code para conectar o WhatsApp" className="w-52 h-52" />
             </div>
             <div
-              className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold"
+              className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
               style={{
                 background: qrAge > 15 ? "#ef444420" : "#25D36620",
                 color: qrAge > 15 ? "#ef4444" : "#25D366",
@@ -526,48 +556,50 @@ function BridgeWaQrPanel({ bridgeInstanceId }: { bridgeInstanceId: number }) {
               }}
             >
               {qrFetching ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : null}
-              {qrAge}s
+              {qrAge > 15 ? "Atualizando…" : "Novo"}
             </div>
           </div>
-          <p className="text-[10px] text-center" style={{ color: "#fbbf24" }}>
-            Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
-          </p>
-          {qrAge > 15 && (
-            <p className="text-[9px] text-center" style={{ color: "#ef4444" }}>
-              QR antigo — aguarde atualizar antes de escanear
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => refetchQrImage()}
-            className="text-[10px] flex items-center gap-1 px-2 py-1 rounded"
-            style={{ color: "#888", background: "#1a1a1a" }}
-          >
-            <RefreshCw className="w-3 h-3" /> Atualizar QR
-          </button>
-        </>
-      ) : (qrImageData as { status?: string; dashboardUrl?: string } | undefined)?.status === "use_dashboard" &&
-        (qrImageData as { dashboardUrl?: string }).dashboardUrl ? (
-        <>
-          <p className="text-[10px] text-center" style={{ color: "#fbbf24" }}>
-            QR disponível no Railway. Clique para escanear:
-          </p>
+          <ol className="flex-1 space-y-2 text-sm text-gray-300 list-none p-0 m-0">
+            {QR_STEPS.map((step, i) => (
+              <li key={step} className="flex gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-200 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  {i + 1}
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+            {qrAge > 15 && (
+              <li className="text-red-400 text-xs pl-8">
+                Este QR já envelheceu. Espere ele atualizar sozinho antes de apontar a câmera.
+              </li>
+            )}
+            <li className="pt-1">
+              <button
+                type="button"
+                onClick={() => refetchQrImage()}
+                className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${qrFetching ? "animate-spin" : ""}`} />
+                Atualizar QR agora
+              </button>
+            </li>
+          </ol>
+        </div>
+      ) : dashboardUrl ? (
+        <div className="space-y-2">
+          <p className="text-sm text-amber-200">O QR abriu em outra página. Use o botão abaixo e siga os mesmos passos no celular.</p>
           <a
-            href={(qrImageData as { dashboardUrl: string }).dashboardUrl}
+            href={dashboardUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold"
-            style={{ background: "#fbbf2420", color: "#fbbf24", border: "1px solid #fbbf2440" }}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500/15 text-amber-200 border border-amber-500/40"
           >
             <ExternalLink className="w-4 h-4" /> Abrir QR Code
           </a>
-          <p className="text-[10px] text-center" style={{ color: "#666" }}>
-            Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo
-          </p>
-        </>
+        </div>
       ) : (
-        <div className="flex items-center gap-2 text-xs" style={{ color: "#888" }}>
-          <RefreshCw className="w-4 h-4 animate-spin" /> Carregando QR...
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+          <RefreshCw className="w-4 h-4 animate-spin" /> Gerando o QR… em alguns segundos ele aparece aqui.
         </div>
       )}
     </div>
@@ -799,7 +831,7 @@ export default function PdvWhatsAppConfig() {
   const bridgeReset = trpc.wa.bridgeReset.useMutation({
     onSuccess: (_data, vars) => {
       autoBridgeStartOnce.current.delete(vars.bridgeInstanceId);
-      toast.success("Sessão resetada — aguarde o QR Code aparecer.");
+      toast.success("Gerando um QR novo — escaneie no cartão deste número.");
       setTimeout(() => refetchBridge(), 5000);
     },
     onError: (e) => toast.error(e.message),
@@ -807,7 +839,7 @@ export default function PdvWhatsAppConfig() {
 
   const bridgeStart = trpc.wa.bridgeStart.useMutation({
     onSuccess: () => {
-      toast.success("Iniciando conexão — aguarde o QR Code aparecer.");
+      toast.success("Conectando — o QR aparece neste cartão em alguns segundos.");
       setTimeout(() => refetchBridge(), 5000);
     },
     onError: (e, vars) => {
@@ -1164,19 +1196,19 @@ export default function PdvWhatsAppConfig() {
             </div>
             <div>
               <h1 className="text-white font-bold text-sm">Configurações WhatsApp IA</h1>
-              <p className="text-gray-400 text-xs">Gerencie instâncias, treinamento e respostas</p>
+              <p className="text-gray-400 text-xs">Números da loja, treinamento e respostas</p>
             </div>
           </div>
 
-          {/* Seletor de instância */}
-          {instances.length > 0 && (
+          {/* Seletor só nas abas de IA / horários — na de conectar cada cartão já é um número */}
+          {instances.length > 0 && activeTab !== "instancias" && (
             <div className="ml-auto">
               <Select
                 value={selectedInstanceId?.toString() ?? ""}
                 onValueChange={v => setSelectedInstanceId(Number(v))}
               >
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white h-8 text-xs w-44">
-                  <SelectValue placeholder="Selecionar instância" />
+                  <SelectValue placeholder="Qual número?" />
                 </SelectTrigger>
                 <SelectContent className="bg-gray-800 border-gray-700 text-white">
                   {instances.map((i: any) => (
@@ -1211,263 +1243,399 @@ export default function PdvWhatsAppConfig() {
         {/* Conteúdo */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6">          {/* ── Tab: Instâncias ────────────────────────────────────────────────── */}
           {activeTab === "instancias" && (
-            <div className="max-w-3xl space-y-6">
-
-              {/* ─── Status ao vivo do wa-bridge ─────────────────────────────────── */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h2 className="text-white font-semibold flex items-center gap-2">
-                      <Radio className="w-4 h-4 text-green-400" />
-                      Conexões WhatsApp (wa-bridge)
-                    </h2>
-                    <p className="text-gray-400 text-xs mt-0.5">Até {WA_MAX_SLOTS} números. Clique no lápis para nomear — o nome aparece no painel do WhatsApp.</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => refetchBridge()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors border-gray-700 text-gray-400 hover:text-white"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${bridgeFetching ? "animate-spin" : ""}`} />
-                      Atualizar
-                    </button>
-                    <a
-                      href={(import.meta.env.VITE_WA_BRIDGE_DASHBOARD_URL as string | undefined) || "https://wa-bridge-production-c9a2.up.railway.app/dashboard"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors"
-                      style={{ borderColor: "#25D36633", color: "#25D366" }}
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Painel QR
-                    </a>
-                  </div>
-                </div>
-
-                <div className="mb-3 rounded-xl border border-gray-800 bg-gray-900/60 p-3 text-[11px] text-gray-400 leading-relaxed">
-                  <p className="text-gray-300 font-medium mb-1">Comportamento da conexão</p>
-                  <p>
-                    Com o servidor estável, a sessão permanece autenticada no wa-bridge (disco no Railway). O QR aparece
-                    automaticamente quando a instância está aguardando pareamento; não é necessário resetar. Use{" "}
-                    <span className="text-orange-300/90">Resetar sessão</span> só para trocar de WhatsApp ou refazer o
-                    pareamento — isso desconecta de propósito. Enquanto estiver <span className="text-green-400/90">Conectado</span>, o
-                    botão de reset fica oculto para não desligar sem querer; use o painel do wa-bridge se precisar forçar despareamento.
+            <div className="max-w-4xl space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div>
+                  <h2 className="text-white font-semibold text-lg flex items-center gap-2">
+                    <Smartphone className="w-5 h-5 text-green-400" />
+                    Conectar os WhatsApps da loja
+                  </h2>
+                  <p className="text-gray-400 text-sm mt-1 max-w-xl">
+                    Cada cartão é um celular. Conecte pelo QR para as conversas desse número aparecerem no painel.
+                    O lápis muda o nome que a equipe vê no chat.
                   </p>
                 </div>
-
-                {bridgeData && !bridgeData.available && (
-                  <div className="flex items-center gap-2 p-3 rounded-xl text-xs bg-red-950/20 border border-red-800/30 text-red-400 mb-3">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    wa-bridge indisponível — verifique o deploy no Railway.
-                  </div>
-                )}
-
-                {bridgeData?.available && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mb-3">
-                    {Array.from({ length: WA_MAX_SLOTS }, (_, i) => i + 1).map((slot) => {
-                      const sess = (bridgeData.sessions as any[]).find((s: any) => Number(s.instanceId) === slot);
-                      const linkedInst = (instances as any[]).find((i: any) => String(i.instanceId) === String(slot));
-                      const displayName = linkedInst?.name || sess?.name || `Instância ${slot}`;
-                      const isConnected = sess?.status === "connected";
-                      const isQr = sess?.status === "qr";
-                      const missingOnBridge = !sess;
-                      return (
-                        <div key={slot} className="rounded-xl border p-4 space-y-3"
-                          style={{ background: isConnected ? "rgba(37,211,102,0.05)" : "#111", borderColor: isConnected ? "#25D36633" : isQr ? "#fbbf2433" : "#2a2a2a" }}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black shrink-0"
-                                style={{ background: isConnected ? "#25D36620" : "#1a1a1a", color: isConnected ? "#25D366" : "#555" }}>
-                                {slot}
-                              </div>
-                              <div className="min-w-0">
-                                {linkedInst ? (
-                                  <InstanceRenameField
-                                    name={displayName}
-                                    pending={renameInst.isPending}
-                                    className="text-white text-xs font-semibold"
-                                    onSave={(name) => renameInst.mutate({ id: linkedInst.id, name })}
-                                  />
-                                ) : (
-                                  <div className="text-white text-xs font-semibold">{displayName}</div>
-                                )}
-                                {(sess?.phone || (linkedInst?.phone && linkedInst.phone !== "00000000000")) && (
-                                  <div className="text-[10px] font-mono" style={{ color: "#25D366" }}>
-                                    +{sess?.phone || linkedInst.phone}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                              style={{ background: isConnected ? "#25D36620" : isQr ? "#fbbf2420" : "#1a1a1a", color: isConnected ? "#25D366" : isQr ? "#fbbf24" : "#555" }}>
-                              {isConnected ? "Conectado" : isQr ? "Aguard. QR" : "Desconectado"}
-                            </span>
-                          </div>
-                          {/* Ícone central */}
-                          <div className="flex justify-center py-1">
-                            {isConnected && <CheckCircle2 className="w-8 h-8" style={{ color: "#25D366" }} />}
-                            {isQr && <QrCode className="w-8 h-8" style={{ color: "#fbbf24" }} />}
-                            {!isConnected && !isQr && <WifiOff className="w-8 h-8" style={{ color: "#444" }} />}
-                          </div>
-
-                          {isQr && sess && <BridgeWaQrPanel bridgeInstanceId={slot} />}
-
-                          {missingOnBridge && (
-                            <div className="text-[10px] text-center text-amber-400/90">
-                              Slot ainda não aparece no wa-bridge. Depois do deploy, use Iniciar conexão.
-                            </div>
-                          )}
-
-                          <div className="flex flex-col gap-1.5">
-                            {!isConnected && !isQr && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  autoBridgeStartOnce.current.delete(slot);
-                                  bridgeStart.mutate({ bridgeInstanceId: slot });
-                                }}
-                                disabled={bridgeStart.isPending || missingOnBridge}
-                                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold border"
-                                style={{ color: "#25D366", borderColor: "#25D36633", background: "#25D36610" }}
-                              >
-                                {bridgeStart.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-                                Iniciar conexão
-                              </button>
-                            )}
-                            {!isConnected && !missingOnBridge && (
-                            <button
-                              type="button"
-                              onClick={() => bridgeReset.mutate({ bridgeInstanceId: slot })}
-                              disabled={bridgeReset.isPending}
-                              className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold border"
-                              style={{ color: "#f87171", borderColor: "#f8717122", background: "#f8717108" }}
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" /> Resetar sessão (novo QR)
-                            </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {!bridgeData && (
-                  <div className="flex items-center justify-center h-16 text-xs" style={{ color: "#444" }}>
-                    <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Consultando wa-bridge...
-                  </div>
-                )}
-              </div>
-
-              {/* ─── Números cadastrados no banco ────────────────────────────────────── */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h2 className="text-white font-semibold">Números cadastrados</h2>
-                    <p className="text-gray-400 text-xs mt-0.5">Cada número fica ligado a um slot de 1 a {WA_MAX_SLOTS}. O nome do lápis é o que aparece no chat.</p>
-                  </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => refetchBridge()}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-gray-700 text-gray-400 hover:text-white transition-colors"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${bridgeFetching ? "animate-spin" : ""}`} />
+                    Atualizar
+                  </button>
                   <Button
-                    onClick={() => { setInstForm({ id: 0, name: "", phone: "", instanceId: "", apiKey: "", webhookUrl: "", active: true }); setEditingInst(true); }}
+                    onClick={() => {
+                      const used = new Set(
+                        (instances as { instanceId?: string }[]).map((i) => String(i.instanceId)).filter(Boolean)
+                      );
+                      const free = Array.from({ length: WA_MAX_SLOTS }, (_, i) => String(i + 1)).find((s) => !used.has(s)) ?? "";
+                      setInstForm({ id: 0, name: "", phone: "", instanceId: free, apiKey: "", webhookUrl: "", active: true });
+                      setEditingInst(true);
+                    }}
+                    disabled={(instances as unknown[]).length >= WA_MAX_SLOTS}
                     className="bg-green-700 hover:bg-green-600 gap-2 text-sm"
                   >
-                    <Plus className="w-4 h-4" /> Novo Número
+                    <Plus className="w-4 h-4" /> Novo número
                   </Button>
-                </div>
-              {/* Lista de números */}
-                <div className="space-y-3">
-                  {instances.map((inst: any) => (
-                    <div key={inst.id} className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm shrink-0"
-                            style={{ background: "#1a1a1a", color: "#25D366" }}>
-                            {inst.instanceId || "?"}
-                          </div>
-                          <div className="min-w-0">
-                            <InstanceRenameField
-                              name={inst.name}
-                              className="text-white font-semibold text-sm"
-                              pending={renameInst.isPending}
-                              onSave={(name) => renameInst.mutate({ id: inst.id, name })}
-                            />
-                            <div className="text-gray-400 text-xs font-mono">{inst.phone}</div>
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-2 shrink-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-500 text-[10px] uppercase tracking-wide">IA</span>
-                            <Switch
-                              checked={Boolean(inst.aiEnabledGlobal)}
-                              disabled={setInstanceAi.isPending}
-                              onCheckedChange={(v) => setInstanceAi.mutate({ instanceId: inst.id, enabled: v })}
-                            />
-                          </div>
-                          <Button variant="ghost" size="sm"
-                            onClick={() => { setInstForm({ id: inst.id, name: inst.name, phone: inst.phone, instanceId: inst.instanceId ?? "", apiKey: inst.apiKey ?? "", webhookUrl: inst.webhookUrl ?? "", active: inst.active }); setEditingInst(true); }}
-                            className="text-gray-400 hover:text-white text-xs h-7">
-                            Editar
-                          </Button>
-                          <Button variant="ghost" size="sm"
-                            onClick={() => {
-                              if (confirm(`Remover "${inst.name}"? Esta ação não pode ser desfeita.`)) {
-                                deleteInst.mutate({ id: inst.id });
-                              }
-                            }}
-                            disabled={deleteInst.isPending}
-                            className="text-red-400 hover:text-red-300 text-xs h-7">
-                            Excluir
-                          </Button>
-                        </div>
-                      </div>
-                      {!inst.instanceId && (
-                        <div className="mt-3 flex items-center gap-2 text-xs text-orange-400 bg-orange-950/20 rounded-lg px-3 py-2">
-                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                          Defina o <strong>ID da instância wa-bridge</strong> (1 a {WA_MAX_SLOTS}) para vincular este número.
-                        </div>
-                      )}
-                      {inst.instanceId && !parseBridgeSlot(inst.instanceId) && (
-                        <div className="mt-3 flex items-center gap-2 text-xs text-red-400 bg-red-950/20 rounded-lg px-3 py-2">
-                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                          ID inválido (<strong>{inst.instanceId}</strong>). Use apenas <strong>1</strong> a <strong>{WA_MAX_SLOTS}</strong> — o sistema tenta corrigir sozinho ao abrir esta tela.
-                        </div>
-                      )}
-                    </div>
-                  ))}
                 </div>
               </div>
 
-              {/* Form de edição */}
+              <div className="rounded-xl border border-gray-800 bg-gray-900/70 px-4 py-3">
+                <p className="text-gray-200 text-sm font-medium mb-2">Como conectar</p>
+                <ol className="grid sm:grid-cols-3 gap-2 text-xs text-gray-400 list-none p-0 m-0">
+                  <li className="flex gap-2 items-start">
+                    <span className="w-5 h-5 rounded-full bg-green-700/30 text-green-300 text-[11px] font-bold flex items-center justify-center shrink-0">1</span>
+                    <span>Toque em <strong className="text-gray-200 font-semibold">Conectar WhatsApp</strong> no cartão do número.</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="w-5 h-5 rounded-full bg-green-700/30 text-green-300 text-[11px] font-bold flex items-center justify-center shrink-0">2</span>
+                    <span>No celular: WhatsApp → Aparelhos conectados → Conectar aparelho.</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="w-5 h-5 rounded-full bg-green-700/30 text-green-300 text-[11px] font-bold flex items-center justify-center shrink-0">3</span>
+                    <span>Escaneie o QR que aparece neste mesmo cartão. Pronto quando ficar verde.</span>
+                  </li>
+                </ol>
+              </div>
+
+              {bridgeData && !bridgeData.available && (
+                <div className="flex items-center gap-2 p-3 rounded-xl text-sm bg-red-950/20 border border-red-800/30 text-red-400">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  O servidor do WhatsApp está offline. Atualize a página em alguns segundos. Se continuar assim, avise o suporte.
+                </div>
+              )}
+
+              {!bridgeData && (
+                <div className="flex items-center justify-center h-16 text-sm text-gray-500">
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Carregando os números…
+                </div>
+              )}
+
+              {bridgeData && (
+                <div className="space-y-3">
+                  {Array.from({ length: WA_MAX_SLOTS }, (_, i) => i + 1).map((slot) => {
+                    const sess = ((bridgeData?.available ? bridgeData.sessions : []) as any[]).find((s: any) => Number(s.instanceId) === slot);
+                    const linkedInst = (instances as any[]).find((i: any) => String(i.instanceId) === String(slot));
+                    const displayName = linkedInst?.name || sess?.name || `WhatsApp ${slot}`;
+                    const isConnected = sess?.status === "connected";
+                    const isQr = sess?.status === "qr";
+                    const missingOnBridge = !sess;
+                    const isVacant = !linkedInst && !isConnected && !isQr;
+                    const phoneLabel = formatPhoneDisplay(sess?.phone || linkedInst?.phone);
+                    const accent = INSTANCE_COLORS[(slot - 1) % INSTANCE_COLORS.length];
+                    const status = isConnected
+                      ? { label: "Conectado", hint: "As conversas deste número já entram no painel.", color: "#25D366", bg: "rgba(37,211,102,0.08)", border: "#25D36644" }
+                      : isQr
+                        ? { label: "Leia o QR no celular", hint: "Use o aparelho deste número — não o WhatsApp do computador.", color: "#fbbf24", bg: "rgba(251,191,36,0.07)", border: "#fbbf2444" }
+                        : missingOnBridge
+                          ? { label: "Aguardando", hint: "O número ainda não apareceu no servidor. Tente conectar de novo em instantes.", color: "#fb923c", bg: "#111", border: "#2a2a2a" }
+                          : { label: "Desconectado", hint: "Toque em Conectar WhatsApp para gerar o QR.", color: "#9ca3af", bg: "#111", border: "#2a2a2a" };
+
+                    if (isVacant) {
+                      return (
+                        <div key={slot} className="rounded-2xl border border-dashed border-gray-800 bg-gray-950/40 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div
+                              className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black shrink-0"
+                              style={{ background: `${accent}18`, color: accent }}
+                            >
+                              {slot}
+                            </div>
+                            <div>
+                              <p className="text-gray-400 text-sm font-medium">Vaga livre</p>
+                              <p className="text-gray-600 text-xs">Ainda sem número cadastrado nesta posição.</p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-gray-700 text-gray-300 hover:text-white"
+                            onClick={() => {
+                              setInstForm({ id: 0, name: "", phone: "", instanceId: String(slot), apiKey: "", webhookUrl: "", active: true });
+                              setEditingInst(true);
+                            }}
+                          >
+                            <Plus className="w-3.5 h-3.5 mr-1" /> Cadastrar número
+                          </Button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <article
+                        key={slot}
+                        className="rounded-2xl border p-4 sm:p-5 space-y-4"
+                        style={{ background: status.bg, borderColor: status.border }}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <div
+                              className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-black shrink-0"
+                              style={{ background: `${accent}22`, color: accent }}
+                            >
+                              {slot}
+                            </div>
+                            <div className="min-w-0 space-y-0.5">
+                              {linkedInst ? (
+                                <InstanceRenameField
+                                  name={displayName}
+                                  pending={renameInst.isPending}
+                                  className="text-white text-base font-semibold"
+                                  onSave={(name) => renameInst.mutate({ id: linkedInst.id, name })}
+                                />
+                              ) : (
+                                <p className="text-white text-base font-semibold">{displayName}</p>
+                              )}
+                              {phoneLabel ? (
+                                <p className="text-sm font-mono" style={{ color: accent }}>{phoneLabel}</p>
+                              ) : (
+                                <p className="text-xs text-gray-500">Número ainda não informado</p>
+                              )}
+                              <p className="text-xs text-gray-400">{status.hint}</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 sm:justify-end shrink-0">
+                            <span
+                              className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full"
+                              style={{ background: `${status.color}22`, color: status.color }}
+                            >
+                              {isConnected ? <CheckCircle2 className="w-3.5 h-3.5" /> : isQr ? <QrCode className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+                              {status.label}
+                            </span>
+                            {linkedInst && (
+                              <label className="inline-flex items-center gap-2 text-xs text-gray-400 pl-1">
+                                <span>Respostas da IA</span>
+                                <Switch
+                                  checked={Boolean(linkedInst.aiEnabledGlobal)}
+                                  disabled={setInstanceAi.isPending}
+                                  onCheckedChange={(v) => setInstanceAi.mutate({ instanceId: linkedInst.id, enabled: v })}
+                                />
+                              </label>
+                            )}
+                          </div>
+                        </div>
+
+                        {isQr && sess && <BridgeWaQrPanel bridgeInstanceId={slot} />}
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {!isConnected && !isQr && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                autoBridgeStartOnce.current.delete(slot);
+                                bridgeStart.mutate({ bridgeInstanceId: slot });
+                              }}
+                              disabled={bridgeStart.isPending || missingOnBridge}
+                              className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-sm font-semibold text-white bg-green-700 hover:bg-green-600 disabled:opacity-50 transition-colors"
+                            >
+                              {bridgeStart.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
+                              Conectar WhatsApp
+                            </button>
+                          )}
+                          {!linkedInst && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-gray-700 text-gray-300"
+                              onClick={() => {
+                                setInstForm({
+                                  id: 0,
+                                  name: displayName,
+                                  phone: sess?.phone || "",
+                                  instanceId: String(slot),
+                                  apiKey: "",
+                                  webhookUrl: "",
+                                  active: true,
+                                });
+                                setEditingInst(true);
+                              }}
+                            >
+                              <Plus className="w-3.5 h-3.5 mr-1" /> Guardar este número no painel
+                            </Button>
+                          )}
+                          {linkedInst && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInstForm({
+                                  id: linkedInst.id,
+                                  name: linkedInst.name,
+                                  phone: linkedInst.phone,
+                                  instanceId: linkedInst.instanceId ?? "",
+                                  apiKey: linkedInst.apiKey ?? "",
+                                  webhookUrl: linkedInst.webhookUrl ?? "",
+                                  active: linkedInst.active,
+                                });
+                                setEditingInst(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 h-10 px-3 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" /> Editar dados
+                            </button>
+                          )}
+                          {(isConnected || isQr) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const ok = confirm(
+                                  isConnected
+                                    ? `Trocar o celular de "${displayName}"? O WhatsApp atual será desconectado e um QR novo aparece.`
+                                    : "Gerar outro QR? O código atual será substituído."
+                                );
+                                if (ok) bridgeReset.mutate({ bridgeInstanceId: slot });
+                              }}
+                              disabled={bridgeReset.isPending}
+                              className="inline-flex items-center gap-1.5 h-10 px-3 rounded-lg text-xs text-red-400/80 hover:text-red-300 hover:bg-red-950/30 transition-colors"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              {isConnected ? "Trocar de celular" : "Gerar outro QR"}
+                            </button>
+                          )}
+                          {!isConnected && !isQr && !missingOnBridge && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm("Gerar um QR novo para este número?")) {
+                                  bridgeReset.mutate({ bridgeInstanceId: slot });
+                                }
+                              }}
+                              disabled={bridgeReset.isPending}
+                              className="inline-flex items-center gap-1.5 h-10 px-3 rounded-lg text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" /> Gerar outro QR
+                            </button>
+                          )}
+                          {linkedInst && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(`Remover "${linkedInst.name}" do painel? As conversas antigas continuam salvas.`)) {
+                                  deleteInst.mutate({ id: linkedInst.id });
+                                }
+                              }}
+                              disabled={deleteInst.isPending}
+                              className="inline-flex items-center gap-1.5 h-10 px-3 rounded-lg text-xs text-gray-600 hover:text-red-400 ml-auto transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Remover
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+
+              {(instances as any[]).some((inst: any) => !parseBridgeSlot(inst.instanceId)) && (
+                <div className="space-y-2">
+                  <p className="text-sm text-amber-200 font-medium">Números sem posição definida</p>
+                  {(instances as any[])
+                    .filter((inst: any) => !parseBridgeSlot(inst.instanceId))
+                    .map((inst: any) => (
+                      <div key={inst.id} className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white font-semibold text-sm">{inst.name}</p>
+                          <p className="text-gray-400 text-xs font-mono">{inst.phone}</p>
+                          <p className="text-amber-300/90 text-xs mt-1">
+                            Escolha em qual vaga (1 a {WA_MAX_SLOTS}) este número entra e salve.
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-amber-700/50 text-amber-200"
+                          onClick={() => {
+                            setInstForm({
+                              id: inst.id,
+                              name: inst.name,
+                              phone: inst.phone,
+                              instanceId: inst.instanceId ?? "",
+                              apiKey: inst.apiKey ?? "",
+                              webhookUrl: inst.webhookUrl ?? "",
+                              active: inst.active,
+                            });
+                            setEditingInst(true);
+                          }}
+                        >
+                          Escolher vaga
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              )}
+
               {editingInst && (
                 <div className="bg-gray-900 rounded-xl border border-green-800/50 p-5 space-y-4">
                   <h3 className="text-white font-semibold text-sm">
-                    {instForm.id ? "Editar Número" : "Novo Número"}
+                    {instForm.id ? "Editar número" : "Cadastrar número"}
                   </h3>
+                  <p className="text-gray-400 text-xs">
+                    Dê um nome fácil para a equipe (ex.: Loja, Delivery). O WhatsApp em si se conecta no cartão, pelo QR.
+                  </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-gray-300 text-xs">Nome *</Label>
-                      <Input value={instForm.name} onChange={e => setInstForm(f => ({ ...f, name: e.target.value }))}
-                        placeholder="ex: Jurema Principal" className="bg-gray-800 border-gray-700 text-white text-sm" />
+                      <Label htmlFor="inst-name" className="text-gray-300 text-xs">Nome no painel *</Label>
+                      <Input
+                        id="inst-name"
+                        value={instForm.name}
+                        onChange={e => setInstForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="ex: Loja principal"
+                        className="bg-gray-800 border-gray-700 text-white text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-gray-300 text-xs">Número (com DDI) *</Label>
-                      <Input value={instForm.phone} onChange={e => setInstForm(f => ({ ...f, phone: e.target.value }))}
-                        placeholder="5511999999999" className="bg-gray-800 border-gray-700 text-white text-sm font-mono" />
+                      <Label htmlFor="inst-phone" className="text-gray-300 text-xs">Celular com DDI *</Label>
+                      <Input
+                        id="inst-phone"
+                        value={instForm.phone}
+                        onChange={e => setInstForm(f => ({ ...f, phone: e.target.value }))}
+                        placeholder="5511999999999"
+                        className="bg-gray-800 border-gray-700 text-white text-sm font-mono"
+                      />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-gray-300 text-xs">ID da instância wa-bridge *</Label>
-                      <Input value={instForm.instanceId} onChange={e => setInstForm(f => ({ ...f, instanceId: e.target.value }))}
-                        placeholder={`1 a ${WA_MAX_SLOTS}`} className="bg-gray-800 border-gray-700 text-white text-sm font-mono" />
-                      <p className="text-gray-500 text-xs">Slot do wa-bridge (1 a {WA_MAX_SLOTS}). Prefira renomear pelo lápis no card acima.</p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-gray-300 text-xs">Webhook URL (opcional)</Label>
-                      <Input value={instForm.webhookUrl} onChange={e => setInstForm(f => ({ ...f, webhookUrl: e.target.value }))}
-                        placeholder="https://juremasports2.com.br/api/trpc/wa.receiveWebhook"
-                        className="bg-gray-800 border-gray-700 text-white text-sm font-mono" />
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label className="text-gray-300 text-xs">Vaga neste painel</Label>
+                      <Select
+                        value={instForm.instanceId || undefined}
+                        onValueChange={(v) => setInstForm((f) => ({ ...f, instanceId: v }))}
+                      >
+                        <SelectTrigger className="bg-gray-800 border-gray-700 text-white text-sm">
+                          <SelectValue placeholder={`Escolha de 1 a ${WA_MAX_SLOTS}`} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                          {Array.from({ length: WA_MAX_SLOTS }, (_, i) => i + 1).map((slot) => {
+                            const taken = (instances as any[]).find(
+                              (inst: any) => String(inst.instanceId) === String(slot) && inst.id !== instForm.id
+                            );
+                            return (
+                              <SelectItem key={slot} value={String(slot)} className="text-sm">
+                                Número {slot}{taken ? ` — já é ${taken.name}` : " — livre"}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                  <div className="flex gap-2 pt-2">
+                  <Collapsible>
+                    <CollapsibleTrigger className="text-xs text-gray-500 hover:text-gray-300 inline-flex items-center gap-1">
+                      <ChevronDown className="w-3.5 h-3.5" /> Opções técnicas
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pt-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="inst-webhook" className="text-gray-300 text-xs">Webhook (opcional)</Label>
+                        <Input
+                          id="inst-webhook"
+                          value={instForm.webhookUrl}
+                          onChange={e => setInstForm(f => ({ ...f, webhookUrl: e.target.value }))}
+                          placeholder="https://juremasports2.com.br/api/trpc/wa.receiveWebhook"
+                          className="bg-gray-800 border-gray-700 text-white text-sm font-mono"
+                        />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                  <div className="flex gap-2 pt-1">
                     <Button
                       onClick={() => upsertInst.mutate(instForm.id ? instForm : { name: instForm.name, phone: instForm.phone, instanceId: instForm.instanceId || undefined, apiKey: instForm.apiKey || undefined, webhookUrl: instForm.webhookUrl || undefined, active: instForm.active })}
                       disabled={upsertInst.isPending || !instForm.name || !instForm.phone}
