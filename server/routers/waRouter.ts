@@ -14,6 +14,14 @@ import { buildSystemPrompt, mergeDbRowWithDefaults } from "./waAiTrainingDefault
 import { detectBusinessContextRegression } from "./waAiTrainingGuard";
 import { refineAiTrainingFromNaturalLanguage, refineTrainingInputSchema } from "./waAiTrainingRefine";
 import { manusStoragePublicPath, resolveStoredMediaToViewUrl } from "../waMediaResolve";
+import {
+  WA_MAX_SLOTS,
+  ensureInstanceSlots,
+  parseBridgeSlot,
+  resolveAiConfigPk,
+  resolveConversationInstanceIds,
+  syncNameToBridge,
+} from "../waInstanceDb";
 
 async function getDb() {
   const url = process.env.DATABASE_URL;
@@ -222,11 +230,12 @@ export const waRouter = router({
     await requireWaAccess(ctx);
     const db = await getDb();
     try {
+      await ensureInstanceSlots(db);
       const [rows] = await db.execute(
         `SELECT i.*, IFNULL(ac.\`enabled\`, 0) AS aiEnabledGlobal
          FROM wa_instances i
          LEFT JOIN wa_ai_config ac ON ac.instanceId = i.id
-         ORDER BY i.id`
+         ORDER BY CAST(i.instanceId AS UNSIGNED), i.id`
       );
       return rows as any[];
     } finally { await db.end(); }
@@ -303,13 +312,12 @@ export const waRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       await requireWaAdmin(ctx);
-      // Slot wa-bridge: somente 1, 2 ou 3 (evita entradas inválidas como "jurema 4").
       let bridgeSlot: string | null = input.instanceId?.trim() || null;
       if (bridgeSlot) {
-        if (!/^[1-3]$/.test(bridgeSlot)) {
+        if (!parseBridgeSlot(bridgeSlot)) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "ID da instância wa-bridge deve ser 1, 2 ou 3.",
+            message: `ID da instância wa-bridge deve ser um número de 1 a ${WA_MAX_SLOTS}.`,
           });
         }
       }
@@ -321,13 +329,40 @@ export const waRouter = router({
             "UPDATE wa_instances SET name=?, phone=?, instanceId=?, apiKey=?, webhookUrl=?, active=? WHERE id=?",
             [input.name, phone, bridgeSlot, input.apiKey ?? null, input.webhookUrl ?? null, input.active ?? true, input.id]
           );
+          const slot = parseBridgeSlot(bridgeSlot);
+          if (slot) await syncNameToBridge(slot, input.name);
           return { success: true };
         }
         const [result] = await db.execute(
           "INSERT INTO wa_instances (name, phone, instanceId, apiKey, webhookUrl, active, status) VALUES (?,?,?,?,?,?,?)",
           [input.name, phone, bridgeSlot, input.apiKey ?? null, input.webhookUrl ?? null, input.active ?? true, "disconnected"]
         ) as any;
+        const slot = parseBridgeSlot(bridgeSlot);
+        if (slot) await syncNameToBridge(slot, input.name);
         return { success: true, id: result.insertId };
+      } finally { await db.end(); }
+    }),
+
+  /** Renomeia a instância no PDV e no painel do wa-bridge. */
+  renameInstance: publicProcedure
+    .input(z.object({
+      id: z.number(),
+      name: z.string().trim().min(1).max(80),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await requireWaAdmin(ctx);
+      const db = await getDb();
+      try {
+        const [rows] = await db.execute(
+          "SELECT id, instanceId FROM wa_instances WHERE id=?",
+          [input.id]
+        ) as any;
+        const row = rows[0];
+        if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Instância não encontrada" });
+        await db.execute("UPDATE wa_instances SET name=? WHERE id=?", [input.name, input.id]);
+        const slot = parseBridgeSlot(row.instanceId) ?? parseBridgeSlot(row.id);
+        if (slot) await syncNameToBridge(slot, input.name);
+        return { success: true, name: input.name };
       } finally { await db.end(); }
     }),
 
@@ -382,13 +417,14 @@ export const waRouter = router({
         let sql = `
           SELECT c.*, i.name AS instanceName, i.phone AS instancePhone
           FROM wa_conversations c
-          LEFT JOIN wa_instances i ON i.instanceId = c.instanceId
+          LEFT JOIN wa_instances i ON (i.instanceId = CAST(c.instanceId AS CHAR) OR i.id = c.instanceId)
           WHERE 1=1
         `;
         const params: any[] = [];
         if (input.instanceId && input.instanceId > 0) {
-          sql += " AND c.instanceId=?";
-          params.push(input.instanceId);
+          const keys = await resolveConversationInstanceIds(db, input.instanceId);
+          sql += ` AND c.instanceId IN (${keys.map(() => "?").join(",")})`;
+          params.push(...keys);
         }
         if (input.status) { sql += " AND c.status=?"; params.push(input.status); }
         if (input.aiEnabled !== undefined) { sql += " AND c.aiEnabled=?"; params.push(input.aiEnabled); }
@@ -414,7 +450,11 @@ export const waRouter = router({
       try {
         let sql = "SELECT status, COUNT(*) as count, SUM(unreadCount) as unread FROM wa_conversations WHERE 1=1";
         const params: any[] = [];
-        if (input.instanceId && input.instanceId > 0) { sql += " AND instanceId=?"; params.push(input.instanceId); }
+        if (input.instanceId && input.instanceId > 0) {
+          const keys = await resolveConversationInstanceIds(db, input.instanceId);
+          sql += ` AND instanceId IN (${keys.map(() => "?").join(",")})`;
+          params.push(...keys);
+        }
         sql += " GROUP BY status";
         const [rows] = await db.execute(sql, params) as any;
         const result: Record<string, { count: number; unread: number }> = {};

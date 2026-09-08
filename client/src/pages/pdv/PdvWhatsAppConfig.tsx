@@ -9,6 +9,8 @@ import {
   ChevronLeft, Eye, RefreshCw, AlertCircle,
   QrCode, RotateCcw, CheckCircle2, Radio, ExternalLink, ChevronDown, Sparkles, Loader2,
 } from "lucide-react";
+import InstanceRenameField from "@/components/wa/InstanceRenameField";
+import { WA_MAX_SLOTS, parseBridgeSlot } from "@shared/waInstanceSlots";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -814,17 +816,14 @@ export default function PdvWhatsAppConfig() {
     },
   });
 
-  // Ao abrir a aba Instâncias: se wa-bridge estiver parado (desconectado), inicia sozinho uma vez por sessão
-  // para gerar QR sem precisar apertar “Iniciar”. Após “Resetar sessão”, volta a poder auto-iniciar.
-  useEffect(() => {
-    if (activeTab !== "instancias" || !bridgeData?.available || !bridgeData.sessions?.length) return;
-    for (const sess of bridgeData.sessions) {
-      if (sess.status !== "disconnected") continue;
-      if (autoBridgeStartOnce.current.has(sess.instanceId)) continue;
-      autoBridgeStartOnce.current.add(sess.instanceId);
-      bridgeStart.mutate({ bridgeInstanceId: sess.instanceId });
-    }
-  }, [activeTab, bridgeData?.available, bridgeData?.sessions]);
+  const renameInst = trpc.wa.renameInstance.useMutation({
+    onSuccess: () => {
+      toast.success("Nome atualizado no painel do WhatsApp");
+      refetchInst();
+      refetchBridge();
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   const refineTrainingAi = trpc.wa.refineAiTrainingFromRequest.useMutation({
     onSuccess: (data) => {
@@ -1222,7 +1221,7 @@ export default function PdvWhatsAppConfig() {
                       <Radio className="w-4 h-4 text-green-400" />
                       Conexões WhatsApp (wa-bridge)
                     </h2>
-                    <p className="text-gray-400 text-xs mt-0.5">Status em tempo real das instâncias no Railway — atualiza a cada 15s</p>
+                    <p className="text-gray-400 text-xs mt-0.5">Até {WA_MAX_SLOTS} números. Clique no lápis para nomear — o nome aparece no painel do WhatsApp.</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -1264,24 +1263,40 @@ export default function PdvWhatsAppConfig() {
                 )}
 
                 {bridgeData?.available && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
-                    {bridgeData.sessions.map((sess: any) => {
-                      const linkedInst = (instances as any[]).find((i: any) => String(i.instanceId) === String(sess.instanceId));
-                      const isConnected = sess.status === "connected";
-                      const isQr = sess.status === "qr";
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mb-3">
+                    {Array.from({ length: WA_MAX_SLOTS }, (_, i) => i + 1).map((slot) => {
+                      const sess = (bridgeData.sessions as any[]).find((s: any) => Number(s.instanceId) === slot);
+                      const linkedInst = (instances as any[]).find((i: any) => String(i.instanceId) === String(slot));
+                      const displayName = linkedInst?.name || sess?.name || `Instância ${slot}`;
+                      const isConnected = sess?.status === "connected";
+                      const isQr = sess?.status === "qr";
+                      const missingOnBridge = !sess;
                       return (
-                        <div key={sess.instanceId} className="rounded-xl border p-4 space-y-3"
+                        <div key={slot} className="rounded-xl border p-4 space-y-3"
                           style={{ background: isConnected ? "rgba(37,211,102,0.05)" : "#111", borderColor: isConnected ? "#25D36633" : isQr ? "#fbbf2433" : "#2a2a2a" }}
                         >
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black"
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black shrink-0"
                                 style={{ background: isConnected ? "#25D36620" : "#1a1a1a", color: isConnected ? "#25D366" : "#555" }}>
-                                {sess.instanceId}
+                                {slot}
                               </div>
-                              <div>
-                                <div className="text-white text-xs font-semibold">{sess.name ?? `Instância ${sess.instanceId}`}</div>
-                                {sess.phone && <div className="text-[10px] font-mono" style={{ color: "#25D366" }}>+{sess.phone}</div>}
+                              <div className="min-w-0">
+                                {linkedInst ? (
+                                  <InstanceRenameField
+                                    name={displayName}
+                                    pending={renameInst.isPending}
+                                    className="text-white text-xs font-semibold"
+                                    onSave={(name) => renameInst.mutate({ id: linkedInst.id, name })}
+                                  />
+                                ) : (
+                                  <div className="text-white text-xs font-semibold">{displayName}</div>
+                                )}
+                                {(sess?.phone || (linkedInst?.phone && linkedInst.phone !== "00000000000")) && (
+                                  <div className="text-[10px] font-mono" style={{ color: "#25D366" }}>
+                                    +{sess?.phone || linkedInst.phone}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
@@ -1296,15 +1311,12 @@ export default function PdvWhatsAppConfig() {
                             {!isConnected && !isQr && <WifiOff className="w-8 h-8" style={{ color: "#444" }} />}
                           </div>
 
-                          {isQr && <BridgeWaQrPanel bridgeInstanceId={sess.instanceId} />}
+                          {isQr && sess && <BridgeWaQrPanel bridgeInstanceId={slot} />}
 
-                          {linkedInst ? (
-                            <div className="text-[10px] text-center" style={{ color: "#555" }}>
-                              Vinculado: <span style={{ color: "#888" }}>{linkedInst.name}</span>
-                              {linkedInst.phone && <span className="font-mono ml-1" style={{ color: "#666" }}>({linkedInst.phone})</span>}
+                          {missingOnBridge && (
+                            <div className="text-[10px] text-center text-amber-400/90">
+                              Slot ainda não aparece no wa-bridge. Depois do deploy, use Iniciar conexão.
                             </div>
-                          ) : (
-                            <div className="text-[10px] text-center" style={{ color: "#444" }}>Sem número vinculado</div>
                           )}
 
                           <div className="flex flex-col gap-1.5">
@@ -1312,10 +1324,10 @@ export default function PdvWhatsAppConfig() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  autoBridgeStartOnce.current.delete(sess.instanceId);
-                                  bridgeStart.mutate({ bridgeInstanceId: sess.instanceId });
+                                  autoBridgeStartOnce.current.delete(slot);
+                                  bridgeStart.mutate({ bridgeInstanceId: slot });
                                 }}
-                                disabled={bridgeStart.isPending}
+                                disabled={bridgeStart.isPending || missingOnBridge}
                                 className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold border"
                                 style={{ color: "#25D366", borderColor: "#25D36633", background: "#25D36610" }}
                               >
@@ -1323,10 +1335,10 @@ export default function PdvWhatsAppConfig() {
                                 Iniciar conexão
                               </button>
                             )}
-                            {!isConnected && (
+                            {!isConnected && !missingOnBridge && (
                             <button
                               type="button"
-                              onClick={() => bridgeReset.mutate({ bridgeInstanceId: sess.instanceId })}
+                              onClick={() => bridgeReset.mutate({ bridgeInstanceId: slot })}
                               disabled={bridgeReset.isPending}
                               className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold border"
                               style={{ color: "#f87171", borderColor: "#f8717122", background: "#f8717108" }}
@@ -1353,7 +1365,7 @@ export default function PdvWhatsAppConfig() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h2 className="text-white font-semibold">Números cadastrados</h2>
-                    <p className="text-gray-400 text-xs mt-0.5">Vincule cada número a uma instância wa-bridge (1, 2 ou 3)</p>
+                    <p className="text-gray-400 text-xs mt-0.5">Cada número fica ligado a um slot de 1 a {WA_MAX_SLOTS}. O nome do lápis é o que aparece no chat.</p>
                   </div>
                   <Button
                     onClick={() => { setInstForm({ id: 0, name: "", phone: "", instanceId: "", apiKey: "", webhookUrl: "", active: true }); setEditingInst(true); }}
@@ -1373,7 +1385,12 @@ export default function PdvWhatsAppConfig() {
                             {inst.instanceId || "?"}
                           </div>
                           <div className="min-w-0">
-                            <div className="text-white font-semibold text-sm">{inst.name}</div>
+                            <InstanceRenameField
+                              name={inst.name}
+                              className="text-white font-semibold text-sm"
+                              pending={renameInst.isPending}
+                              onSave={(name) => renameInst.mutate({ id: inst.id, name })}
+                            />
                             <div className="text-gray-400 text-xs font-mono">{inst.phone}</div>
                           </div>
                         </div>
@@ -1406,13 +1423,13 @@ export default function PdvWhatsAppConfig() {
                       {!inst.instanceId && (
                         <div className="mt-3 flex items-center gap-2 text-xs text-orange-400 bg-orange-950/20 rounded-lg px-3 py-2">
                           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                          Defina o <strong>ID da instância wa-bridge</strong> (1, 2 ou 3) para vincular este número.
+                          Defina o <strong>ID da instância wa-bridge</strong> (1 a {WA_MAX_SLOTS}) para vincular este número.
                         </div>
                       )}
-                      {inst.instanceId && !/^[1-3]$/.test(String(inst.instanceId)) && (
+                      {inst.instanceId && !parseBridgeSlot(inst.instanceId) && (
                         <div className="mt-3 flex items-center gap-2 text-xs text-red-400 bg-red-950/20 rounded-lg px-3 py-2">
                           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                          ID inválido (<strong>{inst.instanceId}</strong>). Use apenas <strong>1</strong>, <strong>2</strong> ou <strong>3</strong> — exclua esta entrada e vincule o número na instância correta.
+                          ID inválido (<strong>{inst.instanceId}</strong>). Use apenas <strong>1</strong> a <strong>{WA_MAX_SLOTS}</strong> — o sistema tenta corrigir sozinho ao abrir esta tela.
                         </div>
                       )}
                     </div>
@@ -1440,8 +1457,8 @@ export default function PdvWhatsAppConfig() {
                     <div className="space-y-1.5">
                       <Label className="text-gray-300 text-xs">ID da instância wa-bridge *</Label>
                       <Input value={instForm.instanceId} onChange={e => setInstForm(f => ({ ...f, instanceId: e.target.value }))}
-                        placeholder="1, 2 ou 3" className="bg-gray-800 border-gray-700 text-white text-sm font-mono" />
-                      <p className="text-gray-500 text-xs">Corresponde ao número da instância no wa-bridge (1 = Jurema 1, 2 = Jurema 2, 3 = Jurema 3).</p>
+                        placeholder={`1 a ${WA_MAX_SLOTS}`} className="bg-gray-800 border-gray-700 text-white text-sm font-mono" />
+                      <p className="text-gray-500 text-xs">Slot do wa-bridge (1 a {WA_MAX_SLOTS}). Prefira renomear pelo lápis no card acima.</p>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-gray-300 text-xs">Webhook URL (opcional)</Label>

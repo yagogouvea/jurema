@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "wouter";
+import InstanceRenameField from "@/components/wa/InstanceRenameField";
+import { findInstanceForConversation, instanceSlotOf } from "@shared/waInstanceSlots";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -1141,10 +1143,21 @@ export default function PdvWhatsApp() {
     const map: Record<number, number> = { 0: 0 };
     for (const c of conversations) {
       map[0] = (map[0] ?? 0) + (c.unreadCount ?? 0);
-      map[c.instanceId] = (map[c.instanceId] ?? 0) + (c.unreadCount ?? 0);
+      const key = instanceSlotOf(
+        findInstanceForConversation(instances as any[], Number(c.instanceId)) ?? { id: Number(c.instanceId) }
+      );
+      map[key] = (map[key] ?? 0) + (c.unreadCount ?? 0);
     }
     return map;
-  }, [conversations]);
+  }, [conversations, instances]);
+
+  const renameInst = trpc.wa.renameInstance.useMutation({
+    onSuccess: () => {
+      toast.success("Nome atualizado no painel");
+      utils.wa.listInstances.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   const totalStatusCount = Object.values(counts).reduce((a, b) => a + b.count, 0);
 
@@ -1281,32 +1294,56 @@ export default function PdvWhatsApp() {
               )}
             </button>
 
-            {(instances as any[]).map((inst, idx) => {
-              const color = getInstColor(idx);
-              const unread = unreadByInstance[inst.id] ?? 0;
-              const isSel = selectedInstanceId === inst.id;
+            {(instances as any[]).map((inst) => {
+              const slot = instanceSlotOf(inst);
+              const color = getInstColor(Math.max(0, slot - 1));
+              const unread = unreadByInstance[slot] ?? 0;
+              const isSel = selectedInstanceId === slot || selectedInstanceId === inst.id;
               return (
-                <button
+                <div
                   key={inst.id}
-                  onClick={() => setSelectedInstanceId(inst.id)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold whitespace-nowrap transition-all flex-shrink-0"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedInstanceId(slot || inst.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedInstanceId(slot || inst.id);
+                    }
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 rounded-full border text-[11px] font-bold whitespace-nowrap transition-all flex-shrink-0 cursor-pointer"
                   style={{
                     color: isSel ? color : "#555",
                     borderColor: isSel ? color : "#2a2a2a",
                     background: isSel ? `${color}14` : "transparent",
                   }}
                 >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                    style={{ background: inst.status === "connected" ? color : "#3a3a3a" }}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedInstanceId(slot || inst.id)}
+                    className="flex items-center gap-1.5"
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                      style={{ background: inst.status === "connected" ? color : "#3a3a3a" }}
+                    />
+                    <span className="sr-only">Filtrar {inst.name}</span>
+                  </button>
+                  <InstanceRenameField
+                    name={inst.name}
+                    compact
+                    disabled={!isAdmin}
+                    pending={renameInst.isPending}
+                    onSave={(name) => renameInst.mutate({ id: inst.id, name })}
                   />
-                  {inst.name}
                   {unread > 0 && (
-                    <span className="rounded-full px-1.5 text-[9px] font-black" style={{ background: color, color: "#000" }}>
-                      {unread}
-                    </span>
+                    <button type="button" onClick={() => setSelectedInstanceId(slot || inst.id)}>
+                      <span className="rounded-full px-1.5 text-[9px] font-black" style={{ background: color, color: "#000" }}>
+                        {unread}
+                      </span>
+                    </button>
                   )}
-                </button>
+                </div>
               );
             })}
 
@@ -1414,8 +1451,9 @@ export default function PdvWhatsApp() {
               </div>
             )}
             {conversations.map((conv: any) => {
-              const instIdx = (instances as any[]).findIndex(i => i.id === conv.instanceId);
-              const instColor = getInstColor(instIdx >= 0 ? instIdx : 0);
+              const inst = findInstanceForConversation(instances as any[], Number(conv.instanceId));
+              const instIdx = Math.max(0, instanceSlotOf(inst ?? { id: Number(conv.instanceId) }) - 1);
+              const instColor = getInstColor(instIdx);
               const isSel = selectedConvId === conv.id;
               const displayName = getDisplayName(conv);
               const convPreset = statusPresets.find((p) => p.key === conv.status);
@@ -1535,9 +1573,8 @@ export default function PdvWhatsApp() {
 
                 {/* Tag da instância */}
                 {(() => {
-                  const instIdx = (instances as any[]).findIndex(i => i.id === selectedConv.instanceId);
-                  const color = getInstColor(instIdx >= 0 ? instIdx : 0);
-                  const inst = (instances as any[])[instIdx];
+                  const inst = findInstanceForConversation(instances as any[], Number(selectedConv.instanceId));
+                  const color = getInstColor(Math.max(0, instanceSlotOf(inst ?? { id: Number(selectedConv.instanceId) }) - 1));
                   return inst ? (
                     <span
                       className="px-2.5 py-1 rounded-full text-xs font-bold flex-shrink-0"
@@ -1827,7 +1864,7 @@ export default function PdvWhatsApp() {
                   <div className="flex justify-between gap-2">
                     <span style={{ color: "#555" }}>Via</span>
                     <span className="font-semibold truncate max-w-[110px]" style={{ color: "#ccc" }}>
-                      {(instances as any[]).find(i => i.id === selectedConv.instanceId)?.name || "—"}
+                      {findInstanceForConversation(instances as any[], Number(selectedConv.instanceId))?.name || "—"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center gap-2">

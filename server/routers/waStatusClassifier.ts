@@ -282,10 +282,13 @@ export async function checkAwayMessage(
   conversationId: number,
   instanceId: number
 ): Promise<string | null> {
+  const { resolveAiConfigPk } = await import("../waInstanceDb");
+  const configPk = await resolveAiConfigPk(db, instanceId);
+
   // Buscar config da IA para esta instância
   const [configRows] = await db.execute<any[]>(
     `SELECT awayEnabled, awayStart, awayEnd, awayMessage, awaySchedule FROM wa_ai_config WHERE instanceId = ?`,
-    [instanceId]
+    [configPk]
   );
   if (!configRows.length) return null;
   const config = configRows[0];

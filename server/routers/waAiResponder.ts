@@ -192,6 +192,9 @@ export async function generateAiResponse(
   sendFn: (instanceId: number, remoteJid: string, content: string) => Promise<void>
 ): Promise<GenerateResult> {
   try {
+    const { resolveAiConfigPk } = await import("../waInstanceDb");
+    const configPk = await resolveAiConfigPk(db, instanceId);
+
     // 1+2+3. Buscar config da IA da instância e dados da conversa
     const [cfgRows] = await db.execute<any[]>(
       `SELECT enabled, aiName, systemPrompt, personality, businessContext, pricingRules, greetingMessage,
@@ -199,7 +202,7 @@ export async function generateAiResponse(
               awayEnabled, awayStart, awayEnd, awaySchedule,
               maxContextMessages, responseDelayMin, responseDelayMax, escalateKeywords
        FROM wa_ai_config WHERE instanceId = ? LIMIT 1`,
-      [instanceId]
+      [configPk]
     );
     if (!cfgRows.length) return { ok: false, skipped: "ai_disabled_instance" };
     const cfg = cfgRows[0] as AiCfgRow;
