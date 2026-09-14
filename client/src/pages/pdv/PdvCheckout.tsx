@@ -49,6 +49,7 @@ interface PaymentItem {
   comprovanteBase64?: string;
   comprovanteMimeType?: string;
   comprovantePreview?: string;
+  receipts?: Array<{ base64: string; mimeType: string; preview: string }>;
 }
 
 const PAYMENT_METHODS = [
@@ -111,11 +112,11 @@ export default function PdvCheckout({
   const [newPaymentValor, setNewPaymentValor] = useState("");
   const [newPaymentNomePix, setNewPaymentNomePix] = useState("");
   const [newPaymentObs, setNewPaymentObs] = useState("");
-  const [newPaymentReceipt, setNewPaymentReceipt] = useState<{
+  const [newPaymentReceipts, setNewPaymentReceipts] = useState<Array<{
     base64: string;
     mimeType: string;
     preview: string;
-  } | null>(null);
+  }>>([]);
   const [compressingReceipt, setCompressingReceipt] = useState(false);
   // editing maquininha value for an existing payment
   const [editingMaquininhaIdx, setEditingMaquininhaIdx] = useState<number | null>(null);
@@ -349,7 +350,7 @@ export default function PdvCheckout({
     const valor = parseFloat(newPaymentValor.replace(",", "."));
     if (isNaN(valor) || valor <= 0) { toast.error("Valor inválido"); return; }
     const electronic = isElectronic(newPaymentMethod);
-    if (electronic && !newPaymentReceipt) {
+    if (electronic && newPaymentReceipts.length === 0) {
       toast.error("Anexe a foto do comprovante (PIX ou cartão)");
       return;
     }
@@ -366,14 +367,15 @@ export default function PdvCheckout({
       valorMaquininha,
       nomePix: electronic ? newPaymentNomePix.trim() || undefined : undefined,
       obsPagamento: electronic ? newPaymentObs.trim() || undefined : undefined,
-      comprovanteBase64: electronic ? newPaymentReceipt?.base64 : undefined,
-      comprovanteMimeType: electronic ? newPaymentReceipt?.mimeType : undefined,
-      comprovantePreview: electronic ? newPaymentReceipt?.preview : undefined,
+      comprovanteBase64: electronic ? newPaymentReceipts[0]?.base64 : undefined,
+      comprovanteMimeType: electronic ? newPaymentReceipts[0]?.mimeType : undefined,
+      comprovantePreview: electronic ? newPaymentReceipts[0]?.preview : undefined,
+      receipts: electronic ? newPaymentReceipts : undefined,
     }]);
     setNewPaymentValor("");
     setNewPaymentNomePix("");
     setNewPaymentObs("");
-    setNewPaymentReceipt(null);
+    setNewPaymentReceipts([]);
     setShowAddPayment(false);
   };
 
@@ -437,8 +439,9 @@ export default function PdvCheckout({
       valorLiquido: p.valorLiquido,
       nomePix: p.nomePix,
       obsPagamento: p.obsPagamento,
-      comprovanteBase64: p.comprovanteBase64,
-      comprovanteMimeType: p.comprovanteMimeType,
+      comprovanteBase64: p.receipts?.[0]?.base64 || p.comprovanteBase64,
+      comprovanteMimeType: p.receipts?.[0]?.mimeType || p.comprovanteMimeType,
+      comprovantesBase64: (p.receipts || []).map((r) => r.base64),
     })),
     services,
   });
@@ -493,7 +496,9 @@ export default function PdvCheckout({
       return;
     }
 
-    const semComprovante = payments.filter((p) => isElectronic(p.formaPagamento) && !p.comprovanteBase64);
+    const semComprovante = payments.filter(
+      (p) => isElectronic(p.formaPagamento) && !(p.receipts?.length || p.comprovanteBase64)
+    );
     if (semComprovante.length > 0) {
       toast.error("Anexe o comprovante de cada PIX, débito ou crédito antes de finalizar.");
       return;
@@ -939,20 +944,52 @@ export default function PdvCheckout({
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
                       Comprovante (obrigatório)
                     </p>
-                    {!newPaymentReceipt ? (
-                      <label className="flex flex-col items-center justify-center w-full min-h-24 border-2 border-dashed border-amber-700/70 rounded-xl cursor-pointer hover:border-amber-500 hover:bg-amber-950/30 transition-all px-3 py-4">
+                    <p className="text-[11px] text-amber-700">
+                      PIX de duas contas? Anexe os dois comprovantes aqui.
+                    </p>
+                    {newPaymentReceipts.length > 0 && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {newPaymentReceipts.map((rec, ri) => (
+                          <div key={ri} className="relative">
+                            <img
+                              src={rec.preview}
+                              alt={`Comprovante ${ri + 1}`}
+                              className="w-full max-h-32 object-contain rounded-xl border border-amber-800/50 bg-gray-950"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewPaymentReceipts((prev) => prev.filter((_, idx) => idx !== ri))
+                              }
+                              className="absolute top-1.5 right-1.5 bg-gray-900/80 hover:bg-red-900/80 text-gray-300 hover:text-red-300 rounded-full p-1.5"
+                              aria-label={`Remover comprovante ${ri + 1}`}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {newPaymentReceipts.length < 4 && (
+                      <label className="flex flex-col items-center justify-center w-full min-h-20 border-2 border-dashed border-amber-700/70 rounded-xl cursor-pointer hover:border-amber-500 hover:bg-amber-950/30 transition-all px-3 py-3">
                         <input
                           type="file"
                           accept="image/*"
+                          multiple
                           className="hidden"
                           disabled={compressingReceipt}
                           onChange={async (e) => {
-                            const f = e.target.files?.[0];
+                            const chosen = Array.from(e.target.files || []);
                             e.target.value = "";
-                            if (!f) return;
+                            if (!chosen.length) return;
                             setCompressingReceipt(true);
                             try {
-                              setNewPaymentReceipt(await compressReceiptImage(f));
+                              const room = 4 - newPaymentReceipts.length;
+                              const next = [];
+                              for (const f of chosen.slice(0, room)) {
+                                next.push(await compressReceiptImage(f));
+                              }
+                              setNewPaymentReceipts((prev) => [...prev, ...next].slice(0, 4));
                             } catch (err) {
                               toast.error(err instanceof Error ? err.message : "Não deu para anexar a foto");
                             } finally {
@@ -966,29 +1003,24 @@ export default function PdvCheckout({
                           <ImagePlus className="w-7 h-7 text-amber-400 mb-1" />
                         )}
                         <span className="text-amber-200 text-sm font-medium">
-                          {compressingReceipt ? "Preparando foto…" : "Tirar ou anexar comprovante"}
+                          {compressingReceipt
+                            ? "Preparando foto…"
+                            : newPaymentReceipts.length
+                              ? "Adicionar outro comprovante"
+                              : "Tirar ou anexar comprovante"}
                         </span>
-                        <span className="text-amber-600 text-xs mt-0.5">Foto ou print do PIX/cartão · comprimida</span>
+                        <span className="text-amber-600 text-xs mt-0.5">
+                          {newPaymentReceipts.length
+                            ? `${newPaymentReceipts.length} de 4 fotos`
+                            : "Foto ou print do PIX/cartão · até 4 fotos"}
+                        </span>
                       </label>
-                    ) : (
-                      <div className="relative">
-                        <img
-                          src={newPaymentReceipt.preview}
-                          alt="Comprovante anexado"
-                          className="w-full max-h-40 object-contain rounded-xl border border-amber-800/50 bg-gray-950"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setNewPaymentReceipt(null)}
-                          className="absolute top-2 right-2 bg-gray-900/80 hover:bg-red-900/80 text-gray-300 hover:text-red-300 rounded-full p-1.5"
-                          aria-label="Remover comprovante"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                        <p className="mt-2 flex items-center gap-1.5 text-green-400 text-xs font-medium">
-                          <Check className="w-3.5 h-3.5" /> Comprovante anexado
-                        </p>
-                      </div>
+                    )}
+                    {newPaymentReceipts.length > 0 && (
+                      <p className="flex items-center gap-1.5 text-green-400 text-xs font-medium">
+                        <Check className="w-3.5 h-3.5" />
+                        {newPaymentReceipts.length} comprovante{newPaymentReceipts.length > 1 ? "s" : ""} anexado{newPaymentReceipts.length > 1 ? "s" : ""}
+                      </p>
                     )}
                     <div>
                       <label htmlFor="payment-nome-opcional" className="mb-1 block text-xs text-gray-400">
@@ -1068,9 +1100,13 @@ export default function PdvCheckout({
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm font-semibold ${method.color}`}>{method.label}</span>
-                          {payment.comprovantePreview && (
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">comprovante</span>
-                          )}
+                          {(payment.receipts?.length || payment.comprovantePreview) ? (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                              {payment.receipts && payment.receipts.length > 1
+                                ? `${payment.receipts.length} comprovantes`
+                                : "comprovante"}
+                            </span>
+                          ) : null}
                           {payment.nomePix && (
                             <span className="text-gray-400 text-xs">· {payment.nomePix}</span>
                           )}
@@ -1086,12 +1122,23 @@ export default function PdvCheckout({
                         </div>
                       </div>
 
-                      {payment.comprovantePreview && (
-                        <img
-                          src={payment.comprovantePreview}
-                          alt={`Comprovante ${method.label}`}
-                          className="mt-2 max-h-24 rounded-lg border border-gray-700 object-contain bg-gray-950"
-                        />
+                      {(payment.receipts?.length ? payment.receipts : payment.comprovantePreview
+                        ? [{ preview: payment.comprovantePreview }]
+                        : []
+                      ).length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {(payment.receipts?.length
+                            ? payment.receipts
+                            : [{ preview: payment.comprovantePreview! }]
+                          ).map((rec, ri) => (
+                            <img
+                              key={ri}
+                              src={rec.preview}
+                              alt={`Comprovante ${ri + 1}`}
+                              className="max-h-24 rounded-lg border border-gray-700 object-contain bg-gray-950"
+                            />
+                          ))}
+                        </div>
                       )}
                       {payment.obsPagamento && (
                         <p className="mt-1 text-[11px] text-gray-500">Obs.: {payment.obsPagamento}</p>

@@ -4,6 +4,22 @@ import { detectSofiaImageMime, invalidSofiaPhotoMessage } from "./pdvSofiaPhotoV
 
 export const ELECTRONIC_PAYMENTS = new Set(["PIX", "DEBITO", "CREDITO"]);
 export const RECEIPT_MAX_BYTES = 5 * 1024 * 1024;
+export const MAX_RECEIPTS_PER_PAYMENT = 4;
+
+export function collectReceiptBase64(p: {
+  comprovanteBase64?: string;
+  comprovantesBase64?: string[];
+}): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of [p.comprovanteBase64, ...(p.comprovantesBase64 || [])]) {
+    const s = raw?.trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out.slice(0, MAX_RECEIPTS_PER_PAYMENT);
+}
 
 export const OrderPaymentSchema = z
   .object({
@@ -16,10 +32,12 @@ export const OrderPaymentSchema = z
     obsPagamento: z.string().optional(),
     comprovanteBase64: z.string().optional(),
     comprovanteMimeType: z.string().optional(),
+    /** PIX picado: vários comprovantes no mesmo pagamento. */
+    comprovantesBase64: z.array(z.string()).max(MAX_RECEIPTS_PER_PAYMENT).optional(),
   })
   .superRefine((p, ctx) => {
     if (!ELECTRONIC_PAYMENTS.has(p.formaPagamento)) return;
-    if (!p.comprovanteBase64?.trim()) {
+    if (collectReceiptBase64(p).length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Anexe o comprovante do PIX ou do cartão para fechar o pedido",

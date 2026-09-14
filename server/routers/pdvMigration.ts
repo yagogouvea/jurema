@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS pdv_payment_receipts (
   sizeBytes INT NOT NULL DEFAULT 0,
   createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT pdv_payment_receipts_id PRIMARY KEY(id),
-  CONSTRAINT pdv_payment_receipts_paymentId_unique UNIQUE(paymentId)
+  INDEX pdv_payment_receipts_paymentId (paymentId)
 );
 
 CREATE TABLE IF NOT EXISTS pdv_goals (
@@ -234,8 +234,12 @@ async function safeAlter(connection: mysql.Connection, sql: string): Promise<voi
   try {
     await connection.execute(sql);
   } catch (e: any) {
-    // 1060 = Duplicate column name
-    if (e?.errno !== 1060 && !String(e?.message || "").includes("Duplicate")) {
+    // 1060 = Duplicate column · 1091 = Can't DROP index
+    if (
+      e?.errno !== 1060 &&
+      e?.errno !== 1091 &&
+      !String(e?.message || "").includes("Duplicate")
+    ) {
       console.warn("[PDV Migration] alter:", e?.message || e);
     }
   }
@@ -264,6 +268,14 @@ async function ensurePaymentExtraColumns(connection: mysql.Connection): Promise<
     `ALTER TABLE pdv_order_items ADD COLUMN ptVarejo DECIMAL(10,2) NOT NULL DEFAULT '0'`,
     `ALTER TABLE pdv_order_services ADD COLUMN cep VARCHAR(10) NULL`,
     `ALTER TABLE pdv_reconciliations ADD COLUMN reportExcel LONGBLOB NULL`,
+    `ALTER TABLE pdv_payment_receipts ADD COLUMN ocrPayerName VARCHAR(255) NULL`,
+    `ALTER TABLE pdv_payment_receipts ADD COLUMN ocrAmountCents INT NULL`,
+    `ALTER TABLE pdv_payment_receipts ADD COLUMN ocrDatetime VARCHAR(40) NULL`,
+    `ALTER TABLE pdv_payment_receipts ADD COLUMN ocrLast4 VARCHAR(8) NULL`,
+    `ALTER TABLE pdv_payment_receipts ADD COLUMN ocrJson TEXT NULL`,
+    `ALTER TABLE pdv_payment_receipts ADD COLUMN ocrAt TIMESTAMP NULL`,
+    `ALTER TABLE pdv_payment_receipts DROP INDEX pdv_payment_receipts_paymentId_unique`,
+    `ALTER TABLE pdv_payment_receipts ADD INDEX pdv_payment_receipts_paymentId (paymentId)`,
   ];
   for (const sql of alters) {
     await safeAlter(connection, sql);

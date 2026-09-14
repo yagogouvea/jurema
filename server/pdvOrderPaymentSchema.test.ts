@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodePaymentReceipt, OrderPaymentSchema } from "./pdvOrderPaymentSchema";
+import { collectReceiptBase64, decodePaymentReceipt, OrderPaymentSchema } from "./pdvOrderPaymentSchema";
 
 const base = {
   valor: 100,
@@ -25,6 +25,16 @@ describe("OrderPaymentSchema", () => {
       comprovanteBase64: "abc123",
     });
     expect(r.success).toBe(true);
+  });
+
+  it("aceita PIX com dois comprovantes (PIX picado)", () => {
+    const r = OrderPaymentSchema.safeParse({
+      ...base,
+      formaPagamento: "PIX",
+      comprovantesBase64: ["foto1", "foto2"],
+    });
+    expect(r.success).toBe(true);
+    expect(collectReceiptBase64(r.success ? r.data : {})).toEqual(["foto1", "foto2"]);
   });
 
   it("aceita dinheiro e desconto em folha sem comprovante", () => {

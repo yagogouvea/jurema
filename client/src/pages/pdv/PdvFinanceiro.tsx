@@ -22,12 +22,78 @@ function fmtDt(iso?: string | null): string {
 }
 
 type Tab = "confirmed" | "review" | "unmatched" | "extractOnly";
+type ExtractSlot = "infinitepay" | "mercado_pago";
+type SlotFile = { fileName: string; pdfBase64: string };
+
+function pdvReceiptUrl(paymentId: number, index = 0): string {
+  const t = typeof window !== "undefined" ? localStorage.getItem("pdv_token")?.trim() : "";
+  const q = new URLSearchParams();
+  if (t) q.set("t", t);
+  if (index > 0) q.set("i", String(index));
+  const qs = q.toString();
+  return `/api/pdv/pagamento/comprovante/${paymentId}${qs ? `?${qs}` : ""}`;
+}
+
+function ReceiptThumb({
+  paymentId,
+  hasReceipt,
+  count = 1,
+}: {
+  paymentId: number;
+  hasReceipt?: boolean;
+  count?: number;
+}) {
+  if (!hasReceipt || !paymentId) return <span className="text-gray-600">—</span>;
+  const n = Math.max(1, Math.min(4, Number(count) || 1));
+  return (
+    <div className="flex flex-wrap gap-1">
+      {Array.from({ length: n }, (_, i) => (
+        <a key={i} href={pdvReceiptUrl(paymentId, i)} target="_blank" rel="noopener noreferrer" className="block w-16">
+          <img
+            src={pdvReceiptUrl(paymentId, i)}
+            alt={`Comprovante ${i + 1}`}
+            className="h-12 w-16 rounded-md border border-gray-700 object-cover bg-gray-950"
+          />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+async function readPdfSlot(file: File): Promise<SlotFile> {
+  if (!file.name.toLowerCase().endsWith(".pdf")) {
+    throw new Error("Envie somente arquivos PDF");
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    throw new Error("Cada PDF pode ter no máximo 8 MB");
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ fileName: file.name, pdfBase64: String(reader.result || "") });
+    reader.onerror = () => reject(new Error("Não deu para ler o PDF"));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function PdvFinanceiro() {
   const { isAdmin } = usePdvAuth();
   const utils = trpc.useUtils();
-  const [files, setFiles] = useState<Array<{ fileName: string; pdfBase64: string }>>([]);
-  const [source, setSource] = useState<"auto" | "infinitepay" | "mercado_pago">("auto");
+  const [slots, setSlots] = useState<Record<ExtractSlot, SlotFile | null>>({
+    infinitepay: null,
+    mercado_pago: null,
+  });
+  const files = useMemo(
+    () =>
+      ([
+        slots.infinitepay
+          ? { ...slots.infinitepay, source: "infinitepay" as const }
+          : null,
+        slots.mercado_pago
+          ? { ...slots.mercado_pago, source: "mercado_pago" as const }
+          : null,
+      ].filter(Boolean) as Array<SlotFile & { source: ExtractSlot }>),
+    [slots]
+  );
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [beforeHours, setBeforeHours] = useState(36);
@@ -105,44 +171,25 @@ export default function PdvFinanceiro() {
     }
   };
 
-  const onFiles = async (selected: FileList | null) => {
-    if (!selected?.length) return;
-    const chosen = Array.from(selected).slice(0, 2);
-    if (selected.length > 2) {
-      toast.error("Selecione no máximo dois extratos");
-      return;
+  const onSlot = async (slot: ExtractSlot, selected: FileList | null) => {
+    const file = selected?.[0];
+    if (!file) return;
+    try {
+      const loaded = await readPdfSlot(file);
+      setSlots((prev) => ({ ...prev, [slot]: loaded }));
+    } catch (e: any) {
+      toast.error(e?.message || "PDF inválido");
     }
-    if (chosen.some((file) => !file.name.toLowerCase().endsWith(".pdf"))) {
-      toast.error("Envie somente arquivos PDF");
-      return;
-    }
-    if (chosen.some((file) => file.size > 8 * 1024 * 1024)) {
-      toast.error("Cada PDF pode ter no máximo 8 MB");
-      return;
-    }
-    const loaded = await Promise.all(
-      chosen.map(
-        (file) =>
-          new Promise<{ fileName: string; pdfBase64: string }>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () =>
-              resolve({ fileName: file.name, pdfBase64: String(reader.result || "") });
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          })
-      )
-    );
-    setFiles(loaded);
   };
 
   const run = () => {
     if (!files.length) {
-      toast.error("Anexe um ou dois extratos");
+      toast.error("Anexe o InfinitePay, o Mercado Pago, ou os dois");
       return;
     }
     reconcile.mutate({
       files,
-      source,
+      source: "auto",
       periodStart: periodStart || undefined,
       periodEnd: periodEnd || undefined,
       beforeHours,
@@ -220,6 +267,7 @@ export default function PdvFinanceiro() {
         r.order?.clienteNome,
         r.order?.sellerName,
         r.nomePix,
+        r.ocrPayerName,
         r.obsPagamento,
         r.extract?.map((e: any) => e.payerNameRaw).join(" "),
         String(r.valorPdvCents / 100),
@@ -259,50 +307,67 @@ export default function PdvFinanceiro() {
           <div>
             <h1 className="text-xl font-bold text-white">Financeiro</h1>
             <p className="text-sm text-gray-400">
-              InfinitePay = Pix · Mercado Pago = débito/crédito (liberação, sem nome —
-              casa por valor com taxa 3%/5% e data)
+              Anexe os dois extratos da semana (um em cada caixa). A análise lê os
+              comprovantes dos pedidos para achar o pagador e dar baixa.
             </p>
           </div>
         </div>
 
         <div className="rounded-2xl border border-gray-800 bg-gray-900/60 p-4 md:p-6 space-y-4">
-          <div className="flex flex-wrap items-end gap-4">
-            <label className="flex-1 min-w-[220px]">
-              <span className="text-xs text-gray-500 block mb-1">
-                Extratos PDF (até 2 — InfinitePay e/ou Mercado Pago)
-              </span>
-              <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-sm text-gray-200 hover:border-emerald-600">
-                <Upload className="w-4 h-4" />
-                {files.length
-                  ? `${files.length} extrato${files.length > 1 ? "s" : ""} selecionado${files.length > 1 ? "s" : ""}`
-                  : "Escolher 1 ou 2 PDFs"}
-                <input
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  multiple
-                  className="hidden"
-                  aria-label="Selecionar até dois extratos em PDF"
-                  onChange={(e) => onFiles(e.target.files)}
-                />
-              </label>
-              {files.length > 0 && (
-                <span className="block mt-1 text-[11px] text-gray-500 truncate">
-                  {files.map((file) => file.fileName).join(" + ")}
-                </span>
-              )}
-            </label>
-            <label>
-              <span className="text-xs text-gray-500 block mb-1">Origem</span>
-              <select
-                value={source}
-                onChange={(e) => setSource(e.target.value as typeof source)}
-                className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white"
+          <div className="grid md:grid-cols-2 gap-3">
+            {(
+              [
+                {
+                  key: "infinitepay" as const,
+                  title: "InfinitePay (PIX)",
+                  hint: "Relatório de movimentações",
+                },
+                {
+                  key: "mercado_pago" as const,
+                  title: "Mercado Pago (cartão)",
+                  hint: "Extrato com Liberação de dinheiro",
+                },
+              ] as const
+            ).map((slot) => (
+              <div
+                key={slot.key}
+                className="rounded-xl border border-gray-800 bg-gray-950/50 p-3 space-y-2"
               >
-                <option value="auto">Detectar automático</option>
-                <option value="infinitepay">InfinitePay</option>
-                <option value="mercado_pago">Mercado Pago</option>
-              </select>
-            </label>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-medium text-white">{slot.title}</div>
+                    <div className="text-[11px] text-gray-500">{slot.hint}</div>
+                  </div>
+                  {slots[slot.key] && (
+                    <button
+                      type="button"
+                      onClick={() => setSlots((prev) => ({ ...prev, [slot.key]: null }))}
+                      className="text-[11px] text-gray-500 hover:text-red-300"
+                    >
+                      Remover
+                    </button>
+                  )}
+                </div>
+                <label className="cursor-pointer flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-sm text-gray-200 hover:border-emerald-600">
+                  <Upload className="w-4 h-4 shrink-0" />
+                  <span className="truncate">
+                    {slots[slot.key]?.fileName || "Escolher PDF"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    aria-label={`Selecionar extrato ${slot.title}`}
+                    onChange={(e) => {
+                      void onSlot(slot.key, e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-4">
             <label>
               <span className="text-xs text-gray-500 block mb-1">Período início</span>
               <input
@@ -349,14 +414,17 @@ export default function PdvFinanceiro() {
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium"
             >
               {reconcile.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              Analisar
+              {reconcile.isPending
+                ? "Analisando…"
+                : files.length === 2
+                  ? "Analisar os dois"
+                  : "Analisar"}
             </button>
           </div>
           <p className="text-xs text-gray-400">
-            InfinitePay casa Pix por valor + nome (<strong className="text-gray-200">Quem pagou</strong>).
-            Mercado Pago casa só débito/crédito pela <strong className="text-gray-200">Liberação de dinheiro</strong>
-            {" "}(sem nome) — compara o valor da maquininha com a taxa de 3% (débito) ou 5% (crédito) e a data do pedido.
-            O mesmo pagamento não é usado duas vezes.
+            Pode analisar os dois de uma vez. InfinitePay casa Pix por valor + nome do comprovante/titular.
+            Mercado Pago casa débito/crédito pela <strong className="text-gray-200">Liberação de dinheiro</strong>
+            {" "}(valor da maquininha com taxa 3%/5% e data). O comprovante aparece na lista para conferir e dar baixa.
           </p>
           <p className="text-xs text-gray-500 flex items-start gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -505,6 +573,7 @@ export default function PdvFinanceiro() {
                         <th className="text-left px-3 py-2">Canal</th>
                         <th className="text-left px-3 py-2">Forma</th>
                         <th className="text-left px-3 py-2">Quem pagou</th>
+                        <th className="text-left px-3 py-2">Comprovante</th>
                         <th className="text-left px-3 py-2">Obs. pag.</th>
                         <th className="text-left px-3 py-2">Valor PDV</th>
                         <th className="text-left px-3 py-2">Pagador extrato</th>
@@ -528,7 +597,15 @@ export default function PdvFinanceiro() {
                             <td className="px-3 py-2">{r.order?.sellerName || "—"}</td>
                             <td className="px-3 py-2 text-xs">{r.order?.canal || "—"}</td>
                             <td className="px-3 py-2 text-xs">{r.formaPagamento}</td>
-                            <td className="px-3 py-2 text-xs">{r.nomePix || "—"}</td>
+                            <td className="px-3 py-2 text-xs">
+                              {r.nomePix || r.ocrPayerName || "—"}
+                              {r.ocrPayerName ? (
+                                <span className="block text-[10px] text-amber-400/80">via comprovante</span>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-2">
+                              <ReceiptThumb paymentId={r.paymentId} hasReceipt={r.hasReceipt} count={r.receiptCount} />
+                            </td>
                             <td className="px-3 py-2 text-xs text-gray-400 max-w-[140px] truncate" title={r.obsPagamento || undefined}>
                               {r.obsPagamento || "—"}
                             </td>
@@ -557,7 +634,7 @@ export default function PdvFinanceiro() {
                       })}
                       {!filterConfirmed.length && (
                         <tr>
-                          <td colSpan={11} className="px-3 py-8 text-center text-gray-500">
+                          <td colSpan={14} className="px-3 py-8 text-center text-gray-500">
                             Nenhum pedido confirmado
                           </td>
                         </tr>
@@ -631,9 +708,17 @@ export default function PdvFinanceiro() {
                               <div>
                                 <dt className="text-gray-600">Quem pagou / score</dt>
                                 <dd className="text-gray-200">
-                                  {c.nomePix || "—"} · {c.score}
+                                  {c.nomePix || c.ocrPayerName || "—"} · {c.score}
                                 </dd>
                               </div>
+                              {c.hasReceipt && (
+                                <div className="col-span-2">
+                                  <dt className="text-gray-600 mb-1">Comprovante</dt>
+                                  <dd>
+                                    <ReceiptThumb paymentId={c.paymentId} hasReceipt count={c.receiptCount} />
+                                  </dd>
+                                </div>
+                              )}
                               {c.obsPagamento && (
                                 <div className="col-span-2">
                                   <dt className="text-gray-600">Obs. pagamento</dt>
@@ -716,6 +801,7 @@ export default function PdvFinanceiro() {
                         <th className="text-left px-3 py-2">Vendedor</th>
                         <th className="text-left px-3 py-2">Forma</th>
                         <th className="text-left px-3 py-2">Quem pagou</th>
+                        <th className="text-left px-3 py-2">Comprovante</th>
                         <th className="text-left px-3 py-2">Obs. pag.</th>
                         <th className="text-left px-3 py-2">Valor</th>
                         <th className="text-left px-3 py-2">Itens</th>
@@ -729,7 +815,10 @@ export default function PdvFinanceiro() {
                           <td className="px-3 py-2">{p.order?.clienteNome || "—"}</td>
                           <td className="px-3 py-2">{p.order?.sellerName || "—"}</td>
                           <td className="px-3 py-2 text-xs">{p.formaPagamento}</td>
-                          <td className="px-3 py-2 text-xs">{p.nomePix || "—"}</td>
+                          <td className="px-3 py-2 text-xs">{p.nomePix || p.ocrPayerName || "—"}</td>
+                          <td className="px-3 py-2">
+                            <ReceiptThumb paymentId={p.paymentId} hasReceipt={p.hasReceipt} count={p.receiptCount} />
+                          </td>
                           <td className="px-3 py-2 text-xs text-gray-400 max-w-[140px] truncate" title={p.obsPagamento || undefined}>
                             {p.obsPagamento || "—"}
                           </td>
@@ -741,7 +830,7 @@ export default function PdvFinanceiro() {
                       ))}
                       {!unmatched.length && (
                         <tr>
-                          <td colSpan={9} className="px-3 py-8 text-center text-gray-500">
+                          <td colSpan={10} className="px-3 py-8 text-center text-gray-500">
                             Todos os pagamentos do período têm correspondência ou estão em dúvida
                           </td>
                         </tr>

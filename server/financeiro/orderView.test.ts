@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attachReceiptHints,
   buildOrderCentricView,
   filterOnlyPdvToPeriod,
   sheetsLabelForStatus,
@@ -93,6 +94,19 @@ describe("orderView", () => {
     ];
     const kept = filterOnlyPdvToPeriod(onlyPdv, "2026-07-07", "2026-07-13");
     expect(kept.map((p) => p.paymentId)).toEqual([2, 4]);
+  });
+
+  it("marca comprovante e nome lido na visão do pedido", () => {
+    const empty = attachReceiptHints(
+      {
+        ordersConfirmed: [{ paymentId: 9, formaPagamento: "PIX", valorPdvCents: 1000, nomePix: null, order: {} as any, extract: [], confidence: "high", kind: "1:1" }],
+        ordersReview: [],
+        ordersUnmatched: [],
+      },
+      new Map([[9, { hasReceipt: true, ocrPayerName: "Ana Lima" }]])
+    );
+    expect(empty.ordersConfirmed[0].hasReceipt).toBe(true);
+    expect(empty.ordersConfirmed[0].ocrPayerName).toBe("Ana Lima");
   });
 
   it("sem período definido não descarta nada", () => {

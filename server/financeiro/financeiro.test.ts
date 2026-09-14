@@ -4,6 +4,7 @@ import { ensurePeriodFromLines } from "./parseExtrato";
 import { reconcileExtractToPayments, scoreMatch, withinWindow } from "./matchReconcile";
 import {
   bestNameScore,
+  mergePayerNames,
   nameMatchSignals,
   normalizeName,
   parseBrlAmountToCents,
@@ -91,6 +92,12 @@ describe("normalize", () => {
     const multi = "M&M Store, Olympia Store e Flavio Silva";
     expect(bestNameScore("FLAVIO SILVA", multi, null)).toBeGreaterThanOrEqual(0.55);
     expect(bestNameScore("OLYMPIA STORE", multi, null)).toBeGreaterThanOrEqual(0.55);
+  });
+
+  it("junta titular digitado com o nome lido do comprovante", () => {
+    expect(mergePayerNames(null, "João da Silva")).toBe("João da Silva");
+    expect(mergePayerNames("João da Silva", "JOAO DA SILVA")).toBe("João da Silva");
+    expect(bestNameScore("JOAO DA SILVA", mergePayerNames(null, "João da Silva"), "Maria")).toBe(1);
   });
 
   it("prioriza quem pagou e mantém o cliente como fallback", () => {

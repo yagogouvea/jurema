@@ -71,6 +71,23 @@ export function nameSimilarity(aRaw: string, bRaw: string): number {
   return union > 0 ? inter / union : 0;
 }
 
+/** Junta titular digitado + nome lido do comprovante, sem duplicar. */
+export function mergePayerNames(
+  ...names: Array<string | null | undefined>
+): string | null {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of names) {
+    for (const part of splitPayerNames(raw)) {
+      const key = normalizeName(part);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      parts.push(part.trim());
+    }
+  }
+  return parts.length ? parts.join(", ") : null;
+}
+
 /** Separa vários titulares (PIX picado): "Empresa, Fulano e Beltrana". */
 export function splitPayerNames(raw: string | null | undefined): string[] {
   const text = (raw || "").trim();

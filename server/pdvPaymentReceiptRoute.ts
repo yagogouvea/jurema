@@ -33,8 +33,10 @@ export function registerPdvPaymentReceiptRoute(app: Express): void {
         res.status(503).type("text/plain").send("DB unavailable");
         return;
       }
+      const idxRaw = Number(req.query.i);
+      const idx = Number.isInteger(idxRaw) && idxRaw > 0 ? Math.min(idxRaw, 20) : 0;
       const [rows] = await conn.execute(
-        "SELECT mimeType, data FROM pdv_payment_receipts WHERE paymentId = ? LIMIT 1",
+        `SELECT mimeType, data FROM pdv_payment_receipts WHERE paymentId = ? ORDER BY id ASC LIMIT 1 OFFSET ${idx}`,
         [paymentId]
       );
       const row = (rows as { mimeType?: string; data?: Buffer }[])[0];

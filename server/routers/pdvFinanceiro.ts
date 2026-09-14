@@ -19,12 +19,14 @@ import { generateReconcileNarrative } from "../financeiro/narrative";
 import { buildReconcileReportPdf } from "../financeiro/reportPdf";
 import { buildReconcileReportExcel } from "../financeiro/reportExcel";
 import {
+  attachReceiptHints,
   buildOrderCentricView,
   collectPedidoIdsFromCore,
   filterOnlyPdvToPeriod,
   loadOrderSnapshots,
   sheetsLabelForStatus,
 } from "../financeiro/orderView";
+import { enrichPaymentsFromReceipts, type ReceiptHint } from "../financeiro/receiptOcr";
 import {
   DEFAULT_CARD_TOLERANCE,
   DEFAULT_TOLERANCE,
@@ -364,6 +366,7 @@ export const pdvFinanceiroRouter = router({
             z.object({
               pdfBase64: z.string().min(20).max(12_000_000),
               fileName: z.string().max(255).optional(),
+              source: z.enum(["auto", "infinitepay", "mercado_pago"]).optional(),
             })
           )
           .min(1)
@@ -417,7 +420,7 @@ export const pdvFinanceiroRouter = router({
 
         try {
           const fileName = file.fileName || `extrato-${index + 1}.pdf`;
-          const one = await parseExtratoPdf(buffer, input.source);
+          const one = await parseExtratoPdf(buffer, file.source || input.source);
           parsedFiles.push({
             ...one,
             fileName,
@@ -498,6 +501,7 @@ export const pdvFinanceiroRouter = router({
       const db = await getDb();
       let payments: PdvPixPayment[] = [];
       let cardPayments: PdvCardPayment[] = [];
+      let receiptHints = new Map<number, ReceiptHint>();
       try {
         // PIX só entra se houver linhas de InfinitePay (MP não casa Pix por nome)
         if (matchableLines.length > 0) {
@@ -517,6 +521,7 @@ export const pdvFinanceiroRouter = router({
           DEFAULT_CARD_TOLERANCE.beforeMs,
           DEFAULT_CARD_TOLERANCE.afterMs
         );
+        receiptHints = await enrichPaymentsFromReceipts(db, [...payments, ...cardPayments]);
       } finally {
         await db.end();
       }
@@ -582,7 +587,7 @@ export const pdvFinanceiroRouter = router({
       let orderView;
       try {
         await ensurePaymentReconcileColumns(dbView);
-        orderView = await attachOrderViews(dbView, core);
+        orderView = attachReceiptHints(await attachOrderViews(dbView, core), receiptHints);
         if (input.persist) {
           await persistReconcileStatusesFromCore(
             dbView,

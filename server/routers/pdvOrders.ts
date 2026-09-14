@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
 import { createPdvMysqlConnection, spLocalDateTimeExpr } from "../pdvMysql";
-import { decodePaymentReceipt, ELECTRONIC_PAYMENTS, OrderPaymentSchema } from "../pdvOrderPaymentSchema";
+import { collectReceiptBase64, decodePaymentReceipt, ELECTRONIC_PAYMENTS, OrderPaymentSchema } from "../pdvOrderPaymentSchema";
 import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet, appendCashFlowToSheet, appendToLucroProdutos, updateOrderStatusInSheet, type LucroItem } from './pdvSheetsWriter';
 import { autoSyncProductToSite } from './pdvSiteSync';
 import { notifyOrderViaWhatsApp, notifyCashFlowViaWhatsApp } from '../pdvWaNotify';
@@ -81,7 +81,7 @@ export const pdvOrdersRouter = router({
     .mutation(async ({ input, ctx }) => {
       for (const p of input.payments) {
         if (!ELECTRONIC_PAYMENTS.has(p.formaPagamento)) continue;
-        if (!p.comprovanteBase64?.trim()) {
+        if (collectReceiptBase64(p).length === 0) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "Anexe o comprovante do PIX ou do cartão para fechar o pedido.",
@@ -90,7 +90,7 @@ export const pdvOrdersRouter = router({
       }
       const seller = await requirePdvAuth(ctx);
       const receipts = input.payments.map((p) =>
-        p.comprovanteBase64?.trim() ? decodePaymentReceipt(p.comprovanteBase64) : null
+        collectReceiptBase64(p).map((raw) => decodePaymentReceipt(raw))
       );
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
@@ -191,13 +191,15 @@ export const pdvOrdersRouter = router({
             ]
           );
           const paymentId = Number((payResult as { insertId?: number }).insertId || 0);
-          const receipt = receipts[i];
-          if (receipt && paymentId) {
-            await db.execute(
-              `INSERT INTO pdv_payment_receipts (paymentId, pedidoId, mimeType, data, sizeBytes)
-               VALUES (?, ?, ?, ?, ?)`,
-              [paymentId, pedidoId, receipt.mime, receipt.buffer, receipt.buffer.length]
-            );
+          const paymentReceipts = receipts[i] || [];
+          if (paymentId) {
+            for (const receipt of paymentReceipts) {
+              await db.execute(
+                `INSERT INTO pdv_payment_receipts (paymentId, pedidoId, mimeType, data, sizeBytes)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [paymentId, pedidoId, receipt.mime, receipt.buffer, receipt.buffer.length]
+              );
+            }
           }
         }
         
@@ -577,22 +579,24 @@ export const pdvOrdersRouter = router({
           "SELECT * FROM pdv_order_items WHERE pedidoId = ?",
           [input.pedidoId]
         );
-        let paymentRows: any[] = [];
+        const [paymentRows] = await db.execute(
+          "SELECT * FROM pdv_order_payments WHERE pedidoId = ?",
+          [input.pedidoId]
+        );
+        const receiptCountByPay = new Map<number, number>();
         try {
-          const [joined] = await db.execute(
-            `SELECT p.*, r.id AS receiptId
-             FROM pdv_order_payments p
-             LEFT JOIN pdv_payment_receipts r ON r.paymentId = p.id
-             WHERE p.pedidoId = ?`,
+          const [rrows] = await db.execute(
+            `SELECT paymentId, COUNT(*) AS n
+             FROM pdv_payment_receipts
+             WHERE pedidoId = ?
+             GROUP BY paymentId`,
             [input.pedidoId]
           );
-          paymentRows = joined as any[];
+          for (const r of rrows as any[]) {
+            receiptCountByPay.set(Number(r.paymentId), Number(r.n) || 0);
+          }
         } catch {
-          const [plain] = await db.execute(
-            "SELECT * FROM pdv_order_payments WHERE pedidoId = ?",
-            [input.pedidoId]
-          );
-          paymentRows = plain as any[];
+          /* tabela ainda não existe */
         }
         const [serviceRows] = await db.execute(
           "SELECT * FROM pdv_order_services WHERE pedidoId = ?",
@@ -604,12 +608,19 @@ export const pdvOrdersRouter = router({
         return {
           ...order,
           items: itemRows as any[],
-          payments: paymentRows.map((p) => {
-            const hasReceipt = p.receiptId != null && p.receiptId !== 0;
+          payments: (paymentRows as any[]).map((p) => {
+            const receiptCount = receiptCountByPay.get(Number(p.id)) || 0;
+            const hasReceipt = receiptCount > 0;
             return {
               ...p,
               hasReceipt,
+              receiptCount,
               receiptUrl: hasReceipt ? `/api/pdv/pagamento/comprovante/${p.id}` : null,
+              receiptUrls: hasReceipt
+                ? Array.from({ length: receiptCount }, (_, i) =>
+                    `/api/pdv/pagamento/comprovante/${p.id}${i ? `?i=${i}` : ""}`
+                  )
+                : [],
             };
           }),
           services: serviceRows as any[],

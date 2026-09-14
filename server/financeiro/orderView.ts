@@ -11,6 +11,7 @@ import type {
   ReconcileResult,
   ReviewItem,
 } from "./types";
+import type { ReceiptHint } from "./receiptOcr";
 
 type DbConn = {
   execute: (sql: string, params?: any[]) => Promise<[any, any]>;
@@ -241,6 +242,36 @@ export function collectPedidoIdsFromCore(
   }
   for (const p of core.onlyPdv || []) ids.push(p.pedidoId);
   return ids;
+}
+
+export function attachReceiptHints<
+  T extends {
+    ordersConfirmed: OrderConfirmedRow[];
+    ordersReview: OrderReviewRow[];
+    ordersUnmatched: OrderUnmatchedRow[];
+  },
+>(view: T, hints: Map<number, ReceiptHint>): T {
+  for (const row of view.ordersConfirmed) {
+    const h = hints.get(row.paymentId);
+    row.hasReceipt = Boolean(h?.hasReceipt);
+    row.receiptCount = h?.receiptCount || (h?.hasReceipt ? 1 : 0);
+    row.ocrPayerName = h?.ocrPayerName ?? null;
+  }
+  for (const row of view.ordersReview) {
+    for (const c of row.candidates) {
+      const h = hints.get(c.paymentId);
+      c.hasReceipt = Boolean(h?.hasReceipt);
+      c.receiptCount = h?.receiptCount || (h?.hasReceipt ? 1 : 0);
+      c.ocrPayerName = h?.ocrPayerName ?? null;
+    }
+  }
+  for (const row of view.ordersUnmatched) {
+    const h = hints.get(row.paymentId);
+    row.hasReceipt = Boolean(h?.hasReceipt);
+    row.receiptCount = h?.receiptCount || (h?.hasReceipt ? 1 : 0);
+    row.ocrPayerName = h?.ocrPayerName ?? null;
+  }
+  return view;
 }
 
 export function sheetsLabelForStatus(

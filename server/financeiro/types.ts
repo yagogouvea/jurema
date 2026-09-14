@@ -112,6 +112,9 @@ export type OrderConfirmedRow = {
   valorPdvCents: number;
   nomePix: string | null;
   obsPagamento?: string | null;
+  hasReceipt?: boolean;
+  receiptCount?: number;
+  ocrPayerName?: string | null;
   order: OrderSnapshot;
   extract: Array<{
     id: string;
@@ -141,6 +144,9 @@ export type OrderReviewRow = {
     valorCents: number;
     nomePix: string | null;
     obsPagamento?: string | null;
+    hasReceipt?: boolean;
+    receiptCount?: number;
+    ocrPayerName?: string | null;
     order: OrderSnapshot;
   }>;
 };
@@ -151,6 +157,9 @@ export type OrderUnmatchedRow = {
   valorCents: number;
   nomePix: string | null;
   obsPagamento?: string | null;
+  hasReceipt?: boolean;
+  receiptCount?: number;
+  ocrPayerName?: string | null;
   order: OrderSnapshot;
 };
 

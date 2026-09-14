@@ -11,10 +11,13 @@ import {
 } from "lucide-react";
 import { printRecibo, downloadReciboPdf, type ReciboData } from "@/lib/recibo";
 
-function pdvReceiptUrl(paymentId: number): string {
+function pdvReceiptUrl(paymentId: number, index = 0): string {
   const t = typeof window !== "undefined" ? localStorage.getItem("pdv_token")?.trim() : "";
-  const q = t ? `?t=${encodeURIComponent(t)}` : "";
-  return `/api/pdv/pagamento/comprovante/${paymentId}${q}`;
+  const q = new URLSearchParams();
+  if (t) q.set("t", t);
+  if (index > 0) q.set("i", String(index));
+  const qs = q.toString();
+  return `/api/pdv/pagamento/comprovante/${paymentId}${qs ? `?${qs}` : ""}`;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -426,19 +429,26 @@ export default function PdvHistorico() {
                           </div>
                         </div>
                         {p.hasReceipt && p.id && (
-                          <a
-                            href={pdvReceiptUrl(Number(p.id))}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block"
-                          >
-                            <img
-                              src={pdvReceiptUrl(Number(p.id))}
-                              alt={`Comprovante ${PAYMENT_LABELS[p.formaPagamento] || p.formaPagamento}`}
-                              className="max-h-28 rounded-lg border border-gray-700 object-contain bg-gray-950"
-                            />
-                            <span className="text-[11px] text-amber-300">Ver comprovante</span>
-                          </a>
+                          <div className="flex flex-wrap gap-2">
+                            {Array.from({ length: Math.max(1, Number(p.receiptCount) || 1) }, (_, i) => (
+                              <a
+                                key={i}
+                                href={pdvReceiptUrl(Number(p.id), i)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block"
+                              >
+                                <img
+                                  src={pdvReceiptUrl(Number(p.id), i)}
+                                  alt={`Comprovante ${i + 1}`}
+                                  className="max-h-28 rounded-lg border border-gray-700 object-contain bg-gray-950"
+                                />
+                                <span className="text-[11px] text-amber-300">
+                                  {Number(p.receiptCount) > 1 ? `Foto ${i + 1}` : "Ver comprovante"}
+                                </span>
+                              </a>
+                            ))}
+                          </div>
                         )}
                       </div>
                     );
