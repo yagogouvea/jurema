@@ -58,6 +58,47 @@ export async function sendWaBridgeText(
   return true;
 }
 
+/** Envia imagem (comprovante) via wa-bridge. */
+export async function sendWaBridgeImage(
+  instanceId: number,
+  remoteJid: string,
+  image: Buffer,
+  opts?: { mimeType?: string; caption?: string }
+): Promise<boolean> {
+  const bridgeUrl = process.env.WA_BRIDGE_URL;
+  const bridgeKey = process.env.WA_BRIDGE_API_KEY;
+
+  if (!bridgeUrl) {
+    console.log(
+      `[waSend] WA_BRIDGE_URL não configurado — imagem não enviada (instanceId=${instanceId}, jid=${remoteJid})`
+    );
+    return false;
+  }
+  if (!image?.length) return false;
+
+  const res = await fetch(`${bridgeUrl}/send-media`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-wa-bridge-key": bridgeKey ?? "",
+    },
+    body: JSON.stringify({
+      instanceId,
+      remoteJid,
+      imageBase64: image.toString("base64"),
+      mimeType: opts?.mimeType || "image/jpeg",
+      caption: opts?.caption,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`wa-bridge /send-media ${res.status}: ${text.substring(0, 200)}`);
+  }
+  return true;
+}
+
 /**
  * Consulta o status real do wa-bridge.
  * `reachable` distingue "bridge fora do ar" de "bridge respondeu, mas nenhum

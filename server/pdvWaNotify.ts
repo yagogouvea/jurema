@@ -3,7 +3,7 @@
  * Suporta múltiplos destinatários via config `notif_pedido_telefone`.
  */
 import type { Connection } from "mysql2/promise";
-import { sendWaBridgeText, phoneToJid, resolveSenderInstanceSlot } from "./waSend";
+import { sendWaBridgeText, sendWaBridgeImage, phoneToJid, resolveSenderInstanceSlot } from "./waSend";
 import { createPdvMysqlConnection } from "./pdvMysql";
 
 /** Números padrão quando a config nunca foi salva. */
@@ -91,6 +91,76 @@ async function sendToAllPhones(
     }
   }
   return { enviados, falhas };
+}
+
+type OrderReceipt = {
+  mimeType: string;
+  data: Buffer;
+  formaPagamento: string;
+};
+
+async function loadOrderReceipts(db: Connection, pedidoId: string): Promise<OrderReceipt[]> {
+  try {
+    const [rows] = await db.execute(
+      `SELECT r.mimeType, r.data, p.formaPagamento
+         FROM pdv_payment_receipts r
+         JOIN pdv_order_payments p ON p.id = r.paymentId
+        WHERE r.pedidoId = ?
+        ORDER BY r.id ASC
+        LIMIT 8`,
+      [pedidoId]
+    );
+    return (rows as any[])
+      .map((r) => ({
+        mimeType: String(r.mimeType || "image/jpeg"),
+        data: Buffer.isBuffer(r.data) ? r.data : Buffer.from(r.data || []),
+        formaPagamento: String(r.formaPagamento || "PIX"),
+      }))
+      .filter((r) => r.data.length >= 256);
+  } catch (err) {
+    console.warn(`[pdvWaNotify] comprovantes de ${pedidoId}:`, err);
+    return [];
+  }
+}
+
+export function receiptNotifyCaption(
+  pedidoId: string,
+  forma: string,
+  index: number,
+  total: number
+): string {
+  const label = PAGAMENTO_LABELS[forma] || forma;
+  const n = total > 1 ? ` (${index}/${total})` : "";
+  return `Comprovante ${label}${n} · ${pedidoId}`;
+}
+
+async function sendReceiptsToAllPhones(
+  slot: number,
+  phones: string[],
+  pedidoId: string,
+  receipts: OrderReceipt[]
+): Promise<void> {
+  if (!receipts.length || !phones.length) return;
+  for (let i = 0; i < receipts.length; i++) {
+    const rec = receipts[i];
+    const caption = receiptNotifyCaption(pedidoId, rec.formaPagamento, i + 1, receipts.length);
+    for (const phone of phones) {
+      await sleep(INTERVALO_ENTRE_NUMEROS_MS);
+      try {
+        const ok = await sendWaBridgeImage(slot, phoneToJid(phone), rec.data, {
+          mimeType: rec.mimeType,
+          caption,
+        });
+        if (ok) {
+          console.log(`[pdvWaNotify] Comprovante ${i + 1}/${receipts.length} enviado para ${phone}`);
+        } else {
+          console.error(`[pdvWaNotify] Comprovante não enviado para ${phone} (bridge)`);
+        }
+      } catch (err) {
+        console.error(`[pdvWaNotify] Falha no comprovante para ${phone}:`, err);
+      }
+    }
+  }
 }
 
 export function buildOrderNotificationMessage(params: {
@@ -218,10 +288,12 @@ export async function notifyOrderViaWhatsApp(params: {
     if (!db) return;
     let phones: string[] = [];
     let slot: number | null = null;
+    let receipts: OrderReceipt[] = [];
     try {
       phones = await getNotificationPhones(db);
       if (phones.length === 0) return;
       slot = await resolveSenderInstanceSlot(db);
+      receipts = await loadOrderReceipts(db, params.pedidoId);
     } finally {
       await db.end();
     }
@@ -233,7 +305,10 @@ export async function notifyOrderViaWhatsApp(params: {
       return;
     }
 
-    const content = buildOrderNotificationMessage(params);
+    let content = buildOrderNotificationMessage(params);
+    if (receipts.length > 0) {
+      content += `\n\n📎 *Comprovante em seguida* (${receipts.length} foto${receipts.length > 1 ? "s" : ""})`;
+    }
     const { enviados, falhas } = await sendToAllPhones(slot, phones, content);
     if (falhas.length > 0) {
       console.error(
@@ -244,6 +319,7 @@ export async function notifyOrderViaWhatsApp(params: {
       console.log(
         `[notifyOrder] ${params.pedidoId} enviado para ${enviados.join(", ")} (instância ${slot}).`
       );
+      await sendReceiptsToAllPhones(slot, enviados, params.pedidoId, receipts);
       await markOrderNotified(params.pedidoId);
     }
   } catch (err) {
@@ -587,8 +663,14 @@ export async function flushPendingOrderNotifications(opts?: {
         reenvio: true,
       });
 
-      const { enviados } = await sendToAllPhones(slot, phones, content);
+      const receipts = await loadOrderReceipts(db, pedido.pedidoId);
+      let msg = content;
+      if (receipts.length > 0) {
+        msg += `\n\n📎 *Comprovante em seguida* (${receipts.length} foto${receipts.length > 1 ? "s" : ""})`;
+      }
+      const { enviados } = await sendToAllPhones(slot, phones, msg);
       if (enviados.length > 0) {
+        await sendReceiptsToAllPhones(slot, enviados, pedido.pedidoId, receipts);
         await db.execute("UPDATE pdv_orders SET notifiedAt = NOW() WHERE pedidoId = ?", [
           pedido.pedidoId,
         ]);
