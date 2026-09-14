@@ -65,10 +65,17 @@ export async function getNotificationPhones(db: Connection): Promise<string[]> {
   return parseNotificationPhones(cfg.value);
 }
 
+type OrderReceipt = {
+  mimeType: string;
+  data: Buffer;
+  formaPagamento: string;
+};
+
 async function sendToAllPhones(
   slot: number,
   phones: string[],
-  content: string
+  content: string,
+  opts?: { pedidoId?: string; receipts?: OrderReceipt[] }
 ): Promise<{ enviados: string[]; falhas: string[] }> {
   const enviados: string[] = [];
   const falhas: string[] = [];
@@ -81,6 +88,9 @@ async function sendToAllPhones(
       if (ok) {
         enviados.push(phone);
         console.log(`[pdvWaNotify] Enviado para ${phone}`);
+        if (opts?.pedidoId && opts.receipts?.length) {
+          await sendReceiptsToPhone(slot, phone, opts.pedidoId, opts.receipts);
+        }
       } else {
         falhas.push(phone);
         console.error(`[pdvWaNotify] Não enviado para ${phone} (bridge indisponível)`);
@@ -92,12 +102,6 @@ async function sendToAllPhones(
   }
   return { enviados, falhas };
 }
-
-type OrderReceipt = {
-  mimeType: string;
-  data: Buffer;
-  formaPagamento: string;
-};
 
 async function loadOrderReceipts(db: Connection, pedidoId: string): Promise<OrderReceipt[]> {
   try {
@@ -134,31 +138,37 @@ export function receiptNotifyCaption(
   return `Comprovante ${label}${n} · ${pedidoId}`;
 }
 
-async function sendReceiptsToAllPhones(
+/** Linha fixa do aviso: com ou sem foto. */
+export function receiptStatusLine(receiptCount: number): string {
+  if (receiptCount > 0) {
+    return `📎 *Comprovante anexado* (${receiptCount} foto${receiptCount > 1 ? "s" : ""})`;
+  }
+  return `⚠️ *Sem comprovante anexado*`;
+}
+
+async function sendReceiptsToPhone(
   slot: number,
-  phones: string[],
+  phone: string,
   pedidoId: string,
   receipts: OrderReceipt[]
 ): Promise<void> {
-  if (!receipts.length || !phones.length) return;
+  if (!receipts.length) return;
   for (let i = 0; i < receipts.length; i++) {
     const rec = receipts[i];
     const caption = receiptNotifyCaption(pedidoId, rec.formaPagamento, i + 1, receipts.length);
-    for (const phone of phones) {
-      await sleep(INTERVALO_ENTRE_NUMEROS_MS);
-      try {
-        const ok = await sendWaBridgeImage(slot, phoneToJid(phone), rec.data, {
-          mimeType: rec.mimeType,
-          caption,
-        });
-        if (ok) {
-          console.log(`[pdvWaNotify] Comprovante ${i + 1}/${receipts.length} enviado para ${phone}`);
-        } else {
-          console.error(`[pdvWaNotify] Comprovante não enviado para ${phone} (bridge)`);
-        }
-      } catch (err) {
-        console.error(`[pdvWaNotify] Falha no comprovante para ${phone}:`, err);
+    await sleep(INTERVALO_ENTRE_NUMEROS_MS);
+    try {
+      const ok = await sendWaBridgeImage(slot, phoneToJid(phone), rec.data, {
+        mimeType: rec.mimeType,
+        caption,
+      });
+      if (ok) {
+        console.log(`[pdvWaNotify] Comprovante ${i + 1}/${receipts.length} enviado para ${phone}`);
+      } else {
+        console.error(`[pdvWaNotify] Comprovante não enviado para ${phone} (bridge)`);
       }
+    } catch (err) {
+      console.error(`[pdvWaNotify] Falha no comprovante para ${phone}:`, err);
     }
   }
 }
@@ -172,6 +182,8 @@ export function buildOrderNotificationMessage(params: {
   dataPedido?: Date;
   /** Marca a mensagem como reenvio de um pedido que ficou sem aviso. */
   reenvio?: boolean;
+  /** Quantas fotos de comprovante vão (ou não) junto do aviso. */
+  receiptCount?: number;
 }): string {
   const { pedidoId, sellerName, input, totalAplicado } = params;
   const dataHora = (params.dataPedido ?? new Date()).toLocaleString("pt-BR", {
@@ -247,6 +259,8 @@ export function buildOrderNotificationMessage(params: {
     if (input.justificativa) lines.push(`_${input.justificativa}_`);
   }
 
+  lines.push(``, receiptStatusLine(params.receiptCount ?? 0));
+
   return lines.join("\n");
 }
 
@@ -305,11 +319,14 @@ export async function notifyOrderViaWhatsApp(params: {
       return;
     }
 
-    let content = buildOrderNotificationMessage(params);
-    if (receipts.length > 0) {
-      content += `\n\n📎 *Comprovante em seguida* (${receipts.length} foto${receipts.length > 1 ? "s" : ""})`;
-    }
-    const { enviados, falhas } = await sendToAllPhones(slot, phones, content);
+    const content = buildOrderNotificationMessage({
+      ...params,
+      receiptCount: receipts.length,
+    });
+    const { enviados, falhas } = await sendToAllPhones(slot, phones, content, {
+      pedidoId: params.pedidoId,
+      receipts,
+    });
     if (falhas.length > 0) {
       console.error(
         `[notifyOrder] ${params.pedidoId}: falhou para ${falhas.join(", ")} (instância ${slot}).`
@@ -319,7 +336,6 @@ export async function notifyOrderViaWhatsApp(params: {
       console.log(
         `[notifyOrder] ${params.pedidoId} enviado para ${enviados.join(", ")} (instância ${slot}).`
       );
-      await sendReceiptsToAllPhones(slot, enviados, params.pedidoId, receipts);
       await markOrderNotified(params.pedidoId);
     }
   } catch (err) {
@@ -654,6 +670,7 @@ export async function flushPendingOrderNotifications(opts?: {
         continue;
       }
 
+      const receipts = await loadOrderReceipts(db, pedido.pedidoId);
       const content = buildOrderNotificationMessage({
         pedidoId: pedido.pedidoId,
         sellerName: pedido.sellerName,
@@ -661,16 +678,14 @@ export async function flushPendingOrderNotifications(opts?: {
         totalAplicado: pedido.totalAplicado,
         dataPedido: pedido.createdAt,
         reenvio: true,
+        receiptCount: receipts.length,
       });
 
-      const receipts = await loadOrderReceipts(db, pedido.pedidoId);
-      let msg = content;
-      if (receipts.length > 0) {
-        msg += `\n\n📎 *Comprovante em seguida* (${receipts.length} foto${receipts.length > 1 ? "s" : ""})`;
-      }
-      const { enviados } = await sendToAllPhones(slot, phones, msg);
+      const { enviados } = await sendToAllPhones(slot, phones, content, {
+        pedidoId: pedido.pedidoId,
+        receipts,
+      });
       if (enviados.length > 0) {
-        await sendReceiptsToAllPhones(slot, enviados, pedido.pedidoId, receipts);
         await db.execute("UPDATE pdv_orders SET notifiedAt = NOW() WHERE pedidoId = ?", [
           pedido.pedidoId,
         ]);
