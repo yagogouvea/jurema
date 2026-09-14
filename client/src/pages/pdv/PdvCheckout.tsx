@@ -9,6 +9,7 @@ import {
   Loader2, XCircle, MapPin
 } from "lucide-react";
 import { useCepLookup } from "@/hooks/useCepLookup";
+import { compressReceiptImage } from "@/lib/compressReceiptImage";
 
 interface CartItem {
   productId?: number;
@@ -41,10 +42,13 @@ interface PaymentItem {
   valorLiquido: number;
   /** Valor a passar na maquininha (pode ser editado) */
   valorMaquininha: number;
-  /** Quem pagou (titular) — PIX / débito / crédito */
+  /** Quem pagou (titular) — opcional */
   nomePix?: string;
   /** Observação livre do pagamento */
   obsPagamento?: string;
+  comprovanteBase64?: string;
+  comprovanteMimeType?: string;
+  comprovantePreview?: string;
 }
 
 const PAYMENT_METHODS = [
@@ -107,14 +111,17 @@ export default function PdvCheckout({
   const [newPaymentValor, setNewPaymentValor] = useState("");
   const [newPaymentNomePix, setNewPaymentNomePix] = useState("");
   const [newPaymentObs, setNewPaymentObs] = useState("");
+  const [newPaymentReceipt, setNewPaymentReceipt] = useState<{
+    base64: string;
+    mimeType: string;
+    preview: string;
+  } | null>(null);
+  const [compressingReceipt, setCompressingReceipt] = useState(false);
   // editing maquininha value for an existing payment
   const [editingMaquininhaIdx, setEditingMaquininhaIdx] = useState<number | null>(null);
   const [editingMaquininhaVal, setEditingMaquininhaVal] = useState("");
   const [justificativa, setJustificativa] = useState("");
   const [showItems, setShowItems] = useState(false);
-  /** Popup obrigatório: quem pagou + obs (PIX / débito / crédito) */
-  const [showPayerModal, setShowPayerModal] = useState(false);
-  const [payerDraft, setPayerDraft] = useState<Record<number, { quemPagou: string; obs: string }>>({});
   // Pendente explícito: checkbox + valor manual + justificativa
   const [isPendente, setIsPendente] = useState(false);
   const [valorPendenteManual, setValorPendenteManual] = useState("");
@@ -251,7 +258,7 @@ export default function PdvCheckout({
           const parsed = JSON.parse(msg);
           if (Array.isArray(parsed)) {
             msg = [...new Set(parsed.map((i: any) => String(i?.message || "")).filter(Boolean))].join(" · ")
-              || "Preencha quem pagou e a observação do pagamento";
+              || "Anexe o comprovante do PIX ou do cartão";
           }
         } catch {
           /* keep msg */
@@ -342,12 +349,8 @@ export default function PdvCheckout({
     const valor = parseFloat(newPaymentValor.replace(",", "."));
     if (isNaN(valor) || valor <= 0) { toast.error("Valor inválido"); return; }
     const electronic = isElectronic(newPaymentMethod);
-    if (electronic && !newPaymentNomePix.trim()) {
-      toast.error("Informe quem pagou (titular da conta/cartão)");
-      return;
-    }
-    if (electronic && !newPaymentObs.trim()) {
-      toast.error("Informe a observação do pagamento");
+    if (electronic && !newPaymentReceipt) {
+      toast.error("Anexe a foto do comprovante (PIX ou cartão)");
       return;
     }
     const method = PAYMENT_METHODS.find(m => m.key === newPaymentMethod)!;
@@ -361,12 +364,16 @@ export default function PdvCheckout({
       taxa,
       valorLiquido,
       valorMaquininha,
-      nomePix: electronic ? newPaymentNomePix.trim() : undefined,
-      obsPagamento: electronic ? newPaymentObs.trim() : undefined,
+      nomePix: electronic ? newPaymentNomePix.trim() || undefined : undefined,
+      obsPagamento: electronic ? newPaymentObs.trim() || undefined : undefined,
+      comprovanteBase64: electronic ? newPaymentReceipt?.base64 : undefined,
+      comprovanteMimeType: electronic ? newPaymentReceipt?.mimeType : undefined,
+      comprovantePreview: electronic ? newPaymentReceipt?.preview : undefined,
     }]);
     setNewPaymentValor("");
     setNewPaymentNomePix("");
     setNewPaymentObs("");
+    setNewPaymentReceipt(null);
     setShowAddPayment(false);
   };
 
@@ -430,54 +437,14 @@ export default function PdvCheckout({
       valorLiquido: p.valorLiquido,
       nomePix: p.nomePix,
       obsPagamento: p.obsPagamento,
+      comprovanteBase64: p.comprovanteBase64,
+      comprovanteMimeType: p.comprovanteMimeType,
     })),
     services,
   });
 
   const submitOrder = (paymentsToSend: PaymentItem[]) => {
     createOrderMutation.mutate(buildOrderPayload(paymentsToSend));
-  };
-
-  const openPayerModal = (list: PaymentItem[]) => {
-    const draft: Record<number, { quemPagou: string; obs: string }> = {};
-    list.forEach((p, i) => {
-      if (!isElectronic(p.formaPagamento)) return;
-      draft[i] = {
-        quemPagou: p.nomePix?.trim() || "",
-        obs: p.obsPagamento?.trim() || "",
-      };
-    });
-    setPayerDraft(draft);
-    setShowPayerModal(true);
-  };
-
-  const confirmPayerModal = (formEl?: HTMLFormElement | null) => {
-    // Lê do FormData (mais confiável no celular — evita valor “preso” no teclado)
-    const fd = formEl ? new FormData(formEl) : null;
-    const next = payments.map((p, i) => {
-      if (!isElectronic(p.formaPagamento)) return p;
-      const fromFormQuem = fd?.get(`quemPagou_${i}`);
-      const fromFormObs = fd?.get(`obs_${i}`);
-      const quemPagou = String(fromFormQuem ?? payerDraft[i]?.quemPagou ?? p.nomePix ?? "").trim();
-      const obs = String(fromFormObs ?? payerDraft[i]?.obs ?? p.obsPagamento ?? "").trim();
-      return { ...p, nomePix: quemPagou, obsPagamento: obs };
-    });
-    for (let i = 0; i < next.length; i++) {
-      const p = next[i];
-      if (!isElectronic(p.formaPagamento)) continue;
-      const label = PAYMENT_METHODS.find((m) => m.key === p.formaPagamento)?.label || p.formaPagamento;
-      if (!p.nomePix) {
-        toast.error(`${label}: informe quem pagou`);
-        return;
-      }
-      if (!p.obsPagamento) {
-        toast.error(`${label}: informe a observação do pagamento`);
-        return;
-      }
-    }
-    setPayments(next);
-    setShowPayerModal(false);
-    submitOrder(next);
   };
 
   const handleFinalize = () => {
@@ -526,9 +493,9 @@ export default function PdvCheckout({
       return;
     }
 
-    // PIX / débito / crédito → popup obrigatório (quem pagou + observação)
-    if (payments.some((p) => isElectronic(p.formaPagamento))) {
-      openPayerModal(payments);
+    const semComprovante = payments.filter((p) => isElectronic(p.formaPagamento) && !p.comprovanteBase64);
+    if (semComprovante.length > 0) {
+      toast.error("Anexe o comprovante de cada PIX, débito ou crédito antes de finalizar.");
       return;
     }
 
@@ -967,38 +934,87 @@ export default function PdvCheckout({
                   />
                 </div>
 
-                {/* Quem pagou + observação — PIX / débito / crédito */}
                 {isElectronic(newPaymentMethod) && (
                   <div className="space-y-2 rounded-xl border border-amber-800/50 bg-amber-950/20 p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
-                      Identificação do pagamento (obrigatório)
+                      Comprovante (obrigatório)
                     </p>
-                    <div>
-                      <label className="mb-1 block text-xs text-gray-400">
-                        Quem pagou? (pode ter mais de um nome)
+                    {!newPaymentReceipt ? (
+                      <label className="flex flex-col items-center justify-center w-full min-h-24 border-2 border-dashed border-amber-700/70 rounded-xl cursor-pointer hover:border-amber-500 hover:bg-amber-950/30 transition-all px-3 py-4">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={compressingReceipt}
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = "";
+                            if (!f) return;
+                            setCompressingReceipt(true);
+                            try {
+                              setNewPaymentReceipt(await compressReceiptImage(f));
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : "Não deu para anexar a foto");
+                            } finally {
+                              setCompressingReceipt(false);
+                            }
+                          }}
+                        />
+                        {compressingReceipt ? (
+                          <Loader2 className="w-6 h-6 text-amber-400 animate-spin mb-1" />
+                        ) : (
+                          <ImagePlus className="w-7 h-7 text-amber-400 mb-1" />
+                        )}
+                        <span className="text-amber-200 text-sm font-medium">
+                          {compressingReceipt ? "Preparando foto…" : "Tirar ou anexar comprovante"}
+                        </span>
+                        <span className="text-amber-600 text-xs mt-0.5">Foto ou print do PIX/cartão · comprimida</span>
                       </label>
-                      <textarea
+                    ) : (
+                      <div className="relative">
+                        <img
+                          src={newPaymentReceipt.preview}
+                          alt="Comprovante anexado"
+                          className="w-full max-h-40 object-contain rounded-xl border border-amber-800/50 bg-gray-950"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setNewPaymentReceipt(null)}
+                          className="absolute top-2 right-2 bg-gray-900/80 hover:bg-red-900/80 text-gray-300 hover:text-red-300 rounded-full p-1.5"
+                          aria-label="Remover comprovante"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                        <p className="mt-2 flex items-center gap-1.5 text-green-400 text-xs font-medium">
+                          <Check className="w-3.5 h-3.5" /> Comprovante anexado
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <label htmlFor="payment-nome-opcional" className="mb-1 block text-xs text-gray-400">
+                        Quem pagou? <span className="text-gray-600">(opcional)</span>
+                      </label>
+                      <input
+                        id="payment-nome-opcional"
+                        type="text"
                         value={newPaymentNomePix}
                         onChange={(e) => setNewPaymentNomePix(e.target.value)}
-                        placeholder="Ex.: Empresa XYZ, João Silva e Maria Souza"
-                        rows={2}
+                        placeholder="Nome no extrato, se souber"
                         maxLength={500}
-                        className="w-full resize-none rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:border-green-600"
+                        className="w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:border-green-600"
                       />
-                      <p className="mt-1 text-[10px] text-gray-500">
-                        PIX picado: separe por vírgula ou “e” — todos os titulares do extrato.
-                      </p>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs text-gray-400">
-                        Observação do pagamento
+                      <label htmlFor="payment-obs-opcional" className="mb-1 block text-xs text-gray-400">
+                        Observação <span className="text-gray-600">(opcional)</span>
                       </label>
-                      <textarea
+                      <input
+                        id="payment-obs-opcional"
+                        type="text"
                         value={newPaymentObs}
                         onChange={(e) => setNewPaymentObs(e.target.value)}
-                        placeholder="Ex.: final do cartão, comprovante, horário…"
-                        rows={2}
-                        className="w-full resize-none rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:border-green-600"
+                        placeholder="Horário, final do cartão…"
+                        className="w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:border-green-600"
                       />
                     </div>
                   </div>
@@ -1052,6 +1068,9 @@ export default function PdvCheckout({
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm font-semibold ${method.color}`}>{method.label}</span>
+                          {payment.comprovantePreview && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">comprovante</span>
+                          )}
                           {payment.nomePix && (
                             <span className="text-gray-400 text-xs">· {payment.nomePix}</span>
                           )}
@@ -1067,6 +1086,13 @@ export default function PdvCheckout({
                         </div>
                       </div>
 
+                      {payment.comprovantePreview && (
+                        <img
+                          src={payment.comprovantePreview}
+                          alt={`Comprovante ${method.label}`}
+                          className="mt-2 max-h-24 rounded-lg border border-gray-700 object-contain bg-gray-950"
+                        />
+                      )}
                       {payment.obsPagamento && (
                         <p className="mt-1 text-[11px] text-gray-500">Obs.: {payment.obsPagamento}</p>
                       )}
@@ -1307,108 +1333,6 @@ export default function PdvCheckout({
         </button>
       </div>
 
-      {/* Popup obrigatório: quem pagou + observação (PIX / débito / crédito) */}
-      {showPayerModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4">
-          <form
-            className="flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-2xl border border-gray-700 bg-gray-900 shadow-2xl sm:rounded-2xl"
-            onSubmit={(e) => {
-              e.preventDefault();
-              confirmPayerModal(e.currentTarget);
-            }}
-          >
-            <div className="border-b border-gray-800 px-5 py-4">
-              <h2 className="text-lg font-bold text-white">Identificação do pagamento</h2>
-              <p className="mt-1 text-xs text-gray-400">
-                Preencha quem pagou e a observação para cada PIX/débito/crédito. Pode vários nomes (PIX picado).
-              </p>
-            </div>
-            <div className="max-h-[55vh] space-y-4 overflow-y-auto px-5 py-4">
-              {payments.map((p, i) => {
-                if (!isElectronic(p.formaPagamento)) return null;
-                const method = PAYMENT_METHODS.find((m) => m.key === p.formaPagamento)!;
-                const draft = payerDraft[i] || { quemPagou: "", obs: "" };
-                return (
-                  <div key={i} className="space-y-2 rounded-xl border border-gray-700 bg-gray-800/60 p-3">
-                    <div className="flex items-center justify-between">
-                      <span className={`text-sm font-semibold ${method.color}`}>{method.label}</span>
-                      <span className="text-sm font-semibold text-white">R$ {fmt(p.valor)}</span>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-gray-400">
-                        Quem pagou? <span className="text-red-400">*</span>
-                        <span className="ml-1 font-normal text-gray-500">(pode vários nomes)</span>
-                      </label>
-                      <textarea
-                        name={`quemPagou_${i}`}
-                        required
-                        defaultValue={draft.quemPagou}
-                        onChange={(e) =>
-                          setPayerDraft((prev) => ({
-                            ...prev,
-                            [i]: { ...(prev[i] || draft), quemPagou: e.target.value },
-                          }))
-                        }
-                        placeholder="Ex.: M&M Store, Olympia Store e Flávio"
-                        rows={2}
-                        maxLength={500}
-                        className="w-full resize-none rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:border-green-600 focus:outline-none"
-                        autoFocus={Object.keys(payerDraft)[0] === String(i)}
-                      />
-                      <p className="mt-1 text-[10px] text-gray-500">
-                        PIX picado: separe os nomes por vírgula ou “e”.
-                      </p>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-gray-400">
-                        Observação <span className="text-red-400">*</span>
-                      </label>
-                      <textarea
-                        name={`obs_${i}`}
-                        required
-                        defaultValue={draft.obs}
-                        onChange={(e) =>
-                          setPayerDraft((prev) => ({
-                            ...prev,
-                            [i]: { ...(prev[i] || draft), obs: e.target.value },
-                          }))
-                        }
-                        placeholder="Campo livre — ex.: final do cartão, comprovante, horário…"
-                        rows={2}
-                        className="w-full resize-none rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:border-green-600 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex gap-2 border-t border-gray-800 px-5 py-4">
-              <button
-                type="button"
-                onClick={() => setShowPayerModal(false)}
-                disabled={createOrderMutation.isPending}
-                className="rounded-xl px-4 py-3 text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white"
-              >
-                Voltar
-              </button>
-              <button
-                type="submit"
-                disabled={createOrderMutation.isPending}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-green-700 py-3 text-sm font-bold text-white hover:bg-green-800 disabled:opacity-50"
-              >
-                {createOrderMutation.isPending ? (
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                ) : (
-                  <>
-                    <CheckCircle className="h-4 w-4" />
-                    Confirmar e finalizar
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
 import { createPdvMysqlConnection, spLocalDateTimeExpr } from "../pdvMysql";
+import { decodePaymentReceipt, ELECTRONIC_PAYMENTS, OrderPaymentSchema } from "../pdvOrderPaymentSchema";
 import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet, appendCashFlowToSheet, appendToLucroProdutos, updateOrderStatusInSheet, type LucroItem } from './pdvSheetsWriter';
 import { autoSyncProductToSite } from './pdvSiteSync';
 import { notifyOrderViaWhatsApp, notifyCashFlowViaWhatsApp } from '../pdvWaNotify';
@@ -46,37 +47,6 @@ const OrderItemSchema = z.object({
   comissaoLojaSofia: z.number().optional().nullable(), // comissão personalizada da loja por item Sofia (R$)
 });
 
-const ELECTRONIC_PAYMENTS = new Set(["PIX", "DEBITO", "CREDITO"]);
-
-const OrderPaymentSchema = z
-  .object({
-    formaPagamento: z.enum(["PIX", "DINHEIRO", "DEBITO", "CREDITO", "DESCONTO_FOLHA"]),
-    valor: z.number().min(0),
-    taxa: z.number().default(0),
-    valorLiquido: z.number().min(0),
-    /** Quem pagou (titular) — obrigatório para PIX/débito/crédito. */
-    nomePix: z.string().optional(),
-    /** Observação livre do pagamento — obrigatória para PIX/débito/crédito. */
-    obsPagamento: z.string().optional(),
-  })
-  .superRefine((p, ctx) => {
-    if (!ELECTRONIC_PAYMENTS.has(p.formaPagamento)) return;
-    if (!p.nomePix?.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Informe quem pagou (titular da conta/cartão)",
-        path: ["nomePix"],
-      });
-    }
-    if (!p.obsPagamento?.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Informe a observação do pagamento",
-        path: ["obsPagamento"],
-      });
-    }
-  });
-
 const OrderServiceSchema = z.object({
   tipo: z.string(),
   descricao: z.string().optional(),
@@ -109,18 +79,19 @@ export const pdvOrdersRouter = router({
       services: z.array(OrderServiceSchema).default([]),
     }))
     .mutation(async ({ input, ctx }) => {
-      // Guarda extra com mensagem amigável (evita toast com JSON do Zod no celular)
       for (const p of input.payments) {
         if (!ELECTRONIC_PAYMENTS.has(p.formaPagamento)) continue;
-        if (!p.nomePix?.trim() || !p.obsPagamento?.trim()) {
+        if (!p.comprovanteBase64?.trim()) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message:
-              "Informe quem pagou e a observação do pagamento (obrigatório para PIX, débito e crédito).",
+            message: "Anexe o comprovante do PIX ou do cartão para fechar o pedido.",
           });
         }
       }
       const seller = await requirePdvAuth(ctx);
+      const receipts = input.payments.map((p) =>
+        p.comprovanteBase64?.trim() ? decodePaymentReceipt(p.comprovanteBase64) : null
+      );
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       
@@ -206,8 +177,9 @@ export const pdvOrdersRouter = router({
         }
         
         // Insert payments
-        for (const payment of input.payments) {
-          await db.execute(
+        for (let i = 0; i < input.payments.length; i++) {
+          const payment = input.payments[i];
+          const [payResult] = await db.execute(
             `INSERT INTO pdv_order_payments 
              (pedidoId, formaPagamento, valor, taxa, valorLiquido, nomePix, obsPagamento)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -218,6 +190,15 @@ export const pdvOrdersRouter = router({
               payment.obsPagamento?.trim() || null,
             ]
           );
+          const paymentId = Number((payResult as { insertId?: number }).insertId || 0);
+          const receipt = receipts[i];
+          if (receipt && paymentId) {
+            await db.execute(
+              `INSERT INTO pdv_payment_receipts (paymentId, pedidoId, mimeType, data, sizeBytes)
+               VALUES (?, ?, ?, ?, ?)`,
+              [paymentId, pedidoId, receipt.mime, receipt.buffer, receipt.buffer.length]
+            );
+          }
         }
         
         // Insert services
@@ -596,10 +577,23 @@ export const pdvOrdersRouter = router({
           "SELECT * FROM pdv_order_items WHERE pedidoId = ?",
           [input.pedidoId]
         );
-        const [paymentRows] = await db.execute(
-          "SELECT * FROM pdv_order_payments WHERE pedidoId = ?",
-          [input.pedidoId]
-        );
+        let paymentRows: any[] = [];
+        try {
+          const [joined] = await db.execute(
+            `SELECT p.*, r.id AS receiptId
+             FROM pdv_order_payments p
+             LEFT JOIN pdv_payment_receipts r ON r.paymentId = p.id
+             WHERE p.pedidoId = ?`,
+            [input.pedidoId]
+          );
+          paymentRows = joined as any[];
+        } catch {
+          const [plain] = await db.execute(
+            "SELECT * FROM pdv_order_payments WHERE pedidoId = ?",
+            [input.pedidoId]
+          );
+          paymentRows = plain as any[];
+        }
         const [serviceRows] = await db.execute(
           "SELECT * FROM pdv_order_services WHERE pedidoId = ?",
           [input.pedidoId]
@@ -610,7 +604,14 @@ export const pdvOrdersRouter = router({
         return {
           ...order,
           items: itemRows as any[],
-          payments: paymentRows as any[],
+          payments: paymentRows.map((p) => {
+            const hasReceipt = p.receiptId != null && p.receiptId !== 0;
+            return {
+              ...p,
+              hasReceipt,
+              receiptUrl: hasReceipt ? `/api/pdv/pagamento/comprovante/${p.id}` : null,
+            };
+          }),
           services: serviceRows as any[],
         };
       } catch (err) {

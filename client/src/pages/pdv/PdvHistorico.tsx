@@ -11,6 +11,12 @@ import {
 } from "lucide-react";
 import { printRecibo, downloadReciboPdf, type ReciboData } from "@/lib/recibo";
 
+function pdvReceiptUrl(paymentId: number): string {
+  const t = typeof window !== "undefined" ? localStorage.getItem("pdv_token")?.trim() : "";
+  const q = t ? `?t=${encodeURIComponent(t)}` : "";
+  return `/api/pdv/pagamento/comprovante/${paymentId}${q}`;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   PAGO: "bg-green-950/50 text-green-400 border-green-900/50",
   PENDENTE: "bg-yellow-950/50 text-yellow-400 border-yellow-900/50",
@@ -398,25 +404,42 @@ export default function PdvHistorico() {
                     const valorExibido = taxa > 0 ? valor + taxa : valor;
                     const hasTaxa = taxa > 0;
                     return (
-                      <div key={i} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-2">
-                        <div>
-                          <span className="text-white text-sm">{PAYMENT_LABELS[p.formaPagamento] || p.formaPagamento}</span>
-                          {p.nomePix && (
-                            <span className="text-gray-400 text-xs ml-2">quem pagou: {p.nomePix}</span>
-                          )}
-                          {hasTaxa && (
-                            <span className="text-gray-500 text-xs ml-2">taxa: {formatCurrency(taxa)}</span>
-                          )}
-                          {p.obsPagamento && (
-                            <div className="text-gray-500 text-[11px] mt-0.5">Obs.: {p.obsPagamento}</div>
-                          )}
+                      <div key={i} className="bg-gray-800 rounded-xl px-3 py-2 space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-white text-sm">{PAYMENT_LABELS[p.formaPagamento] || p.formaPagamento}</span>
+                            {p.nomePix && (
+                              <span className="text-gray-400 text-xs ml-2">quem pagou: {p.nomePix}</span>
+                            )}
+                            {hasTaxa && (
+                              <span className="text-gray-500 text-xs ml-2">taxa: {formatCurrency(taxa)}</span>
+                            )}
+                            {p.obsPagamento && (
+                              <div className="text-gray-500 text-[11px] mt-0.5">Obs.: {p.obsPagamento}</div>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-white text-sm font-semibold">{formatCurrency(valorExibido)}</span>
+                            {hasTaxa && (
+                              <div className="text-gray-500 text-[10px]">loja recebe: {formatCurrency(valor)}</div>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <span className="text-white text-sm font-semibold">{formatCurrency(valorExibido)}</span>
-                          {hasTaxa && (
-                            <div className="text-gray-500 text-[10px]">loja recebe: {formatCurrency(valor)}</div>
-                          )}
-                        </div>
+                        {p.hasReceipt && p.id && (
+                          <a
+                            href={pdvReceiptUrl(Number(p.id))}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block"
+                          >
+                            <img
+                              src={pdvReceiptUrl(Number(p.id))}
+                              alt={`Comprovante ${PAYMENT_LABELS[p.formaPagamento] || p.formaPagamento}`}
+                              className="max-h-28 rounded-lg border border-gray-700 object-contain bg-gray-950"
+                            />
+                            <span className="text-[11px] text-amber-300">Ver comprovante</span>
+                          </a>
+                        )}
                       </div>
                     );
                   })}

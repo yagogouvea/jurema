@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerUploadRoutes } from "../uploadHandler";
 import { registerPdvSofiaPhotoRoute } from "../pdvSofiaPhotoRoute";
+import { registerPdvPaymentReceiptRoute } from "../pdvPaymentReceiptRoute";
 import { registerAppVersionRoute } from "../appVersionRoute";
 import { registerWaMessageMediaRoute } from "../waMessageMediaRoute";
 import { runPdvMigration, seedPdvData } from "../routers/pdvMigration";
@@ -79,6 +80,7 @@ async function startServer() {
   registerUploadRoutes(app);
   // Foto Sofia armazenada em MySQL LONGBLOB (servida com cache forte e ?v= cache-buster)
   registerPdvSofiaPhotoRoute(app);
+  registerPdvPaymentReceiptRoute(app);
   registerWaMessageMediaRoute(app);
   // tRPC API
   app.use(

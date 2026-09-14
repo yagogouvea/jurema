@@ -149,6 +149,18 @@ CREATE TABLE IF NOT EXISTS pdv_order_photos (
   CONSTRAINT pdv_order_photos_pedidoId_pk PRIMARY KEY(pedidoId)
 );
 
+CREATE TABLE IF NOT EXISTS pdv_payment_receipts (
+  id INT AUTO_INCREMENT NOT NULL,
+  paymentId INT NOT NULL,
+  pedidoId VARCHAR(50) NOT NULL,
+  mimeType VARCHAR(50) NOT NULL DEFAULT 'image/jpeg',
+  data LONGBLOB NOT NULL,
+  sizeBytes INT NOT NULL DEFAULT 0,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT pdv_payment_receipts_id PRIMARY KEY(id),
+  CONSTRAINT pdv_payment_receipts_paymentId_unique UNIQUE(paymentId)
+);
+
 CREATE TABLE IF NOT EXISTS pdv_goals (
   id INT AUTO_INCREMENT NOT NULL,
   \`key\` VARCHAR(50) NOT NULL,
