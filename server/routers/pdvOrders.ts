@@ -226,14 +226,18 @@ export const pdvOrdersRouter = router({
         await db.end();
 
         // ── Notificação de novo pedido por WhatsApp (assíncrona, não bloqueia) ──
-        setImmediate(() => {
-          notifyOrderViaWhatsApp({
-            pedidoId,
-            sellerName: seller.name,
-            input,
-            totalAplicado: totalAplicadoGravacao,
-          }).catch(err => console.error('[PDV Orders] Erro na notificação de pedido:', err));
-        });
+        // Peça Sofia: a foto sobe depois do INSERT. O aviso espera o upload
+        // para texto + comprovante + foto da peça chegarem juntos.
+        if (!hasSofiaItems) {
+          setImmediate(() => {
+            notifyOrderViaWhatsApp({
+              pedidoId,
+              sellerName: seller.name,
+              input,
+              totalAplicado: totalAplicadoGravacao,
+            }).catch(err => console.error('[PDV Orders] Erro na notificação de pedido:', err));
+          });
+        }
 
         // ── Auto-sync site: atualizar estoque no catálogo após venda (assíncrono) ──
         const codigosBaseVendidos = new Set<string>();

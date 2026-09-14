@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildOrderNotificationMessage, receiptNotifyCaption, receiptStatusLine } from "./pdvWaNotify";
+import {
+  buildOrderNotificationMessage,
+  receiptNotifyCaption,
+  receiptStatusLine,
+  sofiaPhotoCaption,
+  sofiaPhotoStatusLine,
+} from "./pdvWaNotify";
 
 describe("receiptNotifyCaption", () => {
   it("identifica o pedido e a forma no caption da foto", () => {
@@ -33,5 +39,41 @@ describe("buildOrderNotificationMessage", () => {
 
   it("inclui comprovante anexado no texto do pedido", () => {
     expect(buildOrderNotificationMessage({ ...base, receiptCount: 1 })).toContain("Comprovante anexado");
+  });
+
+  it("não menciona foto Sofia em pedido sem peça de fora", () => {
+    expect(buildOrderNotificationMessage({ ...base, sofiaPhotoCount: 0 })).not.toContain("peça Sofia");
+  });
+
+  it("menciona foto Sofia quando o pedido tem peça de fora", () => {
+    const withSofia = {
+      ...base,
+      sofiaPhotoCount: 1,
+      input: {
+        ...base.input,
+        items: [{ time: "Palmeiras", descricao: "home", tamanho: "M", quantidade: 1, precoUnitario: 100, isSofia: true }],
+      },
+    };
+    expect(buildOrderNotificationMessage(withSofia)).toContain("Foto da peça Sofia anexada");
+  });
+});
+
+describe("sofiaPhotoCaption", () => {
+  it("identifica o pedido na foto da peça", () => {
+    expect(sofiaPhotoCaption("PED-9")).toBe("Foto da peça Sofia · PED-9");
+  });
+});
+
+describe("sofiaPhotoStatusLine", () => {
+  it("não aparece sem item Sofia", () => {
+    expect(sofiaPhotoStatusLine(false, false)).toBeNull();
+  });
+
+  it("avisa quando falta a foto", () => {
+    expect(sofiaPhotoStatusLine(true, false)).toContain("Sem foto da peça Sofia");
+  });
+
+  it("avisa quando a foto foi anexada", () => {
+    expect(sofiaPhotoStatusLine(true, true)).toContain("Foto da peça Sofia anexada");
   });
 });

@@ -5,6 +5,7 @@ import { verifyPdvToken } from "./pdvAuth";
 import type { Request } from "express";
 import { createPdvMysqlConnection, orderDayDateExpr, orderDayYmdExpr } from "../pdvMysql";
 import { detectSofiaImageMime, invalidSofiaPhotoMessage } from "../pdvSofiaPhotoValidate";
+import { notifyAfterSofiaPhoto } from "../pdvWaNotify";
 
 async function getDb() {
   return createPdvMysqlConnection();
@@ -285,6 +286,11 @@ export const pdvSofiaRouter = router({
           [url, input.pedidoId]
         );
         await db.end();
+        setImmediate(() => {
+          notifyAfterSofiaPhoto(input.pedidoId).catch((err) =>
+            console.error("[PDV Sofia] Erro na notificação WhatsApp da foto:", err)
+          );
+        });
         return { success: true, url, sizeBytes: buffer.length };
       } catch (err) {
         try { await db.end(); } catch { /* já fechado */ }

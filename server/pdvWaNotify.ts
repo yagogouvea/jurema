@@ -71,11 +71,17 @@ type OrderReceipt = {
   formaPagamento: string;
 };
 
+type OrderImage = {
+  mimeType: string;
+  data: Buffer;
+  caption: string;
+};
+
 async function sendToAllPhones(
   slot: number,
   phones: string[],
   content: string,
-  opts?: { pedidoId?: string; receipts?: OrderReceipt[] }
+  opts?: { pedidoId?: string; receipts?: OrderReceipt[]; sofiaPhoto?: OrderImage | null }
 ): Promise<{ enviados: string[]; falhas: string[] }> {
   const enviados: string[] = [];
   const falhas: string[] = [];
@@ -90,6 +96,9 @@ async function sendToAllPhones(
         console.log(`[pdvWaNotify] Enviado para ${phone}`);
         if (opts?.pedidoId && opts.receipts?.length) {
           await sendReceiptsToPhone(slot, phone, opts.pedidoId, opts.receipts);
+        }
+        if (opts?.sofiaPhoto) {
+          await sendImageToPhone(slot, phone, opts.sofiaPhoto);
         }
       } else {
         falhas.push(phone);
@@ -127,6 +136,31 @@ async function loadOrderReceipts(db: Connection, pedidoId: string): Promise<Orde
   }
 }
 
+async function loadSofiaPhoto(db: Connection, pedidoId: string): Promise<OrderImage | null> {
+  try {
+    const [rows] = await db.execute(
+      `SELECT mimeType, data FROM pdv_order_photos WHERE pedidoId = ? LIMIT 1`,
+      [pedidoId]
+    );
+    const r = (rows as any[])[0];
+    if (!r?.data) return null;
+    const data = Buffer.isBuffer(r.data) ? r.data : Buffer.from(r.data || []);
+    if (data.length < 256) return null;
+    return {
+      mimeType: String(r.mimeType || "image/jpeg"),
+      data,
+      caption: sofiaPhotoCaption(pedidoId),
+    };
+  } catch (err) {
+    console.warn(`[pdvWaNotify] foto Sofia de ${pedidoId}:`, err);
+    return null;
+  }
+}
+
+export function sofiaPhotoCaption(pedidoId: string): string {
+  return `Foto da peça Sofia · ${pedidoId}`;
+}
+
 export function receiptNotifyCaption(
   pedidoId: string,
   forma: string,
@@ -144,6 +178,17 @@ export function receiptStatusLine(receiptCount: number): string {
     return `📎 *Comprovante anexado* (${receiptCount} foto${receiptCount > 1 ? "s" : ""})`;
   }
   return `⚠️ *Sem comprovante anexado*`;
+}
+
+export function orderHasSofiaItems(input: any): boolean {
+  return Array.isArray(input?.items) && input.items.some((it: any) => !!it.isSofia);
+}
+
+/** Linha da foto da peça de fora (Sofia). Só aparece se o pedido tiver item Sofia. */
+export function sofiaPhotoStatusLine(hasSofiaItems: boolean, hasPhoto: boolean): string | null {
+  if (!hasSofiaItems) return null;
+  if (hasPhoto) return `📷 *Foto da peça Sofia anexada*`;
+  return `⚠️ *Sem foto da peça Sofia*`;
 }
 
 async function sendReceiptsToPhone(
@@ -173,6 +218,23 @@ async function sendReceiptsToPhone(
   }
 }
 
+async function sendImageToPhone(slot: number, phone: string, image: OrderImage): Promise<void> {
+  await sleep(INTERVALO_ENTRE_NUMEROS_MS);
+  try {
+    const ok = await sendWaBridgeImage(slot, phoneToJid(phone), image.data, {
+      mimeType: image.mimeType,
+      caption: image.caption,
+    });
+    if (ok) {
+      console.log(`[pdvWaNotify] Foto Sofia enviada para ${phone}`);
+    } else {
+      console.error(`[pdvWaNotify] Foto Sofia não enviada para ${phone} (bridge)`);
+    }
+  } catch (err) {
+    console.error(`[pdvWaNotify] Falha na foto Sofia para ${phone}:`, err);
+  }
+}
+
 export function buildOrderNotificationMessage(params: {
   pedidoId: string;
   sellerName: string;
@@ -184,6 +246,8 @@ export function buildOrderNotificationMessage(params: {
   reenvio?: boolean;
   /** Quantas fotos de comprovante vão (ou não) junto do aviso. */
   receiptCount?: number;
+  /** Foto da peça Sofia (peça de fora) já gravada. */
+  sofiaPhotoCount?: number;
 }): string {
   const { pedidoId, sellerName, input, totalAplicado } = params;
   const dataHora = (params.dataPedido ?? new Date()).toLocaleString("pt-BR", {
@@ -260,6 +324,11 @@ export function buildOrderNotificationMessage(params: {
   }
 
   lines.push(``, receiptStatusLine(params.receiptCount ?? 0));
+  const sofiaLine = sofiaPhotoStatusLine(
+    orderHasSofiaItems(input),
+    (params.sofiaPhotoCount ?? 0) > 0
+  );
+  if (sofiaLine) lines.push(sofiaLine);
 
   return lines.join("\n");
 }
@@ -303,11 +372,13 @@ export async function notifyOrderViaWhatsApp(params: {
     let phones: string[] = [];
     let slot: number | null = null;
     let receipts: OrderReceipt[] = [];
+    let sofiaPhoto: OrderImage | null = null;
     try {
       phones = await getNotificationPhones(db);
       if (phones.length === 0) return;
       slot = await resolveSenderInstanceSlot(db);
       receipts = await loadOrderReceipts(db, params.pedidoId);
+      sofiaPhoto = await loadSofiaPhoto(db, params.pedidoId);
     } finally {
       await db.end();
     }
@@ -322,10 +393,12 @@ export async function notifyOrderViaWhatsApp(params: {
     const content = buildOrderNotificationMessage({
       ...params,
       receiptCount: receipts.length,
+      sofiaPhotoCount: sofiaPhoto ? 1 : 0,
     });
     const { enviados, falhas } = await sendToAllPhones(slot, phones, content, {
       pedidoId: params.pedidoId,
       receipts,
+      sofiaPhoto,
     });
     if (falhas.length > 0) {
       console.error(
@@ -340,6 +413,93 @@ export async function notifyOrderViaWhatsApp(params: {
     }
   } catch (err) {
     console.error("[notifyOrder] Falha ao enviar notificação de pedido:", err);
+  }
+}
+
+/**
+ * Depois que a foto Sofia é gravada: manda o aviso completo (se ainda não
+ * saiu) ou só a foto, se o pedido já tinha sido avisado sem ela.
+ */
+export async function notifyAfterSofiaPhoto(pedidoId: string): Promise<void> {
+  try {
+    const db = await createPdvMysqlConnection();
+    if (!db) return;
+    let phones: string[] = [];
+    let slot: number | null = null;
+    let alreadyNotified = false;
+    let sellerName = "";
+    let totalAplicado = 0;
+    let createdAt: Date | undefined;
+    let input: any = null;
+    let receipts: OrderReceipt[] = [];
+    let sofiaPhoto: OrderImage | null = null;
+    try {
+      const [orderRows] = await db.execute(
+        `SELECT sellerName, totalAplicado, createdAt, notifiedAt
+           FROM pdv_orders WHERE pedidoId = ? LIMIT 1`,
+        [pedidoId]
+      );
+      const order = (orderRows as any[])[0];
+      if (!order) return;
+      alreadyNotified = !!order.notifiedAt;
+      sellerName = String(order.sellerName ?? "");
+      totalAplicado = Number(order.totalAplicado) || 0;
+      createdAt = order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt);
+      phones = await getNotificationPhones(db);
+      if (phones.length === 0) return;
+      slot = await resolveSenderInstanceSlot(db);
+      sofiaPhoto = await loadSofiaPhoto(db, pedidoId);
+      if (!alreadyNotified) {
+        input = await loadOrderForMessage(db, pedidoId);
+        receipts = await loadOrderReceipts(db, pedidoId);
+      }
+    } finally {
+      await db.end();
+    }
+
+    if (slot === null) {
+      console.error(
+        `[notifyOrder] ${pedidoId}: WhatsApp desconectado — foto Sofia não enviada.`
+      );
+      return;
+    }
+    if (!sofiaPhoto) return;
+
+    if (alreadyNotified) {
+      for (const phone of phones) {
+        await sendImageToPhone(slot, phone, sofiaPhoto);
+      }
+      return;
+    }
+
+    if (!input) return;
+    const content = buildOrderNotificationMessage({
+      pedidoId,
+      sellerName,
+      input,
+      totalAplicado,
+      dataPedido: createdAt,
+      receiptCount: receipts.length,
+      sofiaPhotoCount: 1,
+    });
+    const { enviados, falhas } = await sendToAllPhones(slot, phones, content, {
+      pedidoId,
+      receipts,
+      sofiaPhoto,
+    });
+    if (falhas.length > 0) {
+      console.error(
+        `[notifyOrder] ${pedidoId}: falhou para ${falhas.join(", ")} (instância ${slot}).`
+      );
+    }
+    if (enviados.length > 0) {
+      console.log(
+        `[notifyOrder] ${pedidoId} enviado com foto Sofia para ${enviados.join(", ")} (instância ${slot}).`
+      );
+      await markOrderNotified(pedidoId);
+    }
+  } catch (err) {
+    console.error("[notifyAfterSofiaPhoto] Falha ao enviar foto Sofia:", err);
   }
 }
 
@@ -671,6 +831,7 @@ export async function flushPendingOrderNotifications(opts?: {
       }
 
       const receipts = await loadOrderReceipts(db, pedido.pedidoId);
+      const sofiaPhoto = await loadSofiaPhoto(db, pedido.pedidoId);
       const content = buildOrderNotificationMessage({
         pedidoId: pedido.pedidoId,
         sellerName: pedido.sellerName,
@@ -679,11 +840,13 @@ export async function flushPendingOrderNotifications(opts?: {
         dataPedido: pedido.createdAt,
         reenvio: true,
         receiptCount: receipts.length,
+        sofiaPhotoCount: sofiaPhoto ? 1 : 0,
       });
 
       const { enviados } = await sendToAllPhones(slot, phones, content, {
         pedidoId: pedido.pedidoId,
         receipts,
+        sofiaPhoto,
       });
       if (enviados.length > 0) {
         await db.execute("UPDATE pdv_orders SET notifiedAt = NOW() WHERE pedidoId = ?", [
