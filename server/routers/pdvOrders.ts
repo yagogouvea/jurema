@@ -8,6 +8,7 @@ import { collectReceiptBase64, decodePaymentReceipt, ELECTRONIC_PAYMENTS, OrderP
 import { appendOrderToSheet, appendOrderItemsToSheet, appendSofiaItemsToSheet, updateProductStockInSheet, restoreProductStockInSheet, deleteOrderFromSheet, deleteOrderItemsFromSheet, deleteSofiaItemsFromSheet, appendSaleToCashFlowSheet, appendCashFlowToSheet, appendToLucroProdutos, updateOrderStatusInSheet, type LucroItem } from './pdvSheetsWriter';
 import { autoSyncProductToSite } from './pdvSiteSync';
 import { notifyOrderViaWhatsApp, notifyCashFlowViaWhatsApp } from '../pdvWaNotify';
+import { notifyOrderCancelledViaWhatsApp } from '../pdvDailySummary';
 
 async function getDb() {
   return createPdvMysqlConnection();
@@ -648,12 +649,14 @@ export const pdvOrdersRouter = router({
       try {
         // Buscar status atual do pedido
         const [orderRows] = await db.execute(
-          "SELECT status FROM pdv_orders WHERE pedidoId = ?",
+          "SELECT status, sellerName, totalAplicado FROM pdv_orders WHERE pedidoId = ?",
           [input.pedidoId]
         );
         const orders = orderRows as any[];
         if (orders.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido não encontrado" });
         const statusAtual = orders[0].status;
+        const sellerNamePedido = String(orders[0].sellerName || seller.name);
+        const totalAplicadoPedido = Number(orders[0].totalAplicado) || 0;
 
         // Buscar itens do pedido com código para atualizar planilha
         const [itemRows] = await db.execute(
@@ -727,6 +730,13 @@ export const pdvOrdersRouter = router({
 
           await db.end();
           console.log(`[PDV Orders] Pedido ${input.pedidoId} cancelado — estoque devolvido para ${items.length} produto(s)`);
+          setImmediate(() => {
+            notifyOrderCancelledViaWhatsApp({
+              pedidoId: input.pedidoId,
+              sellerName: sellerNamePedido,
+              totalAplicado: totalAplicadoPedido,
+            }).catch((err) => console.error("[PDV Orders] Erro no aviso de cancelamento:", err));
+          });
           // Devolver estoque e deletar linhas da planilha (assíncrono, não bloqueia resposta)
           setImmediate(async () => {
             // 1. Devolver estoque na aba PRODUTOS

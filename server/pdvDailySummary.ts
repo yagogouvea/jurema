@@ -69,6 +69,8 @@ export type DailySummaryStats = {
   suprimentosHoje: number;
   sangriasHoje: number;
   saldoCaixa: number;
+  cancelados: number;
+  faturamentoCancelado: number;
 };
 
 async function loadRangeSummary(
@@ -146,6 +148,14 @@ export async function loadDailySummaryStats(
     [dia]
   );
 
+  const [cancelRows] = await db.execute(
+    `SELECT COUNT(DISTINCT o.id) as cancelados,
+            COALESCE(SUM(o.totalAplicado), 0) as faturamentoCancelado
+       FROM pdv_orders o
+      WHERE o.status = 'CANCELADO' AND ${dayCmp} = ?`,
+    [dia]
+  );
+
   const [ptRows] = await db.execute(
     `SELECT COALESCE(SUM(
        CASE WHEN o.regime = 'ATACADO' THEN oi.ptAtacado * oi.quantidade
@@ -189,7 +199,15 @@ export async function loadDailySummaryStats(
     suprimentosHoje: rowNumber(cashDay.suprimentos),
     sangriasHoje: rowNumber(cashDay.sangrias),
     saldoCaixa: rowNumber((balanceRows as any[])[0]?.saldo),
+    cancelados: rowNumber((cancelRows as any[])[0]?.cancelados),
+    faturamentoCancelado: rowNumber((cancelRows as any[])[0]?.faturamentoCancelado),
   };
+}
+
+export function cancelledStatusLine(cancelados: number, faturamentoCancelado: number): string | null {
+  if (cancelados <= 0) return null;
+  const ped = cancelados === 1 ? "1 pedido" : `${cancelados} pedidos`;
+  return `🚫 *Cancelados:* ${ped} · ${fmtBRL(faturamentoCancelado)} (fora do total)`;
 }
 
 export function buildDailySummaryMessage(stats: DailySummaryStats): string {
@@ -199,9 +217,13 @@ export function buildDailySummaryMessage(stats: DailySummaryStats): string {
     "",
     `💰 *Faturamento do dia:* ${fmtBRL(stats.faturamento)}`,
     `📦 Pedidos: ${stats.totalPedidos} · Ticket: ${fmtBRL(stats.ticketMedio)}`,
+  ];
+  const cancelLine = cancelledStatusLine(stats.cancelados, stats.faturamentoCancelado);
+  if (cancelLine) lines.push(cancelLine);
+  lines.push(
     `📆 *Faturamento do mês (${fmtMesLabel(stats.dia)}):* ${fmtBRL(stats.faturamentoMes)}`,
     `📦 Pedidos no mês: ${stats.pedidosMes}`,
-  ];
+  );
 
   if (stats.bySeller.length > 0) {
     lines.push("", "👥 *Vendedores*");
@@ -252,6 +274,52 @@ export async function getDailySummaryPhones(db: Connection): Promise<string[]> {
   if (cfg?.value?.trim()) return parseNotificationPhones(cfg.value);
   const pedidoPhones = await getNotificationPhones(db);
   return pedidoPhones.length ? [pedidoPhones[0]] : [];
+}
+
+export function buildOrderCancelledNotice(params: {
+  pedidoId: string;
+  sellerName: string;
+  totalAplicado: number;
+}): string {
+  return [
+    "🚫 *JUREMA SPORT — Pedido cancelado*",
+    `*${params.pedidoId}*`,
+    "",
+    `Esse valor *não entra* no faturamento do dia.`,
+    `👤 ${params.sellerName}`,
+    `💰 ${fmtBRL(params.totalAplicado)}`,
+  ].join("\n");
+}
+
+/** Avisa no WhatsApp do fechamento quando um pedido do dia é cancelado. */
+export async function notifyOrderCancelledViaWhatsApp(params: {
+  pedidoId: string;
+  sellerName: string;
+  totalAplicado: number;
+}): Promise<void> {
+  try {
+    const db = await createPdvMysqlConnection();
+    if (!db) return;
+    let phones: string[] = [];
+    try {
+      phones = await getDailySummaryPhones(db);
+    } finally {
+      await db.end();
+    }
+    if (!phones.length) return;
+    const slot = await resolveSenderInstanceSlot();
+    if (!slot) {
+      console.error("[pdvDailySummary] WhatsApp desconectado — cancelamento não avisado.");
+      return;
+    }
+    const content = buildOrderCancelledNotice(params);
+    for (const phone of phones) {
+      await sendWaBridgeText(slot, phoneToJid(phone), content);
+    }
+    console.log(`[pdvDailySummary] Cancelamento ${params.pedidoId} avisado para ${phones.join(", ")}`);
+  } catch (err) {
+    console.error("[pdvDailySummary] Falha ao avisar cancelamento:", err);
+  }
 }
 
 export async function sendDailySalesSummaryWhatsApp(

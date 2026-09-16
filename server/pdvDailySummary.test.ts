@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildDailySummaryMessage, type DailySummaryStats } from "./pdvDailySummary";
+import {
+  buildDailySummaryMessage,
+  buildOrderCancelledNotice,
+  cancelledStatusLine,
+  type DailySummaryStats,
+} from "./pdvDailySummary";
 
 describe("pdvDailySummary", () => {
   it("inclui faturamento do mês e não menciona fechamento pendente", () => {
@@ -26,6 +31,8 @@ describe("pdvDailySummary", () => {
       suprimentosHoje: 200,
       sangriasHoje: 100,
       saldoCaixa: 2340,
+      cancelados: 1,
+      faturamentoCancelado: 350,
     };
 
     const msg = buildDailySummaryMessage(stats);
@@ -35,5 +42,32 @@ describe("pdvDailySummary", () => {
     expect(msg.toLowerCase()).not.toContain("fechamento");
     expect(msg.toLowerCase()).not.toContain("pendente");
     expect(msg).toContain("Caixa: saldo");
+    expect(msg).toContain("Cancelados");
+    expect(msg).toContain("350,00");
+    expect(msg).toContain("fora do total");
+  });
+});
+
+describe("cancelledStatusLine", () => {
+  it("some quando não há cancelado", () => {
+    expect(cancelledStatusLine(0, 0)).toBeNull();
+  });
+
+  it("mostra o valor fora do total", () => {
+    expect(cancelledStatusLine(1, 200)).toContain("fora do total");
+    expect(cancelledStatusLine(2, 400)).toContain("2 pedidos");
+  });
+});
+
+describe("buildOrderCancelledNotice", () => {
+  it("deixa claro que o valor saiu do faturamento", () => {
+    const msg = buildOrderCancelledNotice({
+      pedidoId: "PED-9",
+      sellerName: "GABRIEL",
+      totalAplicado: 180,
+    });
+    expect(msg).toContain("PED-9");
+    expect(msg).toContain("não entra");
+    expect(msg).toContain("180,00");
   });
 });
