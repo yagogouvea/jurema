@@ -48,7 +48,7 @@ const OrderItemSchema = z.object({
   comissaoLojaSofia: z.number().optional().nullable(), // comissão personalizada da loja por item Sofia (R$)
 });
 
-const OrderServiceSchema = z.object({
+export const OrderServiceSchema = z.object({
   tipo: z.string(),
   descricao: z.string().optional(),
   valor: z.number().min(0),
@@ -59,6 +59,9 @@ const OrderServiceSchema = z.object({
 ).refine(
   (s) => !(s.tipo === 'CORREIO' && (!s.cep || s.cep.replace(/\D/g, '').length !== 8)),
   { message: 'CEP obrigatório para Correio', path: ['cep'] }
+).refine(
+  (s) => !(s.tipo === 'CARRETO' && !s.descricao?.trim()),
+  { message: 'Carreto precisa da observação: quem recebe e o trecho', path: ['descricao'] }
 );
 
 export const pdvOrdersRouter = router({

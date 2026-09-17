@@ -336,6 +336,10 @@ export default function PdvCheckout({
         return;
       }
     }
+    if (newServiceTipo === "CARRETO" && !newServiceDescricao.trim()) {
+      toast.error("Carreto precisa da observação: quem recebe e o trecho");
+      return;
+    }
     const cepFormatado = newServiceTipo === "CORREIO"
       ? (cepLookup.cepFormatado || newServiceCep.replace(/\D/g, '').replace(/(\d{5})(\d{3})/, '$1-$2'))
       : undefined;
@@ -477,6 +481,10 @@ export default function PdvCheckout({
     // Imagem obrigatória para pedidos com item Sofia
     if (hasSofiaItems && !sofiaImageBase64) {
       toast.error("Pedido com item Sofia requer foto obrigatória. Anexe a imagem antes de finalizar.");
+      return;
+    }
+    if (services.some((s) => s.tipo === "CARRETO" && !s.descricao?.trim())) {
+      toast.error("Carreto precisa da observação: quem recebe e o trecho");
       return;
     }
     for (let idx = 0; idx < cart.length; idx++) {
@@ -781,15 +789,25 @@ export default function PdvCheckout({
                   onChange={(e) => setNewServiceDescricao(e.target.value)}
                   placeholder={
                     newServiceTipo === "CARRETO"
-                      ? "Trecho ou observação (ex: Cantagalo, urgente, taxa extra...)"
+                      ? "Quem recebe e o trecho (ex: João no Cantagalo) *"
                       : newServiceTipo === "CAIXINHA"
                         ? "Observação (opcional)"
                         : newServiceTipo === "OUTRO"
                           ? "Descrição do serviço *"
                           : "Observação (opcional)"
                   }
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-3 md:py-3.5 text-white text-sm md:text-base focus:outline-none focus:border-green-600"
+                  aria-required={newServiceTipo === "CARRETO" || newServiceTipo === "OUTRO"}
+                  className={`w-full bg-gray-700 rounded-lg px-3 py-3 md:py-3.5 text-white text-sm md:text-base focus:outline-none ${
+                    newServiceTipo === "CARRETO" && !newServiceDescricao.trim()
+                      ? "border border-red-500 focus:border-red-400"
+                      : "border border-gray-600 focus:border-green-600"
+                  }`}
                 />
+                {newServiceTipo === "CARRETO" && (
+                  <p className="text-orange-400 text-xs">
+                    Obrigatório: quem vai receber o carreto, se for outra pessoa, e o trecho
+                  </p>
+                )}
                 {newServiceTipo === "CORREIO" && (() => {
                   const cepDigits = newServiceCep.replace(/\D/g, "");
                   const showStatus = cepDigits.length === 8;
@@ -845,11 +863,13 @@ export default function PdvCheckout({
                   const blockingCep =
                     newServiceTipo === "CORREIO" &&
                     (cepDigits.length !== 8 || cepLookup.status === "loading" || cepLookup.status === "invalid");
+                  const blockingCarreto =
+                    newServiceTipo === "CARRETO" && !newServiceDescricao.trim();
                   return (
                     <div className="flex gap-2">
                       <button
                         onClick={addService}
-                        disabled={blockingCep}
+                        disabled={blockingCep || blockingCarreto}
                         className="flex-1 bg-green-700 hover:bg-green-800 active:bg-green-900 text-white text-sm md:text-base py-3 md:py-3.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-green-700"
                       >
                         {newServiceTipo === "CORREIO" && cepLookup.status === "loading" ? "Validando CEP…" : "Adicionar"}
