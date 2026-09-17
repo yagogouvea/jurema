@@ -43,6 +43,14 @@ function fmtDiaLabel(ymd: string): string {
   return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y} (${weekday})`;
 }
 
+function fmtHoraAgora(): string {
+  return new Date().toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function fmtMesLabel(ymd: string): string {
   const dt = new Date(`${ymd}T12:00:00-03:00`);
   return dt.toLocaleDateString("pt-BR", {
@@ -71,6 +79,7 @@ export type DailySummaryStats = {
   saldoCaixa: number;
   cancelados: number;
   faturamentoCancelado: number;
+  cancelledOrders: Array<{ pedidoId: string; sellerName: string; totalAplicado: number }>;
 };
 
 async function loadRangeSummary(
@@ -149,12 +158,18 @@ export async function loadDailySummaryStats(
   );
 
   const [cancelRows] = await db.execute(
-    `SELECT COUNT(DISTINCT o.id) as cancelados,
-            COALESCE(SUM(o.totalAplicado), 0) as faturamentoCancelado
+    `SELECT o.pedidoId, o.sellerName, o.totalAplicado
        FROM pdv_orders o
-      WHERE o.status = 'CANCELADO' AND ${dayCmp} = ?`,
+      WHERE o.status = 'CANCELADO' AND ${dayCmp} = ?
+      ORDER BY o.createdAt ASC
+      LIMIT 20`,
     [dia]
   );
+  const cancelledOrders = (cancelRows as any[]).map((r) => ({
+    pedidoId: String(r.pedidoId || ""),
+    sellerName: String(r.sellerName || ""),
+    totalAplicado: rowNumber(r.totalAplicado),
+  }));
 
   const [ptRows] = await db.execute(
     `SELECT COALESCE(SUM(
@@ -199,31 +214,38 @@ export async function loadDailySummaryStats(
     suprimentosHoje: rowNumber(cashDay.suprimentos),
     sangriasHoje: rowNumber(cashDay.sangrias),
     saldoCaixa: rowNumber((balanceRows as any[])[0]?.saldo),
-    cancelados: rowNumber((cancelRows as any[])[0]?.cancelados),
-    faturamentoCancelado: rowNumber((cancelRows as any[])[0]?.faturamentoCancelado),
+    cancelados: cancelledOrders.length,
+    faturamentoCancelado: cancelledOrders.reduce((s, o) => s + o.totalAplicado, 0),
+    cancelledOrders,
   };
 }
 
-export function cancelledStatusLine(cancelados: number, faturamentoCancelado: number): string | null {
-  if (cancelados <= 0) return null;
-  const ped = cancelados === 1 ? "1 pedido" : `${cancelados} pedidos`;
-  return `🚫 *Cancelados:* ${ped} · ${fmtBRL(faturamentoCancelado)} (fora do total)`;
+export function cancelledObservation(
+  orders: Array<{ pedidoId: string; sellerName: string; totalAplicado: number }>
+): string | null {
+  if (!orders.length) return null;
+  const total = orders.reduce((s, o) => s + o.totalAplicado, 0);
+  const ped = orders.length === 1 ? "1 pedido cancelado" : `${orders.length} pedidos cancelados`;
+  const linhas = [
+    `_Obs.: ${ped} — já descontado do total (${fmtBRL(total)})._`,
+  ];
+  for (const o of orders) {
+    const quem = o.sellerName ? ` · ${o.sellerName}` : "";
+    linhas.push(`• ${o.pedidoId}${quem} — ${fmtBRL(o.totalAplicado)}`);
+  }
+  return linhas.join("\n");
 }
 
 export function buildDailySummaryMessage(stats: DailySummaryStats): string {
   const lines: string[] = [
     "📊 *JUREMA SPORT — Resumo do dia*",
-    `📅 ${fmtDiaLabel(stats.dia)} · até 17:00`,
+    `📅 ${fmtDiaLabel(stats.dia)} · até ${fmtHoraAgora()}`,
     "",
     `💰 *Faturamento do dia:* ${fmtBRL(stats.faturamento)}`,
     `📦 Pedidos: ${stats.totalPedidos} · Ticket: ${fmtBRL(stats.ticketMedio)}`,
-  ];
-  const cancelLine = cancelledStatusLine(stats.cancelados, stats.faturamentoCancelado);
-  if (cancelLine) lines.push(cancelLine);
-  lines.push(
     `📆 *Faturamento do mês (${fmtMesLabel(stats.dia)}):* ${fmtBRL(stats.faturamentoMes)}`,
     `📦 Pedidos no mês: ${stats.pedidosMes}`,
-  );
+  ];
 
   if (stats.bySeller.length > 0) {
     lines.push("", "👥 *Vendedores*");
@@ -260,6 +282,11 @@ export function buildDailySummaryMessage(stats: DailySummaryStats): string {
       "",
       `💵 Caixa: saldo ${fmtBRL(stats.saldoCaixa)} · supr. ${fmtBRL(stats.suprimentosHoje)} · sangria ${fmtBRL(stats.sangriasHoje)}`
     );
+  }
+
+  const obs = cancelledObservation(stats.cancelledOrders ?? []);
+  if (obs) {
+    lines.push("", obs);
   }
 
   return lines.join("\n");
