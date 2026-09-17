@@ -32,6 +32,7 @@ const baseStats: DailySummaryStats = {
   cancelados: 0,
   faturamentoCancelado: 0,
   cancelledOrders: [],
+  faturamentoLoja: 8450,
 };
 
 describe("pdvDailySummary", () => {
@@ -57,6 +58,18 @@ describe("pdvDailySummary", () => {
     expect(msg).toContain("PED-88");
     expect(msg).toContain("já descontado");
     expect(msg.indexOf("Obs.:")).toBeGreaterThan(msg.indexOf("Caixa:"));
+  });
+
+  it("mostra Sofia/serviços quando o recebido é maior que a loja", () => {
+    const msg = buildDailySummaryMessage({
+      ...baseStats,
+      faturamento: 9680,
+      faturamentoLoja: 8450,
+    });
+    expect(msg).toContain("Faturamento do dia:");
+    expect(msg).toContain("9680,00");
+    expect(msg).toContain("Sofia/serviços");
+    expect(msg).toContain("1230,00");
   });
 });
 

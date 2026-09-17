@@ -80,6 +80,8 @@ export type DailySummaryStats = {
   cancelados: number;
   faturamentoCancelado: number;
   cancelledOrders: Array<{ pedidoId: string; sellerName: string; totalAplicado: number }>;
+  /** Itens da loja (sem Sofia) — para explicar a diferença vs PIX+dinheiro+cartão. */
+  faturamentoLoja: number;
 };
 
 async function loadRangeSummary(
@@ -124,6 +126,26 @@ async function loadRangeSummary(
   };
 }
 
+/** Soma do que entrou no caixa (PIX + dinheiro + cartão + folha), sem cancelados. */
+async function loadPaymentTotals(
+  db: Connection,
+  startDate: string,
+  endDate: string
+): Promise<{ pedidos: number; recebido: number }> {
+  const dayCmp = orderDayDateExpr("o");
+  const [rows] = await db.execute(
+    `SELECT COUNT(DISTINCT o.id) as pedidos,
+            COALESCE(SUM(p.valor), 0) as recebido
+       FROM pdv_orders o
+       LEFT JOIN pdv_order_payments p ON p.pedidoId = o.pedidoId
+      WHERE o.status != 'CANCELADO'
+        AND ${dayCmp} >= ? AND ${dayCmp} <= ?`,
+    [startDate, endDate]
+  );
+  const r = (rows as any[])[0] || {};
+  return { pedidos: rowNumber(r.pedidos), recebido: rowNumber(r.recebido) };
+}
+
 export async function loadDailySummaryStats(
   db: Connection,
   dia: string
@@ -131,6 +153,8 @@ export async function loadDailySummaryStats(
   const mesInicio = `${dia.slice(0, 7)}-01`;
   const day = await loadRangeSummary(db, dia, dia);
   const month = await loadRangeSummary(db, mesInicio, dia);
+  const payDay = await loadPaymentTotals(db, dia, dia);
+  const payMonth = await loadPaymentTotals(db, mesInicio, dia);
 
   const dayCmp = orderDayDateExpr("o");
   const [sellerRows] = await db.execute(
@@ -199,8 +223,12 @@ export async function loadDailySummaryStats(
   return {
     dia,
     ...day,
-    faturamentoMes: month.faturamento,
-    pedidosMes: month.totalPedidos,
+    faturamento: payDay.recebido,
+    totalPedidos: payDay.pedidos || day.totalPedidos,
+    ticketMedio: payDay.pedidos > 0 ? payDay.recebido / payDay.pedidos : 0,
+    faturamentoLoja: day.faturamento,
+    faturamentoMes: payMonth.recebido,
+    pedidosMes: payMonth.pedidos || month.totalPedidos,
     pontosDia: rowNumber((ptRows as any[])[0]?.pontos),
     bySeller: (sellerRows as any[]).map((r) => ({
       sellerName: String(r.sellerName || ""),
@@ -218,6 +246,12 @@ export async function loadDailySummaryStats(
     faturamentoCancelado: cancelledOrders.reduce((s, o) => s + o.totalAplicado, 0),
     cancelledOrders,
   };
+}
+
+export function lojaVsRecebidoLine(loja: number, recebido: number): string | null {
+  const extra = Math.round((recebido - loja) * 100) / 100;
+  if (Math.abs(extra) < 0.009) return null;
+  return `📌 Loja ${fmtBRL(loja)} · Sofia/serviços ${fmtBRL(extra)}`;
 }
 
 export function cancelledObservation(
@@ -243,9 +277,13 @@ export function buildDailySummaryMessage(stats: DailySummaryStats): string {
     "",
     `💰 *Faturamento do dia:* ${fmtBRL(stats.faturamento)}`,
     `📦 Pedidos: ${stats.totalPedidos} · Ticket: ${fmtBRL(stats.ticketMedio)}`,
+  ];
+  const extraLine = lojaVsRecebidoLine(stats.faturamentoLoja ?? stats.faturamento, stats.faturamento);
+  if (extraLine) lines.push(extraLine);
+  lines.push(
     `📆 *Faturamento do mês (${fmtMesLabel(stats.dia)}):* ${fmtBRL(stats.faturamentoMes)}`,
     `📦 Pedidos no mês: ${stats.pedidosMes}`,
-  ];
+  );
 
   if (stats.bySeller.length > 0) {
     lines.push("", "👥 *Vendedores*");
