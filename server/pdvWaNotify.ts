@@ -320,7 +320,11 @@ export function buildOrderNotificationMessage(params: {
 
   if (Number(input.totalPendente) > 0) {
     lines.push(``, `⚠️ *PENDENTE:* ${fmtBRL(input.totalPendente)}`);
-    if (input.justificativa) lines.push(`_${input.justificativa}_`);
+  }
+
+  const obsPedido = String(input.justificativa || "").trim();
+  if (obsPedido) {
+    lines.push(``, `📝 *Observações:*`, obsPedido);
   }
 
   lines.push(``, receiptStatusLine(params.receiptCount ?? 0));

@@ -56,6 +56,22 @@ describe("buildOrderNotificationMessage", () => {
     };
     expect(buildOrderNotificationMessage(withSofia)).toContain("Foto da peça Sofia anexada");
   });
+
+  it("inclui observações do pedido mesmo quando está pago", () => {
+    const msg = buildOrderNotificationMessage({
+      ...base,
+      input: {
+        ...base.input,
+        justificativa: "Sem internet, não deu para tirar foto do comprovante",
+      },
+    });
+    expect(msg).toContain("Observações");
+    expect(msg).toContain("Sem internet, não deu para tirar foto do comprovante");
+  });
+
+  it("não mostra bloco de observações se o campo estiver vazio", () => {
+    expect(buildOrderNotificationMessage(base)).not.toContain("Observações");
+  });
 });
 
 describe("sofiaPhotoCaption", () => {
