@@ -420,6 +420,56 @@ export async function notifyOrderViaWhatsApp(params: {
   }
 }
 
+/** Reenvia o aviso de um pedido já gravado (com observações, comprovantes e foto Sofia). */
+export async function notifySavedOrderViaWhatsApp(pedidoId: string): Promise<{
+  ok: boolean;
+  phones?: string[];
+  error?: string;
+}> {
+  const id = String(pedidoId || "").trim();
+  if (!id) return { ok: false, error: "pedidoId_vazio" };
+  const db = await createPdvMysqlConnection();
+  if (!db) return { ok: false, error: "sem_db" };
+  try {
+    const [orderRows] = await db.execute(
+      `SELECT sellerName, totalAplicado, createdAt FROM pdv_orders WHERE pedidoId = ? LIMIT 1`,
+      [id]
+    );
+    const order = (orderRows as any[])[0];
+    if (!order) return { ok: false, error: "nao_encontrado" };
+    const input = await loadOrderForMessage(db, id);
+    if (!input) return { ok: false, error: "nao_encontrado" };
+    const phones = await getNotificationPhones(db);
+    if (!phones.length) return { ok: false, error: "sem_telefone" };
+    const slot = await resolveSenderInstanceSlot(db);
+    if (slot === null) return { ok: false, error: "wa_desconectado" };
+    const receipts = await loadOrderReceipts(db, id);
+    const sofiaPhoto = await loadSofiaPhoto(db, id);
+    const content = buildOrderNotificationMessage({
+      pedidoId: id,
+      sellerName: String(order.sellerName ?? ""),
+      input,
+      totalAplicado: Number(order.totalAplicado) || 0,
+      dataPedido: order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt),
+      receiptCount: receipts.length,
+      sofiaPhotoCount: sofiaPhoto ? 1 : 0,
+    });
+    const { enviados } = await sendToAllPhones(slot, phones, content, {
+      pedidoId: id,
+      receipts,
+      sofiaPhoto,
+    });
+    if (!enviados.length) return { ok: false, error: "falha_envio", phones };
+    await db.execute("UPDATE pdv_orders SET notifiedAt = NOW() WHERE pedidoId = ?", [id]);
+    return { ok: true, phones: enviados };
+  } catch (err) {
+    console.error("[notifySavedOrder] Falha:", err);
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    await db.end();
+  }
+}
+
 /**
  * Depois que a foto Sofia é gravada: manda o aviso completo (se ainda não
  * saiu) ou só a foto, se o pedido já tinha sido avisado sem ela.

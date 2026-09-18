@@ -327,6 +327,23 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/wa-notify-pedido", async (req, res) => {
+    const expected = process.env.SHEETS_WEBHOOK_SECRET || "jurema-pdv-2024";
+    const provided =
+      String(req.headers["x-webhook-secret"] ?? req.query.secret ?? req.body?.secret ?? "");
+    if (provided !== expected) {
+      return res.status(403).json({ ok: false, error: "Unauthorized" });
+    }
+    try {
+      const pedidoId = String(req.query.pedidoId ?? req.body?.pedidoId ?? "").trim();
+      const { notifySavedOrderViaWhatsApp } = await import("../pdvWaNotify");
+      const result = await notifySavedOrderViaWhatsApp(pedidoId);
+      res.status(result.ok ? 200 : 400).json(result);
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? String(e) });
+    }
+  });
+
   app.post("/api/admin/wa-resumo-diario", async (req, res) => {
     const expected = process.env.SHEETS_WEBHOOK_SECRET || "jurema-pdv-2024";
     const provided =
